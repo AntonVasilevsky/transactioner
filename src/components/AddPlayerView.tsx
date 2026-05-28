@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, Save, Loader2 } from 'lucide-react'
+import { Plus, Star, Trash2, Save, Loader2 } from 'lucide-react'
 
 const AVAILABLE_ROOMS = ['RedStar', 'Champion Poker', 'Nexa']
 
@@ -13,7 +13,7 @@ type ContactForm = {
 }
 
 export default function AddPlayerView({ onSuccess }: { onSuccess: (player: PlayerPayload) => void }) {
-  const [contacts, setContacts] = useState<ContactForm[]>([{ contactMethod: 'TG', contactValue: '' }])
+  const [contacts, setContacts] = useState<ContactForm[]>([{ contactMethod: 'TG', contactValue: '', isPrimary: true }])
   const [defaultWallet, setDefaultWallet] = useState('')
   const [defaultWalletNetwork, setDefaultWalletNetwork] = useState('')
   const [accounts, setAccounts] = useState<AccountForm[]>([])
@@ -50,14 +50,26 @@ export default function AddPlayerView({ onSuccess }: { onSuccess: (player: Playe
 
   const handleRemoveContact = (index: number) => {
     if (contacts.length === 1) return
-    setContacts(contacts.filter((_, i) => i !== index))
+    const updated = contacts.filter((_, i) => i !== index)
+    if (!updated.some(contact => contact.isPrimary)) {
+      updated[0].isPrimary = true
+    }
+    setContacts(updated)
+  }
+
+  const handleSetPrimaryContact = (index: number) => {
+    setContacts(contacts.map((contact, i) => ({ ...contact, isPrimary: i === index })))
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     const normalizedContacts = contacts
-      .map((contact, index) => ({ ...contact, contactValue: contact.contactValue.trim(), isPrimary: index === 0 }))
+      .map((contact) => ({ ...contact, contactValue: contact.contactValue.trim() }))
       .filter(contact => contact.contactValue)
+    if (normalizedContacts.length > 0 && !normalizedContacts.some(contact => contact.isPrimary)) {
+      normalizedContacts[0].isPrimary = true
+    }
+    const primaryContact = normalizedContacts.find(contact => contact.isPrimary) || normalizedContacts[0]
 
     if (normalizedContacts.length === 0) {
       setError('Добавьте хотя бы один контакт игрока')
@@ -72,8 +84,8 @@ export default function AddPlayerView({ onSuccess }: { onSuccess: (player: Playe
     setError('')
     try {
       const data = {
-        messenger_username: normalizedContacts[0].contactValue,
-        contact_method: normalizedContacts[0].contactMethod,
+        messenger_username: primaryContact.contactValue,
+        contact_method: primaryContact.contactMethod,
         contacts: normalizedContacts,
         default_wallet: defaultWallet.trim(),
         default_wallet_network: defaultWalletNetwork.trim(),
@@ -84,16 +96,16 @@ export default function AddPlayerView({ onSuccess }: { onSuccess: (player: Playe
         onSuccess({
           player: {
             id: res.id,
-            messenger_username: normalizedContacts[0].contactValue,
-            contact_method: normalizedContacts[0].contactMethod,
+            messenger_username: primaryContact.contactValue,
+            contact_method: primaryContact.contactMethod,
             default_wallet: defaultWallet.trim(),
             default_wallet_network: defaultWalletNetwork.trim()
           },
           accounts,
-          contacts: normalizedContacts.map((contact, index) => ({
+          contacts: normalizedContacts.map((contact) => ({
             contact_method: contact.contactMethod,
             contact_value: contact.contactValue,
-            is_primary: index === 0 ? 1 : 0
+            is_primary: contact.isPrimary ? 1 : 0
           }))
         })
       } else {
@@ -145,9 +157,21 @@ export default function AddPlayerView({ onSuccess }: { onSuccess: (player: Playe
                   type="text"
                   value={contact.contactValue}
                   onChange={(e) => handleUpdateContact(index, 'contactValue', e.target.value)}
-                  placeholder={index === 0 ? '@player_tg или номер телефона' : 'Дополнительный контакт'}
+                  placeholder={contact.isPrimary ? '@player_tg или номер телефона' : 'Дополнительный контакт'}
                   className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-600 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                 />
+                <button
+                  type="button"
+                  onClick={() => handleSetPrimaryContact(index)}
+                  className={`px-3 rounded-xl border transition-colors ${
+                    contact.isPrimary
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                      : 'border-slate-700 text-slate-500 hover:text-emerald-300'
+                  }`}
+                  title="Использовать в шаблоне по умолчанию"
+                >
+                  <Star size={18} fill={contact.isPrimary ? 'currentColor' : 'none'} />
+                </button>
                 <button
                   type="button"
                   onClick={() => handleRemoveContact(index)}
@@ -159,7 +183,7 @@ export default function AddPlayerView({ onSuccess }: { onSuccess: (player: Playe
                 </button>
               </div>
             ))}
-            <p className="text-xs text-slate-500">Первый контакт считается основным и используется в заявках по умолчанию.</p>
+            <p className="text-xs text-slate-500">Отмеченный контакт используется в шаблонах по умолчанию.</p>
           </div>
         </div>
 

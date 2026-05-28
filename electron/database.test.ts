@@ -121,6 +121,24 @@ describe('TransactionerDatabase', () => {
     expect(db.searchPlayer('wpd')).not.toBeNull()
   })
 
+  it('uses the selected primary messenger as the default contact in returned payloads', () => {
+    const saved = db.savePlayer(basePlayer({
+      contacts: [
+        { contactMethod: 'TG', contactValue: '@anton' },
+        { contactMethod: 'WA', contactValue: '+5491112345678', isPrimary: true },
+        { contactMethod: 'Discord', contactValue: 'Anton + WPD support' }
+      ]
+    }))
+
+    expect(saved.success).toBe(true)
+
+    const player = db.getPlayerById(saved.id!)
+    expect(player?.player.contact_method).toBe('WA')
+    expect(player?.player.messenger_username).toBe('+5491112345678')
+    expect(player?.contacts[0].contact_method).toBe('WA')
+    expect(player?.contacts[0].is_primary).toBe(1)
+  })
+
   it('updates default wallet details without mutating other player fields', () => {
     const saved = db.savePlayer(basePlayer({
       default_wallet: 'TOLD',

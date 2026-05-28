@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, Save, Loader2, AlertTriangle, X } from 'lucide-react'
+import { Plus, Star, Trash2, Save, Loader2, AlertTriangle, X } from 'lucide-react'
 
 const AVAILABLE_ROOMS = ['RedStar', 'Champion Poker', 'Nexa']
 
@@ -21,10 +21,17 @@ interface Props {
 export default function EditPlayerView({ playerData, onSuccess, onDeleted }: Props) {
   const { player } = playerData
   const [contacts, setContacts] = useState<ContactForm[]>(
-    (playerData.player.contacts || playerData.contacts || [{ contact_method: player.contact_method || 'TG', contact_value: player.messenger_username || '', is_primary: 1 }]).map((contact) => ({
-      contactMethod: contact.contactMethod || contact.contact_method || 'TG',
-      contactValue: contact.contactValue || contact.contact_value || ''
-    }))
+    () => {
+      const initialContacts = (playerData.player.contacts || playerData.contacts || [{ contact_method: player.contact_method || 'TG', contact_value: player.messenger_username || '', is_primary: 1 }]).map((contact) => ({
+        contactMethod: contact.contactMethod || contact.contact_method || 'TG',
+        contactValue: contact.contactValue || contact.contact_value || '',
+        isPrimary: Boolean(contact.isPrimary || contact.is_primary)
+      }))
+      if (initialContacts.length > 0 && !initialContacts.some(contact => contact.isPrimary)) {
+        initialContacts[0].isPrimary = true
+      }
+      return initialContacts
+    }
   )
   const [defaultWallet, setDefaultWallet] = useState(player.default_wallet || '')
   const [defaultWalletNetwork, setDefaultWalletNetwork] = useState(player.default_wallet_network || '')
@@ -71,14 +78,26 @@ export default function EditPlayerView({ playerData, onSuccess, onDeleted }: Pro
 
   const handleRemoveContact = (index: number) => {
     if (contacts.length === 1) return
-    setContacts(contacts.filter((_, i) => i !== index))
+    const updated = contacts.filter((_, i) => i !== index)
+    if (!updated.some(contact => contact.isPrimary)) {
+      updated[0].isPrimary = true
+    }
+    setContacts(updated)
+  }
+
+  const handleSetPrimaryContact = (index: number) => {
+    setContacts(contacts.map((contact, i) => ({ ...contact, isPrimary: i === index })))
   }
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     const normalizedContacts = contacts
-      .map((contact, index) => ({ ...contact, contactValue: contact.contactValue.trim(), isPrimary: index === 0 }))
+      .map((contact) => ({ ...contact, contactValue: contact.contactValue.trim() }))
       .filter(contact => contact.contactValue)
+    if (normalizedContacts.length > 0 && !normalizedContacts.some(contact => contact.isPrimary)) {
+      normalizedContacts[0].isPrimary = true
+    }
+    const primaryContact = normalizedContacts.find(contact => contact.isPrimary) || normalizedContacts[0]
 
     if (normalizedContacts.length === 0) { setError('Добавьте хотя бы один контакт'); return }
     if (accounts.length === 0) { setError('Добавьте хотя бы один аккаунт'); return }
@@ -89,8 +108,8 @@ export default function EditPlayerView({ playerData, onSuccess, onDeleted }: Pro
     try {
       const res = await window.electronAPI.savePlayer({
         id: player.id,
-        messenger_username: normalizedContacts[0].contactValue,
-        contact_method: normalizedContacts[0].contactMethod,
+        messenger_username: primaryContact.contactValue,
+        contact_method: primaryContact.contactMethod,
         contacts: normalizedContacts,
         default_wallet: defaultWallet.trim(),
         default_wallet_network: defaultWalletNetwork.trim(),
@@ -100,21 +119,21 @@ export default function EditPlayerView({ playerData, onSuccess, onDeleted }: Pro
         onSuccess({
           player: {
             ...player,
-            messenger_username: normalizedContacts[0].contactValue,
-            contact_method: normalizedContacts[0].contactMethod,
+            messenger_username: primaryContact.contactValue,
+            contact_method: primaryContact.contactMethod,
             default_wallet: defaultWallet.trim(),
             default_wallet_network: defaultWalletNetwork.trim(),
-            contacts: normalizedContacts.map((contact, index) => ({
+            contacts: normalizedContacts.map((contact) => ({
               contact_method: contact.contactMethod,
               contact_value: contact.contactValue,
-              is_primary: index === 0 ? 1 : 0
+              is_primary: contact.isPrimary ? 1 : 0
             }))
           },
           accounts,
-          contacts: normalizedContacts.map((contact, index) => ({
+          contacts: normalizedContacts.map((contact) => ({
             contact_method: contact.contactMethod,
             contact_value: contact.contactValue,
-            is_primary: index === 0 ? 1 : 0
+            is_primary: contact.isPrimary ? 1 : 0
           }))
         })
       } else {
@@ -226,16 +245,28 @@ export default function EditPlayerView({ playerData, onSuccess, onDeleted }: Pro
                   type="text"
                   value={contact.contactValue}
                   onChange={e => handleUpdateContact(index, 'contactValue', e.target.value)}
-                  placeholder={index === 0 ? 'Основной контакт' : 'Дополнительный контакт'}
+                  placeholder={contact.isPrimary ? 'Основной контакт' : 'Дополнительный контакт'}
                   className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-600 outline-none focus:border-violet-500 transition-all"
                 />
+                <button
+                  type="button"
+                  onClick={() => handleSetPrimaryContact(index)}
+                  className={`px-3 rounded-xl border transition-colors ${
+                    contact.isPrimary
+                      ? 'border-violet-500/40 bg-violet-500/10 text-violet-300'
+                      : 'border-slate-700 text-slate-500 hover:text-violet-300'
+                  }`}
+                  title="Использовать в шаблоне по умолчанию"
+                >
+                  <Star size={18} fill={contact.isPrimary ? 'currentColor' : 'none'} />
+                </button>
                 <button type="button" onClick={() => handleRemoveContact(index)} disabled={contacts.length === 1}
                   className="px-3 rounded-xl border border-slate-700 text-slate-500 hover:text-red-400 disabled:opacity-40 disabled:hover:text-slate-500 transition-colors">
                   <X size={18} />
                 </button>
               </div>
             ))}
-            <p className="text-xs text-slate-500">Первый контакт считается основным и используется в заявках по умолчанию.</p>
+            <p className="text-xs text-slate-500">Отмеченный контакт используется в шаблонах по умолчанию.</p>
           </div>
         </div>
 

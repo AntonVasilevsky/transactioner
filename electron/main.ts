@@ -2,6 +2,7 @@ import { app, BrowserWindow, dialog, ipcMain } from 'electron'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createDailyDatabaseBackup } from './backup'
 import { TransactionerDatabase } from './database'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -10,10 +11,23 @@ process.env.APP_ROOT = path.join(__dirname, '..')
 const userDataPath = process.env.TRANSACTIONER_USER_DATA_DIR || app.getPath('userData')
 mkdirSync(userDataPath, { recursive: true })
 const dbPath = path.join(userDataPath, 'transactioner.db')
+const backupDir = process.env.TRANSACTIONER_BACKUP_DIR || path.join(app.getPath('documents'), 'Transactioner Backups')
 let store: TransactionerDatabase | null = null
 let migrationError: Error | null = null
 
+const runDailyBackup = () => {
+  try {
+    const result = createDailyDatabaseBackup(dbPath, backupDir)
+    if (result.created) {
+      console.info('Database backup created', result.backupPath)
+    }
+  } catch (err) {
+    console.error('Database backup failed', err)
+  }
+}
+
 try {
+  runDailyBackup()
   store = new TransactionerDatabase(dbPath)
 } catch (err) {
   console.error('Database migration failed', err)
@@ -23,10 +37,26 @@ try {
 ipcMain.handle('search-player', (_, username: string) => store?.searchPlayer(username) ?? null)
 ipcMain.handle('get-all-players', () => store?.getAllPlayers() ?? [])
 ipcMain.handle('get-player-by-id', (_, id: number) => store?.getPlayerById(id) ?? null)
-ipcMain.handle('delete-player', (_, id: number) => store?.deletePlayer(id) ?? { success: false, error: 'База данных недоступна' })
-ipcMain.handle('save-player', (_, data) => store?.savePlayer(data) ?? { success: false, error: 'База данных недоступна' })
-ipcMain.handle('update-default-wallet', (_, id: number, wallet: string) => store?.updateDefaultWallet(id, wallet) ?? { success: false, error: 'База данных недоступна' })
-ipcMain.handle('update-default-wallet-details', (_, id: number, wallet: string, network: string) => store?.updateDefaultWalletDetails(id, wallet, network) ?? { success: false, error: 'База данных недоступна' })
+ipcMain.handle('delete-player', (_, id: number) => {
+  const result = store?.deletePlayer(id) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('save-player', (_, data) => {
+  const result = store?.savePlayer(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('update-default-wallet', (_, id: number, wallet: string) => {
+  const result = store?.updateDefaultWallet(id, wallet) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('update-default-wallet-details', (_, id: number, wallet: string, network: string) => {
+  const result = store?.updateDefaultWalletDetails(id, wallet, network) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
 
 let win: BrowserWindow | null
 

@@ -395,15 +395,18 @@ export class TransactionerDatabase {
       : [{ contactMethod: data.contact_method || 'TG', contactValue: data.messenger_username || '' }]
 
     const contacts = rawContacts
-      .map((contact, index) => ({
+      .map((contact) => ({
         contactMethod: contact.contactMethod || contact.contact_method || 'TG',
         contactValue: String(contact.contactValue || contact.contact_value || '').trim(),
-        isPrimary: index === 0 || Boolean(contact.isPrimary || contact.is_primary)
+        isPrimary: Boolean(contact.isPrimary || contact.is_primary)
       }))
       .filter((contact) => contact.contactValue)
 
-    if (contacts.length > 0 && !contacts.some((contact) => contact.isPrimary)) {
-      contacts[0].isPrimary = true
+    const primaryIndex = contacts.findIndex((contact) => contact.isPrimary)
+    if (contacts.length > 0) {
+      contacts.forEach((contact, index) => {
+        contact.isPrimary = primaryIndex === -1 ? index === 0 : index === primaryIndex
+      })
     }
 
     return contacts
