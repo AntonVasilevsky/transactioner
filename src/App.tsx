@@ -82,12 +82,12 @@ function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col h-full overflow-y-auto relative">
+      <main className="min-w-0 flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden relative">
         {/* Background Decorative Gradients */}
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[100px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-600/10 blur-[100px] pointer-events-none" />
 
-        <div className="flex-1 p-8 lg:p-12 z-10">
+        <div className="min-w-0 flex-1 p-8 lg:p-12 z-10">
           {currentView === 'search' && (
             <SearchPlayerView onFound={handlePlayerFound} />
           )}

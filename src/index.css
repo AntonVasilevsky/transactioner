@@ -19,3 +19,14 @@ body {
   color: var(--color-text-light);
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
 }
+
+#root {
+  width: 100%;
+}
+
+input,
+select,
+textarea {
+  min-width: 0;
+  max-width: 100%;
+}

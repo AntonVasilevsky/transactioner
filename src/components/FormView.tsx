@@ -75,7 +75,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
       if (isDeposit) {
         return `@TanyaAkaieva Заявка на депозит NEXA\n${roomPlayerId} / ${roomUsername} / ${email}\n${amount}\n${txId}\n${contactMethod}: ${contactValue}`
       } else {
-        return `@TanyaAkaieva Заявка на вывод Nexa Poker\n${roomUsername}/ ${roomPlayerId}\n${amount}\n${network}\n${wallet}\n${contactMethod}: ${contactValue}`
+        return `@TanyaAkaieva Заявка на вывод Nexa Poker\n${roomUsername}/ ${roomPlayerId} / ${email}\n${amount}\n${network}\n${wallet}\n${contactMethod}: ${contactValue}`
       }
     }
     
@@ -100,7 +100,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
     if (roomName === 'Champion Poker' && !account.email?.trim()) missing.push('email')
     if (roomName === 'Nexa' && !account.roomPlayerId?.trim()) missing.push('roomPlayerId')
-    if (roomName === 'Nexa' && isDeposit && !account.email?.trim()) missing.push('email')
+    if (roomName === 'Nexa' && !account.email?.trim()) missing.push('email')
     if (roomName !== 'RedStar' && !contactValue.trim()) missing.push('contactValue')
 
     return missing
@@ -120,7 +120,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
   const inputClass = (field: string, value?: string) => {
     const isMissing = missingFields.includes(field) && !String(value || '').trim()
-    return `w-full bg-slate-900 border rounded-lg p-3 text-slate-100 placeholder-slate-600 outline-none transition-colors ${
+    return `min-w-0 max-w-full w-full bg-slate-900 border rounded-lg p-3 text-slate-100 placeholder-slate-600 outline-none transition-colors ${
       isMissing ? 'border-red-500 focus:border-red-400' : 'border-slate-700 focus:border-blue-500'
     }`
   }
@@ -189,9 +189,9 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   }
 
   return (
-    <div className="max-w-4xl mx-auto h-full flex flex-col lg:flex-row gap-6 animate-in fade-in slide-in-from-right-8 duration-500 pb-10">
+    <div className="min-w-0 max-w-4xl mx-auto h-full flex flex-col lg:flex-row gap-6 animate-in fade-in slide-in-from-right-8 duration-500 pb-10">
       {/* Left Column: Form */}
-      <div className="flex-1 flex flex-col gap-6">
+      <div className="min-w-0 flex-1 flex flex-col gap-6">
         {/* Header */}
         <div>
           <h2 className="text-2xl font-bold text-slate-100 flex items-center gap-2">
@@ -247,7 +247,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
         </div>
 
         {/* Dynamic Inputs */}
-        <div className="bg-slate-800 border border-slate-700 p-6 rounded-2xl flex flex-col gap-4 shadow-lg flex-1">
+        <div className="min-w-0 bg-slate-800 border border-slate-700 p-6 rounded-2xl flex flex-col gap-4 shadow-lg flex-1">
           <h3 className="font-semibold text-slate-200">Данные заявки</h3>
           {visibleMissingFields.length > 0 && (
             <div className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
@@ -279,7 +279,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           )}
 
           {account?.roomName !== 'RedStar' && (
-            <div className="flex gap-2">
+            <div className="min-w-0 flex gap-2">
               <div className="w-1/3">
                 <label className="block text-sm font-medium text-slate-400 mb-1">Тип связи</label>
                 {playerContacts.length > 1 ? (
@@ -298,7 +298,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
                   </select>
                 )}
               </div>
-              <div className="flex-1">
+              <div className="min-w-0 flex-1">
                 <label className="block text-sm font-medium text-slate-400 mb-1">Контакт</label>
                 <input ref={el => { fieldRefs.current.contactValue = el }} type="text" value={contactValue} onChange={e => setContactValue(e.target.value)} className={inputClass('contactValue', contactValue)} />
               </div>
@@ -308,7 +308,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
       </div>
 
       {/* Right Column: Result */}
-      <div className="flex-1 flex flex-col lg:sticky lg:top-8 h-fit max-h-full">
+      <div className="min-w-0 flex-1 flex flex-col lg:sticky lg:top-8 h-fit max-h-full">
         <div className="bg-gradient-to-br from-slate-800 to-slate-800/80 backdrop-blur-xl border border-slate-700 p-6 rounded-2xl shadow-2xl flex flex-col h-full ring-1 ring-white/5">
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-semibold text-slate-200">Готовый шаблон</h3>
