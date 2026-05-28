@@ -1,0 +1,147 @@
+import { useState } from 'react'
+import { Search, UserPlus, FileText, ChevronRight, Users } from 'lucide-react'
+
+// Views
+import SearchPlayerView from './components/SearchPlayerView'
+import AddPlayerView from './components/AddPlayerView'
+import FormView from './components/FormView'
+import PlayerListView from './components/PlayerListView'
+import EditPlayerView from './components/EditPlayerView'
+
+export type ViewState = 'search' | 'add' | 'form' | 'list' | 'edit'
+export type OperationType = 'Deposit' | 'Withdrawal'
+
+function App() {
+  const [currentView, setCurrentView] = useState<ViewState>('search')
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
+  const [operationType, setOperationType] = useState<OperationType>('Deposit')
+  const [editingPlayer, setEditingPlayer] = useState<PlayerPayload | null>(null)
+
+  const normalizeAccount = (account: Account): Account => ({
+    ...account,
+    roomName: account.roomName ?? account.room_name,
+    roomUsername: account.roomUsername ?? account.room_username ?? '',
+    roomPlayerId: account.roomPlayerId ?? account.room_player_id ?? '',
+    email: account.email ?? ''
+  })
+
+  const normalizeContact = (contact: PlayerContact): PlayerContact => ({
+    ...contact,
+    contactMethod: contact.contactMethod ?? contact.contact_method ?? 'TG',
+    contactValue: contact.contactValue ?? contact.contact_value ?? '',
+    isPrimary: Boolean(contact.isPrimary ?? contact.is_primary)
+  })
+
+  const handlePlayerFound = (playerData: PlayerPayload) => {
+    const accounts = (playerData.accounts || []).map(normalizeAccount)
+    const contacts = (playerData.contacts || playerData.player?.contacts || []).map(normalizeContact)
+    const flat = { ...playerData.player, accounts, contacts }
+    setSelectedPlayer(flat)
+    setSelectedAccount(accounts[0] || null)
+    setCurrentView('form')
+  }
+
+  const handlePlayerUpdate = (updates: Partial<Player>) => {
+    setSelectedPlayer((current) => current ? { ...current, ...updates } : current)
+  }
+
+  return (
+    <div className="flex h-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
+      {/* Sidebar Navigation */}
+      <nav className="w-20 lg:w-64 flex flex-col bg-slate-800/50 backdrop-blur-md border-r border-slate-700/50 transition-all duration-300">
+        <div className="p-4 lg:p-6 mb-8 flex items-center justify-center lg:justify-start gap-3">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
+            <FileText className="text-white" size={20} />
+          </div>
+          <h1 className="hidden lg:block font-bold text-xl tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
+            Transactioner
+          </h1>
+        </div>
+
+        <div className="flex-1 flex flex-col gap-2 px-3">
+          <NavItem 
+            icon={<Search size={20} />} 
+            label="Поиск игрока" 
+            active={currentView === 'search' || currentView === 'form'} 
+            onClick={() => setCurrentView('search')} 
+          />
+          <NavItem 
+            icon={<Users size={20} />} 
+            label="Все игроки" 
+            active={currentView === 'list'} 
+            onClick={() => setCurrentView('list')} 
+          />
+          <NavItem 
+            icon={<UserPlus size={20} />} 
+            label="Добавить игрока" 
+            active={currentView === 'add'} 
+            onClick={() => setCurrentView('add')} 
+          />
+        </div>
+      </nav>
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col h-full overflow-y-auto relative">
+        {/* Background Decorative Gradients */}
+        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[100px] pointer-events-none" />
+        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-600/10 blur-[100px] pointer-events-none" />
+
+        <div className="flex-1 p-8 lg:p-12 z-10">
+          {currentView === 'search' && (
+            <SearchPlayerView onFound={handlePlayerFound} />
+          )}
+          {currentView === 'list' && (
+            <PlayerListView
+              onSelect={handlePlayerFound}
+              onEdit={(data) => { setEditingPlayer(data); setCurrentView('edit') }}
+            />
+          )}
+          {currentView === 'edit' && editingPlayer && (
+            <EditPlayerView
+              playerData={editingPlayer}
+              onSuccess={(p) => handlePlayerFound(p)}
+              onDeleted={() => setCurrentView('list')}
+            />
+          )}
+          {currentView === 'add' && (
+            <AddPlayerView onSuccess={(p) => handlePlayerFound(p)} />
+          )}
+          {currentView === 'form' && selectedPlayer && (
+            <FormView
+              key={`${selectedPlayer.id || selectedPlayer.messenger_username}`}
+              player={selectedPlayer} 
+              account={selectedAccount}
+              onAccountSelect={setSelectedAccount}
+              operationType={operationType}
+              onOperationChange={setOperationType}
+              onPlayerUpdate={handlePlayerUpdate}
+            />
+          )}
+        </div>
+      </main>
+    </div>
+  )
+}
+
+function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 group
+        ${active 
+          ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-inner' 
+          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'}
+      `}
+    >
+      <div className={`${active ? 'scale-110' : 'group-hover:scale-110'} transition-transform duration-200`}>
+        {icon}
+      </div>
+      <span className="hidden lg:block font-medium">{label}</span>
+      {active && <ChevronRight size={16} className="hidden lg:block ml-auto opacity-50" />}
+    </button>
+  )
+}
+
+export default App

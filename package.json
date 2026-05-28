@@ -1,0 +1,76 @@
+{
+  "name": "transactioner",
+  "private": true,
+  "description": "Desktop helper for poker room transaction templates.",
+  "author": "Transactioner",
+  "version": "0.0.0",
+  "main": "dist-electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-rebuild -f -w better-sqlite3 && vite",
+    "build": "tsc -b && vite build",
+    "postinstall": "electron-builder install-app-deps",
+    "lint": "eslint .",
+    "test": "npm rebuild better-sqlite3 && vitest run && electron-rebuild -f -w better-sqlite3",
+    "preview": "vite preview",
+    "dist": "npm run build && electron-builder",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:win": "npm run build && electron-builder --win"
+  },
+  "build": {
+    "appId": "com.transactioner.app",
+    "productName": "Transactioner",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**"
+    ],
+    "mac": {
+      "target": [
+        "dmg"
+      ]
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    }
+  },
+  "dependencies": {
+    "@tailwindcss/vite": "^4.3.0",
+    "better-sqlite3": "^12.10.0",
+    "lucide-react": "^1.16.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "@electron/rebuild": "^4.0.4",
+    "@eslint/js": "^10.0.1",
+    "@electron/rebuild": "^4.0.4",
+    "@types/node": "^24.12.3",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^6.0.1",
+    "autoprefixer": "^10.5.0",
+    "electron": "^32.3.3",
+    "electron-builder": "^26.8.1",
+    "eslint": "^10.3.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.2",
+    "globals": "^17.6.0",
+    "postcss": "^8.5.15",
+    "tailwindcss": "^4.3.0",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.59.2",
+    "vite": "^8.0.12",
+    "vite-plugin-electron": "^0.29.1",
+    "vite-plugin-electron-renderer": "^0.14.7",
+    "vitest": "^4.1.7"
+  }
+}
