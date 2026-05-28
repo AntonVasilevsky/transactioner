@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { Search, UserPlus, FileText, ChevronRight, Users } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Download, Search, UserPlus, FileText, ChevronRight, Users, X } from 'lucide-react'
 
 // Views
 import SearchPlayerView from './components/SearchPlayerView'
@@ -17,6 +17,25 @@ function App() {
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   const [operationType, setOperationType] = useState<OperationType>('Deposit')
   const [editingPlayer, setEditingPlayer] = useState<PlayerPayload | null>(null)
+  const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null)
+  const [updateDismissed, setUpdateDismissed] = useState(false)
+
+  useEffect(() => {
+    let active = true
+    window.electronAPI.checkForUpdates()
+      .then((result) => {
+        if (active && result.available) {
+          setUpdateInfo(result)
+        }
+      })
+      .catch(() => {
+        // Update checks are best-effort and should never block daily work.
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
 
   const normalizeAccount = (account: Account): Account => ({
     ...account,
@@ -88,6 +107,29 @@ function App() {
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-600/10 blur-[100px] pointer-events-none" />
 
         <div className="min-w-0 flex-1 p-8 lg:p-12 z-10">
+          {updateInfo?.releaseUrl && !updateDismissed && (
+            <div className="mx-auto mb-6 flex max-w-4xl items-center gap-3 rounded-xl border border-blue-500/30 bg-blue-500/10 px-4 py-3 text-sm text-blue-100 shadow-lg shadow-blue-950/20">
+              <Download size={18} className="shrink-0 text-blue-300" />
+              <div className="min-w-0 flex-1">
+                Доступна новая версия {updateInfo.latestVersion}
+              </div>
+              <button
+                type="button"
+                onClick={() => window.electronAPI.openExternalUrl(updateInfo.releaseUrl!)}
+                className="rounded-lg bg-blue-500 px-3 py-2 font-medium text-white transition-colors hover:bg-blue-400"
+              >
+                Скачать
+              </button>
+              <button
+                type="button"
+                onClick={() => setUpdateDismissed(true)}
+                className="rounded-lg p-2 text-blue-200 transition-colors hover:bg-blue-400/10 hover:text-white"
+                title="Скрыть"
+              >
+                <X size={16} />
+              </button>
+            </div>
+          )}
           {currentView === 'search' && (
             <SearchPlayerView onFound={handlePlayerFound} />
           )}

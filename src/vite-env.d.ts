@@ -62,12 +62,22 @@ interface SavePlayerResult extends MutationResult {
   id?: number
 }
 
+interface UpdateCheckResult {
+  available: boolean
+  currentVersion: string
+  latestVersion?: string
+  releaseUrl?: string
+  error?: string
+}
+
 interface Window {
   electronAPI: {
     searchPlayer: (username: string) => Promise<PlayerPayload | PlayerPayload[] | null>;
     savePlayer: (data: SavePlayerInput) => Promise<SavePlayerResult>;
     getAllPlayers: () => Promise<Player[]>;
     getPlayerById: (id: number) => Promise<PlayerPayload | null>;
+    checkForUpdates: () => Promise<UpdateCheckResult>;
+    openExternalUrl: (url: string) => Promise<MutationResult>;
     deletePlayer: (id: number) => Promise<MutationResult>;
     updateDefaultWallet: (id: number, wallet: string) => Promise<MutationResult>;
     updateDefaultWalletDetails: (id: number, wallet: string, network: string) => Promise<MutationResult>;

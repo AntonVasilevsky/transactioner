@@ -1,9 +1,10 @@
-import { app, BrowserWindow, dialog, ipcMain } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
 import { mkdirSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDailyDatabaseBackup } from './backup'
 import { TransactionerDatabase } from './database'
+import { checkForUpdate, isAllowedReleaseUrl } from './updates'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 process.env.APP_ROOT = path.join(__dirname, '..')
@@ -37,6 +38,14 @@ try {
 ipcMain.handle('search-player', (_, username: string) => store?.searchPlayer(username) ?? null)
 ipcMain.handle('get-all-players', () => store?.getAllPlayers() ?? [])
 ipcMain.handle('get-player-by-id', (_, id: number) => store?.getPlayerById(id) ?? null)
+ipcMain.handle('check-for-updates', () => checkForUpdate(app.getVersion()))
+ipcMain.handle('open-external-url', (_, url: string) => {
+  if (!isAllowedReleaseUrl(url)) {
+    return { success: false, error: 'Ссылка обновления заблокирована' }
+  }
+
+  return shell.openExternal(url).then(() => ({ success: true }))
+})
 ipcMain.handle('delete-player', (_, id: number) => {
   const result = store?.deletePlayer(id) ?? { success: false, error: 'База данных недоступна' }
   if (result.success) runDailyBackup()
