@@ -17,11 +17,23 @@ function App() {
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   const [operationType, setOperationType] = useState<OperationType>('Deposit')
   const [editingPlayer, setEditingPlayer] = useState<PlayerPayload | null>(null)
+  const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null)
   const [updateDismissed, setUpdateDismissed] = useState(false)
 
   useEffect(() => {
     let active = true
+
+    window.electronAPI.getAppInfo()
+      .then((result) => {
+        if (active) {
+          setAppInfo(result)
+        }
+      })
+      .catch(() => {
+        // Version display is informational; failures should not block the app.
+      })
+
     window.electronAPI.checkForUpdates()
       .then((result) => {
         if (active && result.available) {
@@ -98,6 +110,13 @@ function App() {
             onClick={() => setCurrentView('add')} 
           />
         </div>
+
+        {appInfo?.version && (
+          <div className="px-4 pb-4 text-center text-xs text-slate-600 lg:text-left">
+            <span className="hidden lg:inline">Версия </span>
+            v{appInfo.version}
+          </div>
+        )}
       </nav>
 
       {/* Main Content Area */}
