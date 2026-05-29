@@ -70,12 +70,19 @@ interface UpdateCheckResult {
   error?: string
 }
 
+interface StorageInfo {
+  databasePath: string
+  backupDir: string
+  latestBackupPath: string
+}
+
 interface Window {
   electronAPI: {
     searchPlayer: (username: string) => Promise<PlayerPayload | PlayerPayload[] | null>;
     savePlayer: (data: SavePlayerInput) => Promise<SavePlayerResult>;
     getAllPlayers: () => Promise<Player[]>;
     getPlayerById: (id: number) => Promise<PlayerPayload | null>;
+    getStorageInfo: () => Promise<StorageInfo>;
     checkForUpdates: () => Promise<UpdateCheckResult>;
     openExternalUrl: (url: string) => Promise<MutationResult>;
     deletePlayer: (id: number) => Promise<MutationResult>;

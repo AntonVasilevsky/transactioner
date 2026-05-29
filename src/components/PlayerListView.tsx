@@ -13,12 +13,14 @@ export default function PlayerListView({ onSelect, onEdit }: { onSelect: (player
   const [players, setPlayers] = useState<Player[]>([])
   const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
+  const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null)
 
   useEffect(() => {
     window.electronAPI.getAllPlayers().then(data => {
       setPlayers(data || [])
       setLoading(false)
     })
+    window.electronAPI.getStorageInfo().then(setStorageInfo).catch(() => setStorageInfo(null))
   }, [])
 
   const filtered = players.filter(p => {
@@ -91,6 +93,20 @@ export default function PlayerListView({ onSelect, onEdit }: { onSelect: (player
               </button>
             </div>
           ))}
+        </div>
+      )}
+
+      {storageInfo && (
+        <div className="mt-8 border-t border-slate-800 pt-4 text-xs leading-5 text-slate-500">
+          <div className="min-w-0 break-all">
+            <span className="font-medium text-slate-400">БД:</span> {storageInfo.databasePath}
+          </div>
+          <div className="min-w-0 break-all">
+            <span className="font-medium text-slate-400">Бекап:</span> {storageInfo.latestBackupPath}
+          </div>
+          <div className="min-w-0 break-all">
+            <span className="font-medium text-slate-400">Папка бекапов:</span> {storageInfo.backupDir}
+          </div>
         </div>
       )}
     </div>

@@ -14,6 +14,7 @@ dist-ssr
 release
 *.local
 *.tsbuildinfo
+public/icon.iconset
 
 # Editor directories and files
 .vscode/*

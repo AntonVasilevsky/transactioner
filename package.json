@@ -3,7 +3,7 @@
   "private": true,
   "description": "Desktop helper for poker room transaction templates.",
   "author": "Transactioner",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
@@ -12,6 +12,7 @@
     "postinstall": "electron-builder install-app-deps",
     "lint": "eslint .",
     "test": "npm rebuild better-sqlite3 && vitest run && electron-rebuild -f -w better-sqlite3",
+    "icons": "node scripts/generate-icons.mjs",
     "preview": "vite preview",
     "dist": "npm run build && electron-builder",
     "dist:mac": "npm run build && electron-builder --mac",
@@ -23,6 +24,7 @@
     "directories": {
       "output": "release"
     },
+    "icon": "public/icon",
     "files": [
       "dist/**",
       "dist-electron/**",
@@ -50,8 +52,8 @@
     "react-dom": "^19.2.6"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
     "@electron/rebuild": "^4.0.4",
+    "@eslint/js": "^10.0.1",
     "@types/node": "^24.12.3",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -63,7 +65,10 @@
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.6.0",
+    "png-to-ico": "^3.0.1",
+    "png2icons": "^2.0.1",
     "postcss": "^8.5.15",
+    "sharp": "^0.34.5",
     "tailwindcss": "^4.3.0",
     "typescript": "~6.0.2",
     "typescript-eslint": "^8.59.2",

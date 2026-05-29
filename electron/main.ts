@@ -13,6 +13,7 @@ const userDataPath = process.env.TRANSACTIONER_USER_DATA_DIR || app.getPath('use
 mkdirSync(userDataPath, { recursive: true })
 const dbPath = path.join(userDataPath, 'transactioner.db')
 const backupDir = process.env.TRANSACTIONER_BACKUP_DIR || path.join(app.getPath('documents'), 'Transactioner Backups')
+const latestBackupPath = path.join(backupDir, 'transactioner-latest.db')
 let store: TransactionerDatabase | null = null
 let migrationError: Error | null = null
 
@@ -38,6 +39,11 @@ try {
 ipcMain.handle('search-player', (_, username: string) => store?.searchPlayer(username) ?? null)
 ipcMain.handle('get-all-players', () => store?.getAllPlayers() ?? [])
 ipcMain.handle('get-player-by-id', (_, id: number) => store?.getPlayerById(id) ?? null)
+ipcMain.handle('get-storage-info', () => ({
+  databasePath: dbPath,
+  backupDir,
+  latestBackupPath,
+}))
 ipcMain.handle('check-for-updates', () => checkForUpdate(app.getVersion()))
 ipcMain.handle('open-external-url', (_, url: string) => {
   if (!isAllowedReleaseUrl(url)) {
