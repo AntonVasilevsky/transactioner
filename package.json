@@ -43,6 +43,16 @@
       "target": [
         "nsis"
       ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": false,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": false,
+      "shortcutName": "Transactioner",
+      "include": "build/installer.nsh",
+      "deleteAppDataOnUninstall": false
     }
   },
   "dependencies": {
