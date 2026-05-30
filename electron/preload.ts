@@ -8,6 +8,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   getStorageInfo: () => ipcRenderer.invoke('get-storage-info'),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  resolveTransaction: (input: ResolveTransactionInput) => ipcRenderer.invoke('resolve-transaction', input),
   openExternalUrl: (url: string) => ipcRenderer.invoke('open-external-url', url),
   deletePlayer: (id: number) => ipcRenderer.invoke('delete-player', id),
   updateDefaultWallet: (id: number, wallet: string) => ipcRenderer.invoke('update-default-wallet', id, wallet),

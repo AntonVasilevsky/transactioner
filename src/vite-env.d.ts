@@ -80,6 +80,29 @@ interface AppInfo {
   version: string
 }
 
+interface ResolveTransactionInput {
+  txInput: string
+  roomName?: string
+  operationType?: string
+}
+
+interface ResolveTransactionResult {
+  success: boolean
+  status: 'resolved' | 'not_found' | 'invalid' | 'error'
+  txHash?: string
+  network?: 'ethereum' | 'bsc' | 'tron'
+  explorerUrl?: string
+  amount?: string
+  currency?: string
+  displayAmount?: string
+  convertedAmount?: string
+  convertedCurrency?: string
+  convertedDisplayAmount?: string
+  fxRate?: number
+  fxDate?: string
+  error?: string
+}
+
 interface Window {
   electronAPI: {
     searchPlayer: (username: string) => Promise<PlayerPayload | PlayerPayload[] | null>;
@@ -89,6 +112,7 @@ interface Window {
     getAppInfo: () => Promise<AppInfo>;
     getStorageInfo: () => Promise<StorageInfo>;
     checkForUpdates: () => Promise<UpdateCheckResult>;
+    resolveTransaction: (input: ResolveTransactionInput) => Promise<ResolveTransactionResult>;
     openExternalUrl: (url: string) => Promise<MutationResult>;
     deletePlayer: (id: number) => Promise<MutationResult>;
     updateDefaultWallet: (id: number, wallet: string) => Promise<MutationResult>;

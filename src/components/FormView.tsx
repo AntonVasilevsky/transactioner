@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Copy, CheckCircle2 } from 'lucide-react'
 import type { OperationType } from '../App'
 import { normalizeContactText } from '../utils/contactNormalization'
@@ -25,10 +25,13 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const accountSectionRef = useRef<HTMLDivElement | null>(null)
   const fieldRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const amountEditedRef = useRef(false)
+  const txResolveRunRef = useRef(0)
   
   // Form fields state
   const [amount, setAmount] = useState(() => shouldUseAmountCurrency(account, operationType) ? '$' : '')
   const [txId, setTxId] = useState('')
+  const [txResolveStatus, setTxResolveStatus] = useState<'idle' | 'loading' | 'resolved' | 'not_found' | 'error'>('idle')
+  const [txResolveMessage, setTxResolveMessage] = useState('')
   const [network, setNetwork] = useState(operationType === 'Withdrawal' ? player?.default_wallet_network || '' : '')
   const [wallet, setWallet] = useState(operationType === 'Withdrawal' ? player?.default_wallet || '' : '')
   const [contactMethod, setContactMethod] = useState<ContactMethod>(primaryContact?.contactMethod || primaryContact?.contact_method || player?.contact_method || 'TG')
@@ -56,6 +59,10 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
   const handleOperationChange = (nextOperationType: OperationType) => {
     syncAmountCurrency(account, nextOperationType)
+    if (nextOperationType !== 'Deposit') {
+      setTxResolveStatus('idle')
+      setTxResolveMessage('')
+    }
 
     if (nextOperationType === 'Withdrawal') {
       setWallet(defaultWallet || '')
@@ -76,6 +83,67 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     amountEditedRef.current = true
     setAmount(value)
   }
+
+  const handleTxChange = (value: string) => {
+    setTxId(value)
+    setTxResolveStatus('idle')
+    setTxResolveMessage('')
+  }
+
+  useEffect(() => {
+    const rawTx = txId.trim()
+    const hasCompleteHash = /(?:0x)?[a-fA-F0-9]{64}/.test(rawTx)
+
+    if (operationType !== 'Deposit' || !account || !hasCompleteHash) {
+      return
+    }
+
+    const runId = txResolveRunRef.current + 1
+    txResolveRunRef.current = runId
+    const timer = window.setTimeout(() => {
+      setTxResolveStatus('loading')
+      setTxResolveMessage('Проверяем транзакцию...')
+      window.electronAPI.resolveTransaction({
+        txInput: rawTx,
+        roomName: account.roomName,
+        operationType
+      }).then((result) => {
+        if (txResolveRunRef.current !== runId) return
+
+        if (result.success && result.explorerUrl) {
+          setTxId(current => current.trim() === rawTx ? result.explorerUrl! : current)
+          const resolvedAmount = account.roomName === 'Champion Poker'
+            ? result.convertedDisplayAmount || result.displayAmount
+            : result.displayAmount
+          if (!amountEditedRef.current && resolvedAmount) {
+            setAmount(resolvedAmount)
+          }
+          setTxResolveStatus('resolved')
+          setTxResolveMessage(
+            result.convertedDisplayAmount && result.fxDate
+              ? `Найдена ${result.network}. Сумма ${result.displayAmount}, курс USD/EUR за ${result.fxDate}: ${result.convertedDisplayAmount}.`
+              : `Найдена ${result.network}${result.displayAmount ? `, сумма ${result.displayAmount}` : ''}.`
+          )
+          return
+        }
+
+        if (result.status === 'not_found') {
+          setTxResolveStatus('not_found')
+          setTxResolveMessage(result.error || 'Транзакция не найдена')
+          return
+        }
+
+        setTxResolveStatus('error')
+        setTxResolveMessage(result.error || 'Не удалось проверить транзакцию')
+      }).catch((err) => {
+        if (txResolveRunRef.current !== runId) return
+        setTxResolveStatus('error')
+        setTxResolveMessage(err instanceof Error ? err.message : String(err))
+      })
+    }, 500)
+
+    return () => window.clearTimeout(timer)
+  }, [account, operationType, txId])
 
   const generateTemplate = () => {
     if (!account) return 'Выберите аккаунт'
@@ -296,7 +364,18 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           {operationType === 'Deposit' ? (
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">TX ID / Ссылка на транзакцию</label>
-              <input ref={el => { fieldRefs.current.txId = el }} type="text" value={txId} onChange={e => setTxId(e.target.value)} placeholder="https://tronscan.org/#/transaction/..." className={inputClass('txId', txId)} />
+              <input ref={el => { fieldRefs.current.txId = el }} type="text" value={txId} onChange={e => handleTxChange(e.target.value)} placeholder="https://tronscan.org/#/transaction/..." className={inputClass('txId', txId)} />
+              {txResolveMessage && (
+                <p className={`mt-2 text-xs ${
+                  txResolveStatus === 'resolved'
+                    ? 'text-emerald-400'
+                    : txResolveStatus === 'loading'
+                      ? 'text-slate-500'
+                      : 'text-amber-400'
+                }`}>
+                  {txResolveMessage}
+                </p>
+              )}
             </div>
           ) : (
             <>

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDailyDatabaseBackup } from './backup'
 import { TransactionerDatabase } from './database'
+import { resolveTransaction } from './transactionResolver'
 import { checkForUpdate, isAllowedReleaseUrl } from './updates'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -48,6 +49,7 @@ ipcMain.handle('get-storage-info', () => ({
   latestBackupPath,
 }))
 ipcMain.handle('check-for-updates', () => checkForUpdate(app.getVersion()))
+ipcMain.handle('resolve-transaction', (_, input) => resolveTransaction(input))
 ipcMain.handle('open-external-url', (_, url: string) => {
   if (!isAllowedReleaseUrl(url)) {
     return { success: false, error: 'Ссылка обновления заблокирована' }
