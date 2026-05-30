@@ -93,4 +93,18 @@ describe('transaction resolver helpers', () => {
       rmSync(tempDir, { recursive: true, force: true })
     }
   })
+
+  it('treats a lookup 404 as not found instead of a resolver error', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('not found', { status: 404 }))
+
+    const result = await resolveTransaction({
+      txInput: `0x${'b'.repeat(64)}`,
+      roomName: 'Champion Poker',
+      operationType: 'Deposit',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.status).toBe('not_found')
+    expect(result.error).toBe('Транзакция не найдена в поддерживаемых сетях')
+  })
 })

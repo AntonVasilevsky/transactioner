@@ -164,8 +164,15 @@ const displayCryptoAmount = (amount: string, currency?: string) => {
 }
 
 const loadApiKeys = (): ApiKeys => {
-  const envPath = process.env.TRANSACTIONER_API_KEYS_PATH || path.join(homedir(), 'dev', 'api-keys.env')
-  if (!existsSync(envPath)) return {}
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+  const envPaths = [
+    process.env.TRANSACTIONER_API_KEYS_PATH,
+    resourcesPath ? path.join(resourcesPath, 'private', 'api-keys.env') : '',
+    path.join(homedir(), 'dev', 'api-keys.env'),
+  ].filter(Boolean) as string[]
+
+  const envPath = envPaths.find(candidate => existsSync(candidate))
+  if (!envPath) return {}
 
   return readFileSync(envPath, 'utf8')
     .split(/\r?\n/)
@@ -185,6 +192,10 @@ const fetchJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
   }
   return response.json() as Promise<T>
 }
+
+const isLookupMissError = (err: unknown) => (
+  err instanceof Error && /^HTTP (400|404)$/.test(err.message)
+)
 
 const withEuroConversion = async (
   result: ResolveTransactionResult,
@@ -369,12 +380,20 @@ export const resolveTransaction = async (input: ResolveTransactionInput): Promis
         : ['tron'] as TransactionNetwork[]
 
     for (const network of resolvers) {
-      const result =
-        network === 'tron'
-          ? await resolveTronTransaction(parsed.hash, keys)
-          : network === 'bsc'
-            ? await resolveBscTransaction(parsed.hash)
-            : await resolveEthereumTransaction(parsed.hash, keys)
+      let result: ResolveTransactionResult | null
+      try {
+        result =
+          network === 'tron'
+            ? await resolveTronTransaction(parsed.hash, keys)
+            : network === 'bsc'
+              ? await resolveBscTransaction(parsed.hash)
+              : await resolveEthereumTransaction(parsed.hash, keys)
+      } catch (err) {
+        if (isLookupMissError(err)) {
+          continue
+        }
+        throw err
+      }
 
       if (result) {
         const converted = await withEuroConversion(result, input)

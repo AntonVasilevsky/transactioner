@@ -139,9 +139,11 @@ function App() {
         </div>
 
         {appInfo?.version && (
-          <div className="px-4 pb-4 text-center text-xs text-slate-600 lg:text-left">
-            <span className="hidden lg:inline">Версия </span>
-            v{appInfo.version}
+          <div className="px-3 pb-4">
+            <div className="rounded-xl border border-slate-700/70 bg-slate-900/80 px-2 py-2 text-center text-[11px] font-semibold text-slate-200 shadow-inner lg:px-3 lg:text-left lg:text-xs">
+              <span className="hidden text-slate-400 lg:inline">Версия </span>
+              <span>v{appInfo.version}</span>
+            </div>
           </div>
         )}
       </nav>

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
+import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -148,6 +148,31 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
     },
+  })
+
+  win.webContents.on('context-menu', (_, params) => {
+    const template: Electron.MenuItemConstructorOptions[] = []
+
+    if (params.isEditable) {
+      template.push(
+        { role: 'undo', label: 'Отменить' },
+        { role: 'redo', label: 'Повторить' },
+        { type: 'separator' },
+        { role: 'cut', label: 'Вырезать' },
+        { role: 'copy', label: 'Копировать' },
+        { role: 'paste', label: 'Вставить' },
+        { role: 'selectAll', label: 'Выделить все' },
+      )
+    } else if (params.selectionText) {
+      template.push(
+        { role: 'copy', label: 'Копировать' },
+        { role: 'selectAll', label: 'Выделить все' },
+      )
+    }
+
+    if (template.length > 0) {
+      Menu.buildFromTemplate(template).popup({ window: win || undefined })
+    }
   })
 
   if (process.env.VITE_DEV_SERVER_URL) {

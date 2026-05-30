@@ -3,7 +3,7 @@
   "private": true,
   "description": "Desktop helper for poker room transaction templates.",
   "author": "Transactioner",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
@@ -13,9 +13,12 @@
     "lint": "eslint .",
     "test": "npm rebuild better-sqlite3 && vitest run && electron-rebuild -f -w better-sqlite3",
     "icons": "node scripts/generate-icons.mjs",
+    "prepare:api-keys": "node scripts/prepare-api-keys.mjs",
     "preview": "vite preview",
     "dist": "npm run build && electron-builder",
+    "predist:mac": "npm run prepare:api-keys",
     "dist:mac": "npm run build && electron-builder --mac",
+    "predist:win": "npm run prepare:api-keys",
     "dist:win": "npm run build && electron-builder --win"
   },
   "build": {
@@ -30,6 +33,15 @@
       "dist-electron/**",
       "package.json",
       "USER_RELEASE_NOTES.txt"
+    ],
+    "extraResources": [
+      {
+        "from": "build/private",
+        "to": "private",
+        "filter": [
+          "api-keys.env"
+        ]
+      }
     ],
     "asarUnpack": [
       "node_modules/better-sqlite3/**"
