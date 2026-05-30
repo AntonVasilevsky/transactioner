@@ -107,7 +107,7 @@ function App() {
             title="На главный экран"
           >
             <img
-              src="/icon.png"
+              src="./icon.png"
               alt=""
               className="h-12 w-12 rounded-xl object-cover shadow-lg shadow-blue-500/20"
             />
