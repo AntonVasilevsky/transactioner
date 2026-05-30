@@ -158,7 +158,7 @@ export default function AddPlayerView({ onSuccess }: { onSuccess: (player: Playe
                   value={contact.contactValue}
                   onChange={(e) => handleUpdateContact(index, 'contactValue', e.target.value)}
                   placeholder={contact.isPrimary ? '@player_tg или номер телефона' : 'Дополнительный контакт'}
-                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-600 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                 />
                 <button
                   type="button"
@@ -195,14 +195,14 @@ export default function AddPlayerView({ onSuccess }: { onSuccess: (player: Playe
               value={defaultWalletNetwork}
               onChange={(e) => setDefaultWalletNetwork(e.target.value)}
               placeholder="USDT TRC20"
-              className="bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-600 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+              className="bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
             />
             <input
               type="text"
               value={defaultWallet}
               onChange={(e) => setDefaultWallet(e.target.value)}
               placeholder="T..."
-              className="md:col-span-2 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-600 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
+              className="md:col-span-2 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
             />
           </div>
         </div>

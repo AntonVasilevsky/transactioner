@@ -60,7 +60,7 @@ export default function SearchPlayerView({ onFound }: { onFound: (player: Player
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="@username, Anton или номер"
-            className="flex-1 bg-transparent border-none outline-none text-xl text-slate-100 placeholder-slate-600 py-4 px-2"
+            className="flex-1 bg-transparent border-none outline-none text-xl text-slate-100 placeholder-slate-700 py-4 px-2"
             autoFocus
           />
           <button

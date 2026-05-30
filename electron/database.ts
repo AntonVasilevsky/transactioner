@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import { contactSearchKey, normalizeContactText } from '../src/utils/contactNormalization'
 
 export type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
 
@@ -62,6 +63,10 @@ interface DuplicateContactRow {
   duplicate_count: number
 }
 
+interface SearchPlayerRow extends DbPlayer {
+  contact_summary?: string | null
+}
+
 export class TransactionerDatabase {
   private db: Database.Database
 
@@ -77,22 +82,23 @@ export class TransactionerDatabase {
   searchPlayer(username: string) {
     const query = String(username || '').trim()
     if (!query) return null
+    const queryKey = contactSearchKey(query)
+    if (!queryKey) return null
 
-    const players = this.db.prepare(`
-      SELECT DISTINCT p.*
+    const players = (this.db.prepare(`
+      SELECT p.*, GROUP_CONCAT(c.contact_value, ' ') AS contact_summary
       FROM players p
       LEFT JOIN player_contacts c ON c.player_id = p.id
-      WHERE p.messenger_username LIKE ? ESCAPE '\\' COLLATE NOCASE
-        OR c.contact_value LIKE ? ESCAPE '\\' COLLATE NOCASE
-      ORDER BY
-        CASE
-          WHEN p.messenger_username = ? COLLATE NOCASE THEN 0
-          WHEN c.contact_value = ? COLLATE NOCASE THEN 0
-          ELSE 1
-        END,
-        p.last_used_at DESC,
-        p.messenger_username COLLATE NOCASE ASC
-    `).all(`%${this.escapeLike(query)}%`, `%${this.escapeLike(query)}%`, query, query) as DbPlayer[]
+      GROUP BY p.id
+    `).all() as SearchPlayerRow[])
+      .filter((player) => contactSearchKey(`${player.messenger_username} ${player.contact_summary || ''}`).includes(queryKey))
+      .sort((left, right) => {
+        const leftExact = contactSearchKey(left.messenger_username) === queryKey ? 0 : 1
+        const rightExact = contactSearchKey(right.messenger_username) === queryKey ? 0 : 1
+        if (leftExact !== rightExact) return leftExact - rightExact
+        if ((right.last_used_at || 0) !== (left.last_used_at || 0)) return (right.last_used_at || 0) - (left.last_used_at || 0)
+        return left.messenger_username.localeCompare(right.messenger_username, undefined, { sensitivity: 'base' })
+      })
 
     if (!players.length) return null
 
@@ -146,28 +152,30 @@ export class TransactionerDatabase {
       const savePlayer = this.db.transaction(() => {
         const seenContacts = new Set<string>()
         for (const contact of contacts) {
-          const key = `${contact.contactMethod.toLowerCase()}::${contact.contactValue.toLowerCase()}`
+          const contactValueKey = contactSearchKey(contact.contactValue)
+          const key = `${contact.contactMethod.toLowerCase()}::${contactValueKey}`
           if (seenContacts.has(key)) {
             throw new Error(`Контакт ${contact.contactMethod}: ${contact.contactValue} указан несколько раз`)
           }
           seenContacts.add(key)
 
-          const existingContact = this.db.prepare(`
+          const existingContact = (this.db.prepare(`
             SELECT * FROM player_contacts
             WHERE contact_method = ? COLLATE NOCASE
-              AND contact_value = ? COLLATE NOCASE
-          `).get(contact.contactMethod, contact.contactValue) as DbContact | undefined
+          `).all(contact.contactMethod) as DbContact[])
+            .find(existing => contactSearchKey(existing.contact_value) === contactValueKey)
 
           if (existingContact && (!playerId || existingContact.player_id !== playerId)) {
             throw new Error(`Контакт ${contact.contactMethod}: ${contact.contactValue} уже привязан к другому игроку`)
           }
         }
 
-        const existingPrimary = this.db.prepare(`
+        const usernameKey = contactSearchKey(username)
+        const existingPrimary = (this.db.prepare(`
           SELECT * FROM players
           WHERE contact_method = ? COLLATE NOCASE
-            AND messenger_username = ? COLLATE NOCASE
-        `).get(contactMethod, username) as DbPlayer | undefined
+        `).all(contactMethod) as DbPlayer[])
+          .find(existing => contactSearchKey(existing.messenger_username) === usernameKey)
 
         if (existingPrimary && (!playerId || existingPrimary.id !== playerId)) {
           throw new Error(`Игрок ${contactMethod}: ${username} уже существует`)
@@ -385,10 +393,6 @@ export class TransactionerDatabase {
     }
   }
 
-  private escapeLike(value: string) {
-    return value.replace(/[\\%_]/g, match => `\\${match}`)
-  }
-
   private normalizeContacts(data: SavePlayerInput): ContactInput[] {
     const rawContacts = Array.isArray(data.contacts) && data.contacts.length > 0
       ? data.contacts
@@ -397,7 +401,7 @@ export class TransactionerDatabase {
     const contacts = rawContacts
       .map((contact) => ({
         contactMethod: contact.contactMethod || contact.contact_method || 'TG',
-        contactValue: String(contact.contactValue || contact.contact_value || '').trim(),
+        contactValue: normalizeContactText(String(contact.contactValue || contact.contact_value || '')),
         isPrimary: Boolean(contact.isPrimary || contact.is_primary)
       }))
       .filter((contact) => contact.contactValue)

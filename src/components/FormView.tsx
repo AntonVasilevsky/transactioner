@@ -1,6 +1,7 @@
-import { useState, useRef } from 'react'
+import { useRef, useState } from 'react'
 import { Copy, CheckCircle2 } from 'lucide-react'
 import type { OperationType } from '../App'
+import { normalizeContactText } from '../utils/contactNormalization'
 
 interface FormViewProps {
   player: Player
@@ -12,6 +13,9 @@ interface FormViewProps {
 }
 
 export default function FormView({ player, account, onAccountSelect, operationType, onOperationChange, onPlayerUpdate }: FormViewProps) {
+  const shouldUseAmountCurrency = (targetAccount: Account | null, targetOperationType: OperationType) =>
+    targetAccount?.roomName === 'Nexa' || (targetAccount?.roomName === 'RedStar' && targetOperationType === 'Deposit')
+
   const primaryContact = player?.contacts?.find((contact) => contact.isPrimary) || player?.contacts?.[0]
   const playerContacts = player.contacts || []
   const [copied, setCopied] = useState(false)
@@ -20,15 +24,27 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const [missingFields, setMissingFields] = useState<string[]>([])
   const accountSectionRef = useRef<HTMLDivElement | null>(null)
   const fieldRefs = useRef<Record<string, HTMLInputElement | null>>({})
+  const amountEditedRef = useRef(false)
   
   // Form fields state
-  const [amount, setAmount] = useState('')
+  const [amount, setAmount] = useState(() => shouldUseAmountCurrency(account, operationType) ? '$' : '')
   const [txId, setTxId] = useState('')
   const [network, setNetwork] = useState(operationType === 'Withdrawal' ? player?.default_wallet_network || '' : '')
   const [wallet, setWallet] = useState(operationType === 'Withdrawal' ? player?.default_wallet || '' : '')
   const [contactMethod, setContactMethod] = useState<ContactMethod>(primaryContact?.contactMethod || primaryContact?.contact_method || player?.contact_method || 'TG')
   const [contactValue, setContactValue] = useState(primaryContact?.contactValue || primaryContact?.contact_value || player?.messenger_username || '')
   const [selectedContactIndex, setSelectedContactIndex] = useState(0)
+
+  const syncAmountCurrency = (targetAccount: Account | null, targetOperationType: OperationType) => {
+    if (amountEditedRef.current) return
+
+    const shouldPrefill = shouldUseAmountCurrency(targetAccount, targetOperationType)
+    setAmount(currentAmount => {
+      if (shouldPrefill && !currentAmount) return '$'
+      if (!shouldPrefill && currentAmount === '$') return ''
+      return currentAmount
+    })
+  }
 
   const handleContactSelect = (index: number) => {
     const contact = player?.contacts?.[index]
@@ -39,6 +55,8 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   }
 
   const handleOperationChange = (nextOperationType: OperationType) => {
+    syncAmountCurrency(account, nextOperationType)
+
     if (nextOperationType === 'Withdrawal') {
       setWallet(defaultWallet || '')
       setNetwork(defaultWalletNetwork || '')
@@ -49,11 +67,24 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     onOperationChange(nextOperationType)
   }
 
+  const handleAccountSelect = (nextAccount: Account) => {
+    syncAmountCurrency(nextAccount, operationType)
+    onAccountSelect(nextAccount)
+  }
+
+  const handleAmountChange = (value: string) => {
+    amountEditedRef.current = true
+    setAmount(value)
+  }
+
   const generateTemplate = () => {
     if (!account) return 'Выберите аккаунт'
     
     const { roomName, roomUsername, roomPlayerId, email } = account
     const isDeposit = operationType === 'Deposit'
+    const templateContactValue = normalizeContactText(contactValue)
+    const accountLine = (...parts: Array<string | null | undefined>) =>
+      parts.map(part => String(part || '').trim()).filter(Boolean).join(' / ')
     
     if (roomName === 'RedStar') {
       if (isDeposit) {
@@ -64,18 +95,21 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     }
     
     if (roomName === 'Champion Poker') {
+      const championAccountLine = accountLine(roomUsername, email)
       if (isDeposit) {
-        return `@TanyaAkaieva \nЗаявка на депозит Champion\n${roomUsername} / ${email}\n${amount}\n${txId}\n${contactMethod}: ${contactValue}`
+        return `@TanyaAkaieva \nЗаявка на депозит Champion\n${championAccountLine}\n${amount}\n${txId}\n${contactMethod}: ${templateContactValue}`
       } else {
-        return `@TanyaAkaieva Заявка на вывод Champion\n${roomUsername} / ${email}\nСумма: ${amount}\nКошелек: ${network}\n${wallet}\n${contactMethod}: ${contactValue}`
+        return `@TanyaAkaieva Заявка на вывод Champion\n${championAccountLine}\nСумма: ${amount}\nКошелек: ${network}\n${wallet}\n${contactMethod}: ${templateContactValue}`
       }
     }
     
     if (roomName === 'Nexa') {
+      const nexaDepositAccountLine = accountLine(roomPlayerId, roomUsername, email)
+      const nexaWithdrawalAccountLine = accountLine(roomUsername, roomPlayerId, email)
       if (isDeposit) {
-        return `@TanyaAkaieva Заявка на депозит NEXA\n${roomPlayerId} / ${roomUsername} / ${email}\n${amount}\n${txId}\n${contactMethod}: ${contactValue}`
+        return `@TanyaAkaieva Заявка на депозит NEXA\n${nexaDepositAccountLine}\n${amount}\n${txId}\n${contactMethod}: ${templateContactValue}`
       } else {
-        return `@TanyaAkaieva Заявка на вывод Nexa Poker\n${roomUsername}/ ${roomPlayerId} / ${email}\n${amount}\n${network}\n${wallet}\n${contactMethod}: ${contactValue}`
+        return `@TanyaAkaieva Заявка на вывод Nexa Poker\n${nexaWithdrawalAccountLine}\n${amount}\n${network}\n${wallet}\n${contactMethod}: ${templateContactValue}`
       }
     }
     
@@ -100,7 +134,6 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
     if (roomName === 'Champion Poker' && !account.email?.trim()) missing.push('email')
     if (roomName === 'Nexa' && !account.roomPlayerId?.trim()) missing.push('roomPlayerId')
-    if (roomName === 'Nexa' && !account.email?.trim()) missing.push('email')
     if (roomName !== 'RedStar' && !contactValue.trim()) missing.push('contactValue')
 
     return missing
@@ -120,7 +153,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
   const inputClass = (field: string, value?: string) => {
     const isMissing = missingFields.includes(field) && !String(value || '').trim()
-    return `min-w-0 max-w-full w-full bg-slate-900 border rounded-lg p-3 text-slate-100 placeholder-slate-600 outline-none transition-colors ${
+    return `min-w-0 max-w-full w-full bg-slate-900 border rounded-lg p-3 text-slate-100 placeholder-slate-700 outline-none transition-colors ${
       isMissing ? 'border-red-500 focus:border-red-400' : 'border-slate-700 focus:border-blue-500'
     }`
   }
@@ -207,7 +240,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
               {player.accounts?.map((acc, i) => (
                 <button
                   key={i}
-                  onClick={() => onAccountSelect(acc)}
+                  onClick={() => handleAccountSelect(acc)}
                   className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
                     account === acc 
                       ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20' 
@@ -257,7 +290,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           
           <div>
             <label className="block text-sm font-medium text-slate-400 mb-1">Сумма</label>
-            <input ref={el => { fieldRefs.current.amount = el }} type="text" value={amount} onChange={e => setAmount(e.target.value)} placeholder="$500" className={inputClass('amount', amount)} />
+            <input ref={el => { fieldRefs.current.amount = el }} type="text" value={amount} onChange={e => handleAmountChange(e.target.value)} placeholder="$500" className={inputClass('amount', amount)} />
           </div>
 
           {operationType === 'Deposit' ? (

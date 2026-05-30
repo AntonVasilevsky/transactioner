@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Users, Clock, Search, Pencil } from 'lucide-react'
+import { contactSearchKey } from '../utils/contactNormalization'
 
 const METHOD_COLORS: Record<string, string> = {
   TG: 'bg-blue-500/20 text-blue-400',
@@ -24,8 +25,8 @@ export default function PlayerListView({ onSelect, onEdit }: { onSelect: (player
   }, [])
 
   const filtered = players.filter(p => {
-    const haystack = `${p.messenger_username || ''} ${p.contact_summary || ''}`.toLowerCase()
-    return haystack.includes(filter.toLowerCase())
+    const haystack = contactSearchKey(`${p.messenger_username || ''} ${p.contact_summary || ''}`)
+    return haystack.includes(contactSearchKey(filter))
   })
 
   const handleSelect = async (p: Player) => {
@@ -51,7 +52,7 @@ export default function PlayerListView({ onSelect, onEdit }: { onSelect: (player
           value={filter}
           onChange={e => setFilter(e.target.value)}
           placeholder="Фильтр по юзернейму..."
-          className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-4 py-3 text-slate-100 placeholder-slate-600 outline-none focus:border-violet-500"
+          className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-4 py-3 text-slate-100 placeholder-slate-700 outline-none focus:border-violet-500"
         />
       </div>
 

@@ -121,6 +121,62 @@ describe('TransactionerDatabase', () => {
     expect(db.searchPlayer('wpd')).not.toBeNull()
   })
 
+  it('normalizes hidden WhatsApp characters while keeping contacts searchable', () => {
+    const dirtyWhatsapp = '\u202A+55\u00A048\u00A099663\u20110764\u202C'
+    const cleanWhatsapp = '+55 48 99663-0764'
+    const saved = db.savePlayer(basePlayer({
+      messenger_username: dirtyWhatsapp,
+      contact_method: 'WA',
+      contacts: [
+        { contactMethod: 'WA', contactValue: dirtyWhatsapp }
+      ]
+    }))
+
+    expect(saved.success).toBe(true)
+
+    const player = db.getPlayerById(saved.id!)
+    expect(player?.player.messenger_username).toBe(cleanWhatsapp)
+    expect(player?.contacts[0].contact_value).toBe(cleanWhatsapp)
+    expect(db.searchPlayer(dirtyWhatsapp)).not.toBeNull()
+    expect(db.searchPlayer(cleanWhatsapp)).not.toBeNull()
+  })
+
+  it('blocks duplicate contacts that only differ by hidden WhatsApp characters', () => {
+    const dirtyWhatsapp = '\u202A+55\u00A048\u00A099663\u20110764\u202C'
+    const cleanWhatsapp = '+55 48 99663-0764'
+    const first = db.savePlayer(basePlayer({
+      messenger_username: cleanWhatsapp,
+      contact_method: 'WA',
+      contacts: [{ contactMethod: 'WA', contactValue: cleanWhatsapp }]
+    }))
+    const duplicate = db.savePlayer(basePlayer({
+      messenger_username: dirtyWhatsapp,
+      contact_method: 'WA',
+      contacts: [{ contactMethod: 'WA', contactValue: dirtyWhatsapp }]
+    }))
+
+    expect(first.success).toBe(true)
+    expect(duplicate.success).toBe(false)
+    expect(duplicate.error).toContain('уже привязан')
+  })
+
+  it('finds existing dirty WhatsApp contacts with a clean query', () => {
+    db.close()
+    const dbPath = path.join(tempDir, 'transactioner.db')
+    const raw = new Database(dbPath)
+    const dirtyWhatsapp = '\u202A+55\u00A048\u00A099663\u20110764\u202C'
+    const cleanWhatsapp = '+55 48 99663-0764'
+    raw.prepare('INSERT INTO players (messenger_username, contact_method) VALUES (?, ?)').run(dirtyWhatsapp, 'WA')
+    const playerId = Number(raw.prepare('SELECT last_insert_rowid() AS id').get().id)
+    raw.prepare('INSERT INTO player_contacts (player_id, contact_method, contact_value, is_primary) VALUES (?, ?, ?, 1)').run(playerId, 'WA', dirtyWhatsapp)
+    raw.close()
+
+    db = new TransactionerDatabase(dbPath)
+
+    expect(db.searchPlayer(cleanWhatsapp)).not.toBeNull()
+    expect(db.searchPlayer(dirtyWhatsapp)).not.toBeNull()
+  })
+
   it('uses the selected primary messenger as the default contact in returned payloads', () => {
     const saved = db.savePlayer(basePlayer({
       contacts: [
