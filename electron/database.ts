@@ -65,6 +65,7 @@ interface DuplicateContactRow {
 
 interface SearchPlayerRow extends DbPlayer {
   contact_summary?: string | null
+  room_summary?: string | null
 }
 
 export class TransactionerDatabase {
@@ -86,12 +87,16 @@ export class TransactionerDatabase {
     if (!queryKey) return null
 
     const players = (this.db.prepare(`
-      SELECT p.*, GROUP_CONCAT(c.contact_value, ' ') AS contact_summary
+      SELECT
+        p.*,
+        GROUP_CONCAT(DISTINCT c.contact_value) AS contact_summary,
+        GROUP_CONCAT(DISTINCT (a.room_name || ' ' || IFNULL(a.room_username, '') || ' ' || IFNULL(a.room_player_id, '') || ' ' || IFNULL(a.email, ''))) AS room_summary
       FROM players p
       LEFT JOIN player_contacts c ON c.player_id = p.id
+      LEFT JOIN accounts a ON a.player_id = p.id
       GROUP BY p.id
     `).all() as SearchPlayerRow[])
-      .filter((player) => contactSearchKey(`${player.messenger_username} ${player.contact_summary || ''}`).includes(queryKey))
+      .filter((player) => contactSearchKey(`${player.messenger_username} ${player.contact_summary || ''} ${player.room_summary || ''}`).includes(queryKey))
       .sort((left, right) => {
         const leftExact = contactSearchKey(left.messenger_username) === queryKey ? 0 : 1
         const rightExact = contactSearchKey(right.messenger_username) === queryKey ? 0 : 1
@@ -110,9 +115,13 @@ export class TransactionerDatabase {
 
   getAllPlayers() {
     return this.db.prepare(`
-      SELECT p.*, GROUP_CONCAT(c.contact_value, ' ') AS contact_summary
+      SELECT
+        p.*,
+        GROUP_CONCAT(DISTINCT c.contact_value) AS contact_summary,
+        GROUP_CONCAT(DISTINCT (a.room_name || ' ' || IFNULL(a.room_username, '') || ' ' || IFNULL(a.room_player_id, '') || ' ' || IFNULL(a.email, ''))) AS room_summary
       FROM players p
       LEFT JOIN player_contacts c ON c.player_id = p.id
+      LEFT JOIN accounts a ON a.player_id = p.id
       GROUP BY p.id
       ORDER BY p.last_used_at DESC
     `).all()

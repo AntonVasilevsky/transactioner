@@ -20,6 +20,7 @@ function App() {
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null)
   const [updateDismissed, setUpdateDismissed] = useState(false)
+  const [releaseNotes, setReleaseNotes] = useState<ReleaseNotesInfo | null>(null)
 
   useEffect(() => {
     let active = true
@@ -42,6 +43,16 @@ function App() {
       })
       .catch(() => {
         // Update checks are best-effort and should never block daily work.
+      })
+
+    window.electronAPI.getReleaseNotes()
+      .then((result) => {
+        if (active && result.shouldShow) {
+          setReleaseNotes(result)
+        }
+      })
+      .catch(() => {
+        // Release notes are informational and should never block startup.
       })
 
     return () => {
@@ -75,6 +86,13 @@ function App() {
 
   const handlePlayerUpdate = (updates: Partial<Player>) => {
     setSelectedPlayer((current) => current ? { ...current, ...updates } : current)
+  }
+
+  const closeReleaseNotes = () => {
+    window.electronAPI.markReleaseNotesSeen().catch(() => {
+      // Seeing the same notes again is less harmful than blocking the app.
+    })
+    setReleaseNotes(null)
   }
 
   return (
@@ -190,6 +208,44 @@ function App() {
           )}
         </div>
       </main>
+
+      {releaseNotes && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-6 backdrop-blur-sm">
+          <div className="max-h-[82vh] w-full max-w-2xl overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
+              <div>
+                <h2 className="text-xl font-bold text-slate-100">Что нового</h2>
+                <p className="text-sm text-slate-500">Версия {releaseNotes.version}</p>
+              </div>
+              <button
+                type="button"
+                onClick={closeReleaseNotes}
+                className="rounded-lg p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+                title="Закрыть"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="max-h-[56vh] overflow-y-auto px-6 py-5">
+              <pre className="whitespace-pre-wrap font-sans text-sm leading-6 text-slate-300">
+                {releaseNotes.notes}
+              </pre>
+              <p className="mt-5 break-all border-t border-slate-800 pt-4 text-xs text-slate-500">
+                Файл с этим текстом находится в папке приложения: {releaseNotes.notesPath}
+              </p>
+            </div>
+            <div className="border-t border-slate-800 px-6 py-4 text-right">
+              <button
+                type="button"
+                onClick={closeReleaseNotes}
+                className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-500"
+              >
+                Понятно
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

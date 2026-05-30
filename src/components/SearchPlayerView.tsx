@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Search, Loader2, UserRound } from 'lucide-react'
 
 const METHOD_COLORS: Record<string, string> = {
@@ -9,11 +9,29 @@ const METHOD_COLORS: Record<string, string> = {
   Email: 'bg-amber-500/20 text-amber-400',
 }
 
+const sortByPrimaryContact = (items: PlayerPayload[]) => [...items].sort((left, right) =>
+  left.player.messenger_username.localeCompare(right.player.messenger_username, undefined, {
+    numeric: true,
+    sensitivity: 'base'
+  })
+)
+
 export default function SearchPlayerView({ onFound }: { onFound: (player: PlayerPayload) => void }) {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [results, setResults] = useState<PlayerPayload[]>([])
+  const liveSearchRunRef = useRef(0)
+
+  const handleQueryChange = (value: string) => {
+    setQuery(value)
+    if (!value.trim()) {
+      liveSearchRunRef.current += 1
+      setResults([])
+      setError('')
+      setLoading(false)
+    }
+  }
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -25,7 +43,7 @@ export default function SearchPlayerView({ onFound }: { onFound: (player: Player
     try {
       const result = await window.electronAPI.searchPlayer(query.trim())
       if (Array.isArray(result)) {
-        setResults(result)
+        setResults(sortByPrimaryContact(result))
       } else if (result) {
         onFound(result)
       } else {
@@ -38,6 +56,53 @@ export default function SearchPlayerView({ onFound }: { onFound: (player: Player
     }
   }
 
+  useEffect(() => {
+    const trimmedQuery = query.trim()
+    const runId = liveSearchRunRef.current + 1
+    liveSearchRunRef.current = runId
+
+    if (!trimmedQuery) {
+      return
+    }
+
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setLoading(true)
+      setError('')
+      window.electronAPI.searchPlayer(trimmedQuery)
+        .then((result) => {
+          if (cancelled || liveSearchRunRef.current !== runId) return
+
+          if (Array.isArray(result)) {
+            setResults(sortByPrimaryContact(result))
+            return
+          }
+
+          if (result) {
+            setResults(sortByPrimaryContact([result]))
+            return
+          }
+
+          setResults([])
+        })
+        .catch((err: unknown) => {
+          if (cancelled || liveSearchRunRef.current !== runId) return
+          setResults([])
+          setError('Ошибка поиска: ' + (err instanceof Error ? err.message : String(err)))
+        })
+        .finally(() => {
+          if (!cancelled && liveSearchRunRef.current === runId) {
+            setLoading(false)
+          }
+        })
+    }, 250)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [query])
+
   return (
     <div className="max-w-2xl mx-auto mt-20 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="text-center mb-10">
@@ -45,7 +110,7 @@ export default function SearchPlayerView({ onFound }: { onFound: (player: Player
           Найти игрока
         </h2>
         <p className="text-slate-400 text-lg">
-          Введите юзернейм, номер или часть контакта из мессенджера
+          Введите юзернейм, номер, ник в руме или часть контакта
         </p>
       </div>
 
@@ -58,7 +123,7 @@ export default function SearchPlayerView({ onFound }: { onFound: (player: Player
           <input
             type="text"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => handleQueryChange(e.target.value)}
             placeholder="@username, Anton или номер"
             className="flex-1 bg-transparent border-none outline-none text-xl text-slate-100 placeholder-slate-700 py-4 px-2"
             autoFocus

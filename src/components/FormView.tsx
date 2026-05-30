@@ -3,6 +3,37 @@ import { Copy, CheckCircle2 } from 'lucide-react'
 import type { OperationType } from '../App'
 import { normalizeContactText } from '../utils/contactNormalization'
 
+type AmountCurrency = 'EUR' | 'USD'
+
+const shouldUseAmountCurrency = (targetAccount: Account | null, targetOperationType: OperationType) =>
+  targetAccount?.roomName === 'Nexa' || (targetAccount?.roomName === 'RedStar' && targetOperationType === 'Deposit')
+
+const isChampionWithdrawal = (targetAccount: Account | null, targetOperationType: OperationType) =>
+  targetAccount?.roomName === 'Champion Poker' && targetOperationType === 'Withdrawal'
+
+const escapeHtml = (value: string) => value
+  .replace(/&/g, '&amp;')
+  .replace(/</g, '&lt;')
+  .replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;')
+  .replace(/'/g, '&#39;')
+
+const highlightUsdcHtml = (value: string) => escapeHtml(value).replace(/\bUSDC\b/gi, match => `<strong>${match}</strong>`)
+
+const templateHtml = (value: string) => `<pre style="font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; white-space: pre-wrap;">${highlightUsdcHtml(value)}</pre>`
+
+const isUsdcNetwork = (value: string) => /\bUSDC\b/i.test(value)
+
+const isBitcoinDepositInput = (amountValue: string, txValue: string) => {
+  const combined = `${amountValue} ${txValue}`.toLowerCase()
+  return /\bbtc\b|\bbitcoin\b|blockstream\.info|mempool\.space|blockchain\.com\/(?:btc\/)?tx|blockchair\.com\/bitcoin/.test(combined)
+}
+
+const cleanCurrencyNumber = (value: string) => String(value || '')
+  .trim()
+  .replace(/^(?:EUR|USD)\s+/i, '')
+  .replace(/^[€$]\s*/, '')
+
 interface FormViewProps {
   player: Player
   account: Account | null
@@ -13,9 +44,6 @@ interface FormViewProps {
 }
 
 export default function FormView({ player, account, onAccountSelect, operationType, onOperationChange, onPlayerUpdate }: FormViewProps) {
-  const shouldUseAmountCurrency = (targetAccount: Account | null, targetOperationType: OperationType) =>
-    targetAccount?.roomName === 'Nexa' || (targetAccount?.roomName === 'RedStar' && targetOperationType === 'Deposit')
-
   const primaryContact = player?.contacts?.find((contact) => contact.isPrimary) || player?.contacts?.[0]
   const playerContacts = player.contacts || []
   const [copied, setCopied] = useState(false)
@@ -26,9 +54,14 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const fieldRefs = useRef<Record<string, HTMLInputElement | null>>({})
   const amountEditedRef = useRef(false)
   const txResolveRunRef = useRef(0)
+  const amountConversionRunRef = useRef(0)
   
   // Form fields state
   const [amount, setAmount] = useState(() => shouldUseAmountCurrency(account, operationType) ? '$' : '')
+  const [amountCurrency, setAmountCurrency] = useState<AmountCurrency>(() => isChampionWithdrawal(account, operationType) ? 'EUR' : 'USD')
+  const [convertedWithdrawalAmount, setConvertedWithdrawalAmount] = useState('')
+  const [amountConversionStatus, setAmountConversionStatus] = useState<'idle' | 'loading' | 'converted' | 'error'>('idle')
+  const [amountConversionMessage, setAmountConversionMessage] = useState('')
   const [txId, setTxId] = useState('')
   const [txResolveStatus, setTxResolveStatus] = useState<'idle' | 'loading' | 'resolved' | 'not_found' | 'error'>('idle')
   const [txResolveMessage, setTxResolveMessage] = useState('')
@@ -57,8 +90,17 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     setContactValue(contact.contactValue || contact.contact_value || '')
   }
 
+  const resetAmountConversion = () => {
+    amountConversionRunRef.current += 1
+    setConvertedWithdrawalAmount('')
+    setAmountConversionStatus('idle')
+    setAmountConversionMessage('')
+  }
+
   const handleOperationChange = (nextOperationType: OperationType) => {
     syncAmountCurrency(account, nextOperationType)
+    setAmountCurrency(isChampionWithdrawal(account, nextOperationType) ? 'EUR' : 'USD')
+    resetAmountConversion()
     if (nextOperationType !== 'Deposit') {
       setTxResolveStatus('idle')
       setTxResolveMessage('')
@@ -76,12 +118,22 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
   const handleAccountSelect = (nextAccount: Account) => {
     syncAmountCurrency(nextAccount, operationType)
+    setAmountCurrency(isChampionWithdrawal(nextAccount, operationType) ? 'EUR' : 'USD')
+    resetAmountConversion()
     onAccountSelect(nextAccount)
   }
 
   const handleAmountChange = (value: string) => {
     amountEditedRef.current = true
     setAmount(value)
+    if (isChampionWithdrawal(account, operationType) && amountCurrency === 'USD') {
+      resetAmountConversion()
+    }
+  }
+
+  const handleAmountCurrencyChange = (nextCurrency: AmountCurrency) => {
+    setAmountCurrency(nextCurrency)
+    resetAmountConversion()
   }
 
   const handleTxChange = (value: string) => {
@@ -145,12 +197,72 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     return () => window.clearTimeout(timer)
   }, [account, operationType, txId])
 
+  useEffect(() => {
+    const rawAmount = amount.trim()
+    if (!isChampionWithdrawal(account, operationType) || amountCurrency !== 'USD' || !rawAmount) {
+      return
+    }
+
+    const runId = amountConversionRunRef.current + 1
+    amountConversionRunRef.current = runId
+    let cancelled = false
+    const timer = window.setTimeout(() => {
+      setAmountConversionStatus('loading')
+      setAmountConversionMessage('Конвертируем USD в EUR...')
+      window.electronAPI.convertUsdToEur(rawAmount)
+        .then((result) => {
+          if (cancelled || amountConversionRunRef.current !== runId) return
+
+          if (result.success && result.convertedDisplayAmount) {
+            const templateAmount = result.convertedAmount ? `EUR ${result.convertedAmount}` : result.convertedDisplayAmount
+            setConvertedWithdrawalAmount(templateAmount)
+            setAmountConversionStatus('converted')
+            setAmountConversionMessage(
+              result.fxDate
+                ? `$${result.inputAmount} = ${templateAmount} по курсу за ${result.fxDate}`
+                : `$${result.inputAmount} = ${templateAmount}`
+            )
+            return
+          }
+
+          setConvertedWithdrawalAmount('')
+          setAmountConversionStatus('error')
+          setAmountConversionMessage(result.error || 'Не удалось конвертировать сумму')
+        })
+        .catch((err) => {
+          if (cancelled || amountConversionRunRef.current !== runId) return
+          setConvertedWithdrawalAmount('')
+          setAmountConversionStatus('error')
+          setAmountConversionMessage(err instanceof Error ? err.message : String(err))
+        })
+    }, 500)
+
+    return () => {
+      cancelled = true
+      window.clearTimeout(timer)
+    }
+  }, [account, amount, amountCurrency, operationType])
+
+  const amountWithCurrency = (value: string, currency: AmountCurrency) => {
+    const trimmed = value.trim()
+    if (!trimmed) return value
+    const amountValue = cleanCurrencyNumber(trimmed)
+    return `${currency} ${amountValue}`
+  }
+
+  const getTemplateAmount = () => {
+    if (!isChampionWithdrawal(account, operationType)) return amount
+    if (amountCurrency === 'USD') return convertedWithdrawalAmount || amountWithCurrency(amount, 'USD')
+    return amountWithCurrency(amount, 'EUR')
+  }
+
   const generateTemplate = () => {
     if (!account) return 'Выберите аккаунт'
     
     const { roomName, roomUsername, roomPlayerId, email } = account
     const isDeposit = operationType === 'Deposit'
     const templateContactValue = normalizeContactText(contactValue)
+    const templateAmount = getTemplateAmount()
     const accountLine = (...parts: Array<string | null | undefined>) =>
       parts.map(part => String(part || '').trim()).filter(Boolean).join(' / ')
     
@@ -167,7 +279,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
       if (isDeposit) {
         return `@TanyaAkaieva \nЗаявка на депозит Champion\n${championAccountLine}\n${amount}\n${txId}\n${contactMethod}: ${templateContactValue}`
       } else {
-        return `@TanyaAkaieva Заявка на вывод Champion\n${championAccountLine}\nСумма: ${amount}\nКошелек: ${network}\n${wallet}\n${contactMethod}: ${templateContactValue}`
+        return `@TanyaAkaieva Заявка на вывод Champion\n${championAccountLine}\nСумма: ${templateAmount}\nКошелек: ${network}\n${wallet}\n${contactMethod}: ${templateContactValue}`
       }
     }
     
@@ -185,6 +297,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   }
 
   const generatedText = generateTemplate()
+  const showBitcoinDepositWarning = operationType === 'Deposit' && isBitcoinDepositInput(amount, txId)
 
   const getMissingFields = () => {
     if (!account) return ['account']
@@ -201,6 +314,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     if (!isDeposit && !wallet.trim()) missing.push('wallet')
 
     if (roomName === 'Champion Poker' && !account.email?.trim()) missing.push('email')
+    if (isChampionWithdrawal(account, operationType) && amountCurrency === 'USD' && amount.trim() && !convertedWithdrawalAmount) missing.push('convertedAmount')
     if (roomName === 'Nexa' && !account.roomPlayerId?.trim()) missing.push('roomPlayerId')
     if (roomName !== 'RedStar' && !contactValue.trim()) missing.push('contactValue')
 
@@ -210,6 +324,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const missingLabels: Record<string, string> = {
     account: 'аккаунт рума',
     amount: 'сумма',
+    convertedAmount: 'конвертация USD в EUR',
     txId: 'TX ID / ссылка',
     network: 'сеть / монета',
     wallet: 'адрес кошелька',
@@ -256,7 +371,20 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     setMissingFields(missing)
     scrollToFirstMissingField(missing)
 
-    await navigator.clipboard.writeText(generatedText)
+    if (isUsdcNetwork(network) && 'ClipboardItem' in window) {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/plain': new Blob([generatedText], { type: 'text/plain' }),
+            'text/html': new Blob([templateHtml(generatedText)], { type: 'text/html' }),
+          })
+        ])
+      } catch {
+        await navigator.clipboard.writeText(generatedText)
+      }
+    } else {
+      await navigator.clipboard.writeText(generatedText)
+    }
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
 
@@ -357,8 +485,50 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           )}
           
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-1">Сумма</label>
-            <input ref={el => { fieldRefs.current.amount = el }} type="text" value={amount} onChange={e => handleAmountChange(e.target.value)} placeholder="$500" className={inputClass('amount', amount)} />
+            <div className="mb-1 flex items-center justify-between gap-3">
+              <label className="block text-sm font-medium text-slate-400">Сумма</label>
+              {isChampionWithdrawal(account, operationType) && (
+                <div className="flex shrink-0 items-center rounded-lg bg-slate-900 p-1">
+                  <button
+                    type="button"
+                    onClick={() => handleAmountCurrencyChange('EUR')}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      amountCurrency === 'EUR' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-100'
+                    }`}
+                  >
+                    EUR
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleAmountCurrencyChange('USD')}
+                    className={`rounded-md px-3 py-1.5 text-xs font-semibold transition-colors ${
+                      amountCurrency === 'USD' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-100'
+                    }`}
+                  >
+                    USD
+                  </button>
+                </div>
+              )}
+            </div>
+            <input
+              ref={el => { fieldRefs.current.amount = el }}
+              type="text"
+              value={amount}
+              onChange={e => handleAmountChange(e.target.value)}
+              placeholder={isChampionWithdrawal(account, operationType) ? (amountCurrency === 'EUR' ? '€500' : '$500') : '$500'}
+              className={inputClass('amount', amount)}
+            />
+            {isChampionWithdrawal(account, operationType) && amountCurrency === 'USD' && amountConversionMessage && (
+              <p className={`mt-2 text-xs ${
+                amountConversionStatus === 'converted'
+                  ? 'text-emerald-400'
+                  : amountConversionStatus === 'loading'
+                    ? 'text-slate-500'
+                    : 'text-amber-400'
+              }`}>
+                {amountConversionMessage}
+              </p>
+            )}
           </div>
 
           {operationType === 'Deposit' ? (
@@ -375,6 +545,11 @@ export default function FormView({ player, account, onAccountSelect, operationTy
                 }`}>
                   {txResolveMessage}
                 </p>
+              )}
+              {showBitcoinDepositWarning && (
+                <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+                  BTC-транзакция может объединять несколько платежей. Внимательно проверьте именно отправленную сумму игрока, а не общую сумму всей транзакции.
+                </div>
               )}
             </div>
           ) : (
@@ -430,9 +605,10 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           </div>
           
           <div className="flex-1 bg-slate-900/50 rounded-xl p-4 border border-slate-800/50 overflow-y-auto mb-6">
-            <pre className="text-slate-300 font-mono text-sm whitespace-pre-wrap leading-relaxed">
-              {generatedText}
-            </pre>
+            <pre
+              className="text-slate-300 font-mono text-sm whitespace-pre-wrap leading-relaxed"
+              dangerouslySetInnerHTML={{ __html: highlightUsdcHtml(generatedText) }}
+            />
           </div>
 
           <button

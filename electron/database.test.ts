@@ -121,6 +121,20 @@ describe('TransactionerDatabase', () => {
     expect(db.searchPlayer('wpd')).not.toBeNull()
   })
 
+  it('searches by room usernames and room player ids', () => {
+    const saved = db.savePlayer(basePlayer({
+      messenger_username: '@roomsearch',
+      contacts: [{ contactMethod: 'TG', contactValue: '@roomsearch' }],
+      accounts: [
+        { roomName: 'Nexa', roomUsername: 'Maldoror', roomPlayerId: '217811', email: '' }
+      ]
+    }))
+
+    expect(saved.success).toBe(true)
+    expect(db.searchPlayer('mald')).not.toBeNull()
+    expect(db.searchPlayer('2178')).not.toBeNull()
+  })
+
   it('normalizes hidden WhatsApp characters while keeping contacts searchable', () => {
     const dirtyWhatsapp = '\u202A+55\u00A048\u00A099663\u20110764\u202C'
     const cleanWhatsapp = '+55 48 99663-0764'

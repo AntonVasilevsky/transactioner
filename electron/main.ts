@@ -1,8 +1,9 @@
 import { app, BrowserWindow, dialog, ipcMain, shell } from 'electron'
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDailyDatabaseBackup } from './backup'
+import { convertUsdToEur, parseCurrencyAmount } from './currency'
 import { TransactionerDatabase } from './database'
 import { resolveTransaction } from './transactionResolver'
 import { checkForUpdate, isAllowedReleaseUrl } from './updates'
@@ -15,8 +16,31 @@ mkdirSync(userDataPath, { recursive: true })
 const dbPath = path.join(userDataPath, 'transactioner.db')
 const backupDir = process.env.TRANSACTIONER_BACKUP_DIR || path.join(app.getPath('documents'), 'Transactioner Backups')
 const latestBackupPath = path.join(backupDir, 'transactioner-latest.db')
+const appStatePath = path.join(userDataPath, 'app-state.json')
+const releaseNotesPath = path.join(process.env.APP_ROOT, 'USER_RELEASE_NOTES.txt')
 let store: TransactionerDatabase | null = null
 let migrationError: Error | null = null
+
+const readAppState = () => {
+  try {
+    if (!existsSync(appStatePath)) return {}
+    return JSON.parse(readFileSync(appStatePath, 'utf8')) as { lastSeenReleaseNotesVersion?: string }
+  } catch {
+    return {}
+  }
+}
+
+const writeAppState = (state: { lastSeenReleaseNotesVersion?: string }) => {
+  writeFileSync(appStatePath, JSON.stringify(state, null, 2))
+}
+
+const readReleaseNotes = () => {
+  try {
+    return readFileSync(releaseNotesPath, 'utf8')
+  } catch {
+    return ''
+  }
+}
 
 const runDailyBackup = () => {
   try {
@@ -50,6 +74,34 @@ ipcMain.handle('get-storage-info', () => ({
 }))
 ipcMain.handle('check-for-updates', () => checkForUpdate(app.getVersion()))
 ipcMain.handle('resolve-transaction', (_, input) => resolveTransaction(input))
+ipcMain.handle('convert-usd-to-eur', async (_, amountText: string) => {
+  try {
+    const amount = parseCurrencyAmount(amountText)
+    if (amount === null) {
+      return { success: false, error: 'Введите сумму в долларах' }
+    }
+
+    const conversion = await convertUsdToEur(amount)
+    return { success: true, ...conversion }
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : String(err) }
+  }
+})
+ipcMain.handle('get-release-notes', () => {
+  const version = app.getVersion()
+  const state = readAppState()
+  const notes = readReleaseNotes()
+  return {
+    version,
+    notes,
+    notesPath: releaseNotesPath,
+    shouldShow: Boolean(notes && state.lastSeenReleaseNotesVersion !== version)
+  }
+})
+ipcMain.handle('mark-release-notes-seen', () => {
+  writeAppState({ ...readAppState(), lastSeenReleaseNotesVersion: app.getVersion() })
+  return { success: true }
+})
 ipcMain.handle('open-external-url', (_, url: string) => {
   if (!isAllowedReleaseUrl(url)) {
     return { success: false, error: 'Ссылка обновления заблокирована' }

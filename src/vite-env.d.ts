@@ -33,6 +33,7 @@ interface Player {
   default_wallet_network?: string | null
   last_used_at?: number
   contact_summary?: string | null
+  room_summary?: string | null
   accounts?: Account[]
   contacts?: PlayerContact[]
 }
@@ -103,6 +104,23 @@ interface ResolveTransactionResult {
   error?: string
 }
 
+interface CurrencyConversionResult extends MutationResult {
+  inputAmount?: string
+  inputCurrency?: 'USD'
+  convertedAmount?: string
+  convertedCurrency?: 'EUR'
+  convertedDisplayAmount?: string
+  fxRate?: number
+  fxDate?: string
+}
+
+interface ReleaseNotesInfo {
+  version: string
+  notes: string
+  notesPath: string
+  shouldShow: boolean
+}
+
 interface Window {
   electronAPI: {
     searchPlayer: (username: string) => Promise<PlayerPayload | PlayerPayload[] | null>;
@@ -113,6 +131,9 @@ interface Window {
     getStorageInfo: () => Promise<StorageInfo>;
     checkForUpdates: () => Promise<UpdateCheckResult>;
     resolveTransaction: (input: ResolveTransactionInput) => Promise<ResolveTransactionResult>;
+    convertUsdToEur: (amount: string) => Promise<CurrencyConversionResult>;
+    getReleaseNotes: () => Promise<ReleaseNotesInfo>;
+    markReleaseNotesSeen: () => Promise<MutationResult>;
     openExternalUrl: (url: string) => Promise<MutationResult>;
     deletePlayer: (id: number) => Promise<MutationResult>;
     updateDefaultWallet: (id: number, wallet: string) => Promise<MutationResult>;

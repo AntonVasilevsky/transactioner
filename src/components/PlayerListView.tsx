@@ -25,7 +25,7 @@ export default function PlayerListView({ onSelect, onEdit }: { onSelect: (player
   }, [])
 
   const filtered = players.filter(p => {
-    const haystack = contactSearchKey(`${p.messenger_username || ''} ${p.contact_summary || ''}`)
+    const haystack = contactSearchKey(`${p.messenger_username || ''} ${p.contact_summary || ''} ${p.room_summary || ''}`)
     return haystack.includes(contactSearchKey(filter))
   })
 

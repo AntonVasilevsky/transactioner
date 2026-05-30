@@ -19,5 +19,6 @@ describe('transaction resolver helpers', () => {
   it('formats token amounts by decimals', () => {
     expect(formatTokenAmount('99990000000000000000', 18)).toBe('99.99')
     expect(formatTokenAmount('500000000', 6)).toBe('500')
+    expect(formatTokenAmount('1234567890123456789', 18)).toBe('1.234567890123456789')
   })
 })

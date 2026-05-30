@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
+import { convertUsdToEur } from './currency'
 
 export type TransactionNetwork = 'ethereum' | 'bsc' | 'tron'
 
@@ -79,6 +80,10 @@ interface EthereumReceipt {
   logs?: EthereumLog[]
 }
 
+interface EthereumTransaction {
+  value?: string
+}
+
 const cache = new Map<string, { expiresAt: number, result: ResolveTransactionResult }>()
 const cacheTtlMs = 10 * 60 * 1000
 const evmHashPattern = /^0x[a-fA-F0-9]{64}$/
@@ -93,12 +98,6 @@ const explorers: Record<TransactionNetwork, (hash: string) => string> = {
 
 const amountFormat = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 6,
-  useGrouping: false,
-})
-
-const currencyFormat = new Intl.NumberFormat('en-US', {
-  minimumFractionDigits: 2,
-  maximumFractionDigits: 2,
   useGrouping: false,
 })
 
@@ -189,19 +188,14 @@ const withEuroConversion = async (
   if (!shouldConvert) return result
 
   try {
-    const data = await fetchJson<{ date: string, rates?: { EUR?: number } }>('https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR')
-    const rate = data.rates?.EUR
-    if (!rate) return result
-
-    const converted = (Number(result.amount) || 0) * rate
-    const convertedAmount = currencyFormat.format(converted)
+    const conversion = await convertUsdToEur(Number(result.amount) || 0)
     return {
       ...result,
-      convertedAmount,
-      convertedCurrency: 'EUR',
-      convertedDisplayAmount: `€${convertedAmount}`,
-      fxRate: rate,
-      fxDate: data.date,
+      convertedAmount: conversion.convertedAmount,
+      convertedCurrency: conversion.convertedCurrency,
+      convertedDisplayAmount: conversion.convertedDisplayAmount,
+      fxRate: conversion.fxRate,
+      fxDate: conversion.fxDate,
     }
   } catch {
     return result
@@ -276,6 +270,14 @@ const resolveEthereumTransaction = async (hash: string, keys: ApiKeys): Promise<
   if (!receipt || typeof receipt !== 'object') return null
   const typedReceipt = receipt as EthereumReceipt
 
+  const transactionData = await fetchEtherscanProxy({
+    action: 'eth_getTransactionByHash',
+    txhash: hash,
+  }, keys.ETHERSCAN_API_KEY)
+  const transaction = transactionData.result && typeof transactionData.result === 'object'
+    ? transactionData.result as EthereumTransaction
+    : null
+
   const transferLog = Array.isArray(typedReceipt.logs)
     ? typedReceipt.logs.find(log => String(log.topics?.[0]).toLowerCase() === transferTopic && log.data)
     : null
@@ -301,6 +303,9 @@ const resolveEthereumTransaction = async (hash: string, keys: ApiKeys): Promise<
       tag: 'latest',
     }, keys.ETHERSCAN_API_KEY)
     currency = decodeStringCallResult(symbolData.result) || undefined
+  } else if (transaction?.value && transaction.value !== '0x0') {
+    amount = formatTokenAmount(BigInt(transaction.value).toString(), 18)
+    currency = 'ETH'
   }
 
   return {

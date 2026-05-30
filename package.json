@@ -3,7 +3,7 @@
   "private": true,
   "description": "Desktop helper for poker room transaction templates.",
   "author": "Transactioner",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
@@ -28,7 +28,8 @@
     "files": [
       "dist/**",
       "dist-electron/**",
-      "package.json"
+      "package.json",
+      "USER_RELEASE_NOTES.txt"
     ],
     "asarUnpack": [
       "node_modules/better-sqlite3/**"
