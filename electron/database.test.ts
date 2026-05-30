@@ -6,6 +6,7 @@ import Database from 'better-sqlite3'
 import { TransactionerDatabase, type SavePlayerInput } from './database'
 
 let tempDir = ''
+let dbPath = ''
 let db: TransactionerDatabase
 
 const basePlayer = (overrides: Partial<SavePlayerInput> = {}): SavePlayerInput => ({
@@ -24,7 +25,8 @@ const basePlayer = (overrides: Partial<SavePlayerInput> = {}): SavePlayerInput =
 
 beforeEach(() => {
   tempDir = mkdtempSync(path.join(tmpdir(), 'transactioner-db-'))
-  db = new TransactionerDatabase(path.join(tempDir, 'transactioner.db'))
+  dbPath = path.join(tempDir, 'transactioner.db')
+  db = new TransactionerDatabase(dbPath)
 })
 
 afterEach(() => {
@@ -312,5 +314,84 @@ describe('TransactionerDatabase', () => {
     legacy.close()
 
     expect(() => new TransactionerDatabase(dbPath)).toThrow('duplicate players')
+  })
+
+  it('creates room knowledge tables and seeds initial room data idempotently', () => {
+    const firstIndex = db.getRoomKnowledgeIndex()
+
+    expect(firstIndex.profiles.map((profile) => profile.room_key).sort()).toEqual([
+      'champion-poker',
+      'nexa',
+      'redstar'
+    ])
+    expect(firstIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')).toHaveLength(3)
+
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+    const secondIndex = db.getRoomKnowledgeIndex()
+
+    expect(secondIndex.profiles.filter((profile) => profile.room_key === 'champion-poker')).toHaveLength(1)
+    expect(secondIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')).toHaveLength(3)
+  })
+
+  it('returns active room deals filtered by room, language, and deal type', () => {
+    db.close()
+    const raw = new Database(dbPath)
+    raw.prepare(`
+      INSERT INTO room_deals (
+        room_key, deal_type, language, short_text, full_text, sort_order, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('redstar', 'General', 'RU', 'Коротко RedStar', 'Полный шаблон RedStar', 10, 1)
+    raw.prepare(`
+      INSERT INTO room_deals (
+        room_key, deal_type, language, short_text, full_text, sort_order, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('redstar', 'General', 'EN', 'Short RedStar', 'Full RedStar', 20, 1)
+    raw.prepare(`
+      INSERT INTO room_deals (
+        room_key, deal_type, language, short_text, full_text, sort_order, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('redstar', 'Agent', 'RU', 'Старый короткий', 'Старый полный', 30, 0)
+    raw.close()
+
+    db = new TransactionerDatabase(dbPath)
+    const ruDeals = db.getRoomDeals('redstar', 'RU')
+    const enDeals = db.getRoomDeals('redstar', 'EN', 'General')
+
+    expect(ruDeals).toHaveLength(1)
+    expect(ruDeals[0].short_text).toBe('Коротко RedStar')
+    expect(enDeals).toHaveLength(1)
+    expect(enDeals[0].short_text).toBe('Short RedStar')
+  })
+
+  it('returns room wallets filtered by room and deal type while preserving inactive rows for warnings', () => {
+    db.close()
+    const raw = new Database(dbPath)
+    raw.prepare(`
+      INSERT INTO room_wallets (
+        room_key, deal_type, currency, network, wallet_address, fee_text, verified_at, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('redstar', 'General', 'USDT', 'ERC20', '0xactive', 'без комиссии', '2026-02-16', 1, 20)
+    raw.prepare(`
+      INSERT INTO room_wallets (
+        room_key, deal_type, currency, network, wallet_address, fee_text, verified_at, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('redstar', 'General', 'USDT', 'TRC20', 'Tinactive', 'не актуально', '2025-05-25', 0, 10)
+    raw.prepare(`
+      INSERT INTO room_wallets (
+        room_key, deal_type, currency, network, wallet_address, fee_text, verified_at, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('redstar', 'Agent', 'BTC', 'BTC', 'bc1agent', 'без комиссии', '2026-02-16', 1, 30)
+    raw.close()
+
+    db = new TransactionerDatabase(dbPath)
+    const generalWallets = db.getRoomWallets('redstar', 'General')
+    const agentWallets = db.getRoomWallets('redstar', 'Agent')
+
+    expect(generalWallets).toHaveLength(2)
+    expect(generalWallets.map((wallet) => wallet.wallet_address)).toEqual(['0xactive', 'Tinactive'])
+    expect(generalWallets[1].is_active).toBe(0)
+    expect(agentWallets).toHaveLength(1)
+    expect(agentWallets[0].wallet_address).toBe('bc1agent')
   })
 })

@@ -96,6 +96,17 @@ const explorers: Record<TransactionNetwork, (hash: string) => string> = {
   tron: hash => `https://tronscan.org/#/transaction/${hash}`,
 }
 
+const knownTokenSymbols: Partial<Record<TransactionNetwork, Record<string, string>>> = {
+  ethereum: {
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 'USDC',
+    '0xdac17f958d2ee523a2206206994597c13d831ec7': 'USDT',
+  },
+  bsc: {
+    '0x55d398326f99059ff775485246999027b3197955': 'USDT',
+    '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': 'USDC',
+  },
+}
+
 const amountFormat = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 6,
   useGrouping: false,
@@ -285,7 +296,7 @@ const resolveEthereumTransaction = async (hash: string, keys: ApiKeys): Promise<
   let amount: string | undefined
   let currency: string | undefined
   if (transferLog) {
-    const contract = transferLog.address
+    const contract = transferLog.address.toLowerCase()
     const rawAmount = BigInt(transferLog.data).toString()
     const decimalsData = await fetchEtherscanProxy({
       action: 'eth_call',
@@ -296,13 +307,18 @@ const resolveEthereumTransaction = async (hash: string, keys: ApiKeys): Promise<
     const decimals = Number.parseInt(String(decimalsData.result || '0x0'), 16)
     amount = formatTokenAmount(rawAmount, decimals)
 
-    const symbolData = await fetchEtherscanProxy({
-      action: 'eth_call',
-      to: contract,
-      data: '0x95d89b41',
-      tag: 'latest',
-    }, keys.ETHERSCAN_API_KEY)
-    currency = decodeStringCallResult(symbolData.result) || undefined
+    const knownCurrency = knownTokenSymbols.ethereum?.[contract]
+    if (knownCurrency) {
+      currency = knownCurrency
+    } else {
+      const symbolData = await fetchEtherscanProxy({
+        action: 'eth_call',
+        to: contract,
+        data: '0x95d89b41',
+        tag: 'latest',
+      }, keys.ETHERSCAN_API_KEY)
+      currency = decodeStringCallResult(symbolData.result) || undefined
+    }
   } else if (transaction?.value && transaction.value !== '0x0') {
     amount = formatTokenAmount(BigInt(transaction.value).toString(), 18)
     currency = 'ETH'

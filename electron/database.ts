@@ -1,7 +1,10 @@
 import Database from 'better-sqlite3'
 import { contactSearchKey, normalizeContactText } from '../src/utils/contactNormalization'
+import { roomKnowledgeSeed, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
 
 export type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
+export type RoomDealType = 'General' | 'Direct' | 'Agent'
+export type RoomLanguage = 'RU' | 'EN'
 
 export interface AccountInput {
   roomName: string
@@ -37,6 +40,67 @@ export interface MutationResult {
 
 export interface SavePlayerResult extends MutationResult {
   id?: number
+}
+
+export interface RoomProfileInfo {
+  id: number
+  room_key: string
+  display_name: string
+  network_name?: string | null
+  is_active: number
+  notes?: string | null
+}
+
+export interface RoomDealInfo {
+  id: number
+  room_key: string
+  deal_type: RoomDealType
+  language: RoomLanguage
+  short_text: string
+  full_text: string
+  registration_url?: string | null
+  promo_code?: string | null
+  registration_note?: string | null
+  sort_order: number
+  is_active: number
+  updated_at?: string | null
+}
+
+export interface RoomPaymentMethodInfo {
+  id: number
+  room_key: string
+  deal_type: RoomDealType
+  operation_type: 'Deposit' | 'Withdrawal'
+  method_name: string
+  currency: string
+  network: string
+  fee_text?: string | null
+  limits_text?: string | null
+  note?: string | null
+  sort_order: number
+  is_active: number
+}
+
+export interface RoomWalletInfo {
+  id: number
+  room_key: string
+  deal_type: RoomDealType
+  currency: string
+  network: string
+  wallet_address: string
+  memo_tag?: string | null
+  fee_text?: string | null
+  note?: string | null
+  verified_at?: string | null
+  is_active: number
+  sort_order: number
+}
+
+export interface RoomKnowledgeIndex {
+  profiles: RoomProfileInfo[]
+  dealOptions: Array<{ room_key: string; deal_type: RoomDealType; language: RoomLanguage }>
+  paymentMethods: RoomPaymentMethodInfo[]
+  walletOptions: Array<{ room_key: string; deal_type: RoomDealType; currency: string; network: string; is_active: number }>
 }
 
 interface DbPlayer {
@@ -131,6 +195,76 @@ export class TransactionerDatabase {
     const player = this.db.prepare('SELECT * FROM players WHERE id = ?').get(id) as DbPlayer | undefined
     if (!player) return null
     return this.getPlayerPayload(player)
+  }
+
+  getRoomKnowledgeIndex(): RoomKnowledgeIndex {
+    const profiles = this.db.prepare(`
+      SELECT * FROM room_profiles
+      WHERE is_active = 1
+      ORDER BY display_name COLLATE NOCASE
+    `).all() as RoomProfileInfo[]
+    const dealOptions = this.db.prepare(`
+      SELECT room_key, deal_type, language
+      FROM room_deals
+      WHERE is_active = 1
+      ORDER BY room_key COLLATE NOCASE, sort_order, deal_type COLLATE NOCASE, language
+    `).all() as RoomKnowledgeIndex['dealOptions']
+    const paymentMethods = this.db.prepare(`
+      SELECT * FROM room_payment_methods
+      WHERE is_active = 1
+      ORDER BY room_key COLLATE NOCASE, sort_order, operation_type, method_name COLLATE NOCASE
+    `).all() as RoomPaymentMethodInfo[]
+    const walletOptions = this.db.prepare(`
+      SELECT room_key, deal_type, currency, network, is_active
+      FROM room_wallets
+      ORDER BY room_key COLLATE NOCASE, sort_order, currency COLLATE NOCASE, network COLLATE NOCASE
+    `).all() as RoomKnowledgeIndex['walletOptions']
+
+    return { profiles, dealOptions, paymentMethods, walletOptions }
+  }
+
+  getRoomWallets(roomKey: string, dealType?: RoomDealType): RoomWalletInfo[] {
+    const normalizedRoomKey = String(roomKey || '').trim()
+    if (!normalizedRoomKey) return []
+
+    if (dealType) {
+      return this.db.prepare(`
+        SELECT * FROM room_wallets
+        WHERE room_key = ? COLLATE NOCASE
+          AND deal_type = ? COLLATE NOCASE
+        ORDER BY is_active DESC, sort_order, currency COLLATE NOCASE, network COLLATE NOCASE
+      `).all(normalizedRoomKey, dealType) as RoomWalletInfo[]
+    }
+
+    return this.db.prepare(`
+      SELECT * FROM room_wallets
+      WHERE room_key = ? COLLATE NOCASE
+      ORDER BY is_active DESC, sort_order, deal_type COLLATE NOCASE, currency COLLATE NOCASE, network COLLATE NOCASE
+    `).all(normalizedRoomKey) as RoomWalletInfo[]
+  }
+
+  getRoomDeals(roomKey: string, language: RoomLanguage, dealType?: RoomDealType): RoomDealInfo[] {
+    const normalizedRoomKey = String(roomKey || '').trim()
+    if (!normalizedRoomKey) return []
+
+    if (dealType) {
+      return this.db.prepare(`
+        SELECT * FROM room_deals
+        WHERE room_key = ? COLLATE NOCASE
+          AND language = ? COLLATE NOCASE
+          AND deal_type = ? COLLATE NOCASE
+          AND is_active = 1
+        ORDER BY sort_order, deal_type COLLATE NOCASE
+      `).all(normalizedRoomKey, language, dealType) as RoomDealInfo[]
+    }
+
+    return this.db.prepare(`
+      SELECT * FROM room_deals
+      WHERE room_key = ? COLLATE NOCASE
+        AND language = ? COLLATE NOCASE
+        AND is_active = 1
+      ORDER BY sort_order, deal_type COLLATE NOCASE
+    `).all(normalizedRoomKey, language) as RoomDealInfo[]
   }
 
   deletePlayer(id: number): MutationResult {
@@ -314,6 +448,59 @@ export class TransactionerDatabase {
         FOREIGN KEY(player_id) REFERENCES players(id),
         UNIQUE(contact_method, contact_value)
       );
+      CREATE TABLE IF NOT EXISTS room_profiles (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_key TEXT NOT NULL UNIQUE,
+        display_name TEXT NOT NULL,
+        network_name TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        notes TEXT
+      );
+      CREATE TABLE IF NOT EXISTS room_deals (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_key TEXT NOT NULL,
+        deal_type TEXT NOT NULL DEFAULT 'General',
+        language TEXT NOT NULL,
+        short_text TEXT NOT NULL,
+        full_text TEXT NOT NULL,
+        registration_url TEXT,
+        promo_code TEXT,
+        registration_note TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT,
+        UNIQUE(room_key, deal_type, language)
+      );
+      CREATE TABLE IF NOT EXISTS room_payment_methods (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_key TEXT NOT NULL,
+        deal_type TEXT NOT NULL DEFAULT 'General',
+        operation_type TEXT NOT NULL,
+        method_name TEXT NOT NULL,
+        currency TEXT NOT NULL DEFAULT '',
+        network TEXT NOT NULL DEFAULT '',
+        fee_text TEXT,
+        limits_text TEXT,
+        note TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(room_key, deal_type, operation_type, method_name, currency, network)
+      );
+      CREATE TABLE IF NOT EXISTS room_wallets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_key TEXT NOT NULL,
+        deal_type TEXT NOT NULL DEFAULT 'General',
+        currency TEXT NOT NULL,
+        network TEXT NOT NULL,
+        wallet_address TEXT NOT NULL,
+        memo_tag TEXT,
+        fee_text TEXT,
+        note TEXT,
+        verified_at TEXT,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(room_key, deal_type, currency, network, wallet_address)
+      );
     `)
 
     this.migrate()
@@ -340,6 +527,133 @@ export class TransactionerDatabase {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_player_contacts_unique_nocase
       ON player_contacts(contact_method COLLATE NOCASE, contact_value COLLATE NOCASE);
     `)
+    this.seedRoomKnowledge(roomKnowledgeSeed)
+  }
+
+  private seedRoomKnowledge(seed: RoomKnowledgeSeed) {
+    const seedRooms = this.db.transaction(() => {
+      const insertProfile = this.db.prepare(`
+        INSERT INTO room_profiles (room_key, display_name, network_name, is_active, notes)
+        VALUES (@roomKey, @displayName, @networkName, @isActive, @notes)
+        ON CONFLICT(room_key) DO UPDATE SET
+          display_name = excluded.display_name,
+          network_name = excluded.network_name,
+          is_active = excluded.is_active,
+          notes = excluded.notes
+      `)
+      const insertDeal = this.db.prepare(`
+        INSERT INTO room_deals (
+          room_key, deal_type, language, short_text, full_text, registration_url,
+          promo_code, registration_note, sort_order, is_active, updated_at
+        )
+        VALUES (
+          @roomKey, @dealType, @language, @shortText, @fullText, @registrationUrl,
+          @promoCode, @registrationNote, @sortOrder, @isActive, @updatedAt
+        )
+        ON CONFLICT(room_key, deal_type, language) DO UPDATE SET
+          short_text = excluded.short_text,
+          full_text = excluded.full_text,
+          registration_url = excluded.registration_url,
+          promo_code = excluded.promo_code,
+          registration_note = excluded.registration_note,
+          sort_order = excluded.sort_order,
+          is_active = excluded.is_active,
+          updated_at = excluded.updated_at
+      `)
+      const insertPaymentMethod = this.db.prepare(`
+        INSERT INTO room_payment_methods (
+          room_key, deal_type, operation_type, method_name, currency, network,
+          fee_text, limits_text, note, sort_order, is_active
+        )
+        VALUES (
+          @roomKey, @dealType, @operationType, @methodName, @currency, @network,
+          @feeText, @limitsText, @note, @sortOrder, @isActive
+        )
+        ON CONFLICT(room_key, deal_type, operation_type, method_name, currency, network) DO UPDATE SET
+          fee_text = excluded.fee_text,
+          limits_text = excluded.limits_text,
+          note = excluded.note,
+          sort_order = excluded.sort_order,
+          is_active = excluded.is_active
+      `)
+      const insertWallet = this.db.prepare(`
+        INSERT INTO room_wallets (
+          room_key, deal_type, currency, network, wallet_address, memo_tag,
+          fee_text, note, verified_at, is_active, sort_order
+        )
+        VALUES (
+          @roomKey, @dealType, @currency, @network, @walletAddress, @memoTag,
+          @feeText, @note, @verifiedAt, @isActive, @sortOrder
+        )
+        ON CONFLICT(room_key, deal_type, currency, network, wallet_address) DO UPDATE SET
+          memo_tag = excluded.memo_tag,
+          fee_text = excluded.fee_text,
+          note = excluded.note,
+          verified_at = excluded.verified_at,
+          is_active = excluded.is_active,
+          sort_order = excluded.sort_order
+      `)
+
+      for (const profile of seed.profiles) {
+        insertProfile.run({
+          roomKey: profile.roomKey,
+          displayName: profile.displayName,
+          networkName: profile.networkName || null,
+          isActive: profile.isActive === false ? 0 : 1,
+          notes: profile.notes || null
+        })
+      }
+
+      for (const deal of seed.deals) {
+        insertDeal.run({
+          roomKey: deal.roomKey,
+          dealType: deal.dealType || 'General',
+          language: deal.language,
+          shortText: deal.shortText,
+          fullText: deal.fullText,
+          registrationUrl: deal.registrationUrl || null,
+          promoCode: deal.promoCode || null,
+          registrationNote: deal.registrationNote || null,
+          sortOrder: deal.sortOrder || 0,
+          isActive: deal.isActive === false ? 0 : 1,
+          updatedAt: deal.updatedAt || null
+        })
+      }
+
+      for (const method of seed.paymentMethods) {
+        insertPaymentMethod.run({
+          roomKey: method.roomKey,
+          dealType: method.dealType || 'General',
+          operationType: method.operationType,
+          methodName: method.methodName,
+          currency: method.currency || '',
+          network: method.network || '',
+          feeText: method.feeText || null,
+          limitsText: method.limitsText || null,
+          note: method.note || null,
+          sortOrder: method.sortOrder || 0,
+          isActive: method.isActive === false ? 0 : 1
+        })
+      }
+
+      for (const wallet of seed.wallets) {
+        insertWallet.run({
+          roomKey: wallet.roomKey,
+          dealType: wallet.dealType || 'General',
+          currency: wallet.currency,
+          network: wallet.network,
+          walletAddress: wallet.walletAddress,
+          memoTag: wallet.memoTag || null,
+          feeText: wallet.feeText || null,
+          note: wallet.note || null,
+          verifiedAt: wallet.verifiedAt || null,
+          isActive: wallet.isActive === false ? 0 : 1,
+          sortOrder: wallet.sortOrder || 0
+        })
+      }
+    })
+
+    seedRooms()
   }
 
   private migratePrimaryContacts() {
