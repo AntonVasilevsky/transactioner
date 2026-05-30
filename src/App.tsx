@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Download, Search, UserPlus, FileText, ChevronRight, Users, X } from 'lucide-react'
+import { Download, Search, UserPlus, ChevronRight, Users, X } from 'lucide-react'
 
 // Views
 import SearchPlayerView from './components/SearchPlayerView'
@@ -82,9 +82,18 @@ function App() {
       {/* Sidebar Navigation */}
       <nav className="w-20 lg:w-64 flex flex-col bg-slate-800/50 backdrop-blur-md border-r border-slate-700/50 transition-all duration-300">
         <div className="p-4 lg:p-6 mb-8 flex items-center justify-center lg:justify-start gap-3">
-          <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-500 flex items-center justify-center shadow-lg shadow-blue-500/20">
-            <FileText className="text-white" size={20} />
-          </div>
+          <button
+            type="button"
+            onClick={() => setCurrentView('search')}
+            className="rounded-xl transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
+            title="На главный экран"
+          >
+            <img
+              src="/icon.png"
+              alt=""
+              className="h-12 w-12 rounded-xl object-cover shadow-lg shadow-blue-500/20"
+            />
+          </button>
           <h1 className="hidden lg:block font-bold text-xl tracking-tight bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">
             Transactioner
           </h1>
