@@ -3,7 +3,7 @@ import { homedir } from 'node:os'
 import path from 'node:path'
 import { convertUsdToEur } from './currency'
 
-export type TransactionNetwork = 'ethereum' | 'bsc' | 'tron'
+export type TransactionNetwork = 'ethereum' | 'bsc' | 'tron' | 'bitcoin'
 
 interface ResolveTransactionInput {
   txInput: string
@@ -84,6 +84,10 @@ interface EthereumTransaction {
   value?: string
 }
 
+interface BitcoinTransactionResponse {
+  txid?: string
+}
+
 const cache = new Map<string, { expiresAt: number, result: ResolveTransactionResult }>()
 const cacheTtlMs = 10 * 60 * 1000
 const evmHashPattern = /^0x[a-fA-F0-9]{64}$/
@@ -94,6 +98,7 @@ const explorers: Record<TransactionNetwork, (hash: string) => string> = {
   ethereum: hash => `https://etherscan.io/tx/${hash}`,
   bsc: hash => `https://bscscan.com/tx/${hash}`,
   tron: hash => `https://tronscan.org/#/transaction/${hash}`,
+  bitcoin: hash => `https://blockstream.info/tx/${hash}`,
 }
 
 const knownTokenSymbols: Partial<Record<TransactionNetwork, Record<string, string>>> = {
@@ -127,6 +132,14 @@ export const parseTransactionInput = (input: string): ParsedTransactionInput | n
     if (host.includes('tronscan')) preferredNetwork = 'tron'
     if (host.includes('bscscan') || host.includes('binplorer')) preferredNetwork = 'bsc'
     if (host.includes('etherscan')) preferredNetwork = 'ethereum'
+    if (
+      host.includes('blockstream.info') ||
+      host.includes('mempool.space') ||
+      host.includes('blockchain.com') ||
+      host.includes('blockchair.com')
+    ) {
+      preferredNetwork = 'bitcoin'
+    }
   } catch {
     // Plain hashes are expected here.
   }
@@ -136,7 +149,7 @@ export const parseTransactionInput = (input: string): ParsedTransactionInput | n
   }
 
   if (!hash.startsWith('0x') && tronHashPattern.test(hash)) {
-    return { hash, preferredNetwork: preferredNetwork || 'tron' }
+    return { hash, preferredNetwork }
   }
 
   return null
@@ -271,6 +284,19 @@ const resolveBscTransaction = async (hash: string): Promise<ResolveTransactionRe
   }
 }
 
+const resolveBitcoinTransaction = async (hash: string): Promise<ResolveTransactionResult | null> => {
+  const data = await fetchJson<BitcoinTransactionResponse>(`https://blockstream.info/api/tx/${hash}`)
+  if (data.txid !== hash) return null
+
+  return {
+    success: true,
+    status: 'resolved',
+    txHash: hash,
+    network: 'bitcoin',
+    explorerUrl: explorers.bitcoin(hash),
+  }
+}
+
 const fetchEtherscanProxy = async (params: Record<string, string>, apiKey: string) => {
   const search = new URLSearchParams({
     chainid: '1',
@@ -377,7 +403,7 @@ export const resolveTransaction = async (input: ResolveTransactionInput): Promis
       ? [parsed.preferredNetwork]
       : parsed.hash.startsWith('0x')
         ? ['ethereum', 'bsc'] as TransactionNetwork[]
-        : ['tron'] as TransactionNetwork[]
+        : ['tron', 'bitcoin'] as TransactionNetwork[]
 
     for (const network of resolvers) {
       let result: ResolveTransactionResult | null
@@ -387,7 +413,9 @@ export const resolveTransaction = async (input: ResolveTransactionInput): Promis
             ? await resolveTronTransaction(parsed.hash, keys)
             : network === 'bsc'
               ? await resolveBscTransaction(parsed.hash)
-              : await resolveEthereumTransaction(parsed.hash, keys)
+              : network === 'bitcoin'
+                ? await resolveBitcoinTransaction(parsed.hash)
+                : await resolveEthereumTransaction(parsed.hash, keys)
       } catch (err) {
         if (isLookupMissError(err)) {
           continue

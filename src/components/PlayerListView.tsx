@@ -121,7 +121,6 @@ export default function PlayerListView({ onSelect, onEdit }: { onSelect: (player
           <div className="space-y-3">
             <StoragePath label="БД" value={storageInfo.databasePath} />
             <StoragePath label="Бекап" value={storageInfo.latestBackupPath} />
-            <StoragePath label="Папка бекапов" value={storageInfo.backupDir} />
           </div>
         )}
       </div>

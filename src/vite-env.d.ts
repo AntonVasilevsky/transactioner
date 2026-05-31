@@ -91,7 +91,7 @@ interface ResolveTransactionResult {
   success: boolean
   status: 'resolved' | 'not_found' | 'invalid' | 'error'
   txHash?: string
-  network?: 'ethereum' | 'bsc' | 'tron'
+  network?: 'ethereum' | 'bsc' | 'tron' | 'bitcoin'
   explorerUrl?: string
   amount?: string
   currency?: string

@@ -168,6 +168,9 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           const resolvedAmount = account.roomName === 'Champion Poker'
             ? result.convertedDisplayAmount || result.displayAmount
             : result.displayAmount
+          if (result.network === 'bitcoin' && !amountEditedRef.current) {
+            setAmount('')
+          }
           if (!amountEditedRef.current && resolvedAmount) {
             setAmount(resolvedAmount)
           }

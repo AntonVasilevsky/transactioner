@@ -29,6 +29,13 @@ describe('transaction resolver helpers', () => {
     })
   })
 
+  it('extracts a Bitcoin hash and preferred network from a Blockstream URL', () => {
+    expect(parseTransactionInput('https://blockstream.info/tx/5f52529ab5d4ebb711a879ba30435062b58d0dcee4c82a98d479a398ca72145a')).toEqual({
+      hash: '5f52529ab5d4ebb711a879ba30435062b58d0dcee4c82a98d479a398ca72145a',
+      preferredNetwork: 'bitcoin',
+    })
+  })
+
   it('formats token amounts by decimals', () => {
     expect(formatTokenAmount('99990000000000000000', 18)).toBe('99.99')
     expect(formatTokenAmount('500000000', 6)).toBe('500')
@@ -106,5 +113,31 @@ describe('transaction resolver helpers', () => {
     expect(result.success).toBe(false)
     expect(result.status).toBe('not_found')
     expect(result.error).toBe('Транзакция не найдена в поддерживаемых сетях')
+  })
+
+  it('resolves a plain Bitcoin transaction hash after Tron misses', async () => {
+    const txHash = '5f52529ab5d4ebb711a879ba30435062b58d0dcee4c82a98d479a398ca72145a'
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = String(input)
+      if (url.includes('tronscanapi.com')) {
+        return new Response('not found', { status: 404 })
+      }
+      if (url === `https://blockstream.info/api/tx/${txHash}`) {
+        return jsonResponse({ txid: txHash })
+      }
+      return new Response('not found', { status: 404 })
+    })
+
+    const result = await resolveTransaction({
+      txInput: txHash,
+      roomName: 'Champion Poker',
+      operationType: 'Deposit',
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.network).toBe('bitcoin')
+    expect(result.explorerUrl).toBe(`https://blockstream.info/tx/${txHash}`)
+    expect(result.displayAmount).toBeUndefined()
+    expect(fetchMock).toHaveBeenCalled()
   })
 })
