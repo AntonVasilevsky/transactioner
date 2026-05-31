@@ -276,7 +276,10 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
                 event.target.select()
                 setIsRoomPickerOpen(true)
               }}
-              onClick={(event) => event.currentTarget.select()}
+              onClick={(event) => {
+                event.currentTarget.select()
+                setIsRoomPickerOpen(true)
+              }}
               onBlur={() => {
                 window.setTimeout(() => {
                   setIsRoomPickerOpen(false)

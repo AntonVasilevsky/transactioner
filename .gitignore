@@ -28,3 +28,4 @@ build/private/*
 *.njsproj
 *.sln
 *.sw?
+.gbrain-source
