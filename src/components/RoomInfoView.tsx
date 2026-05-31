@@ -65,6 +65,7 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
   const [adminSessionKey, setAdminSessionKey] = useState(0)
   const [refreshToken, setRefreshToken] = useState(0)
   const hasSeenHomeSignal = useRef(false)
+  const roomInputWasFocusedOnMouseDown = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -276,9 +277,14 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
                 event.target.select()
                 setIsRoomPickerOpen(true)
               }}
+              onMouseDown={(event) => {
+                roomInputWasFocusedOnMouseDown.current = document.activeElement === event.currentTarget
+              }}
               onClick={(event) => {
                 event.currentTarget.select()
-                setIsRoomPickerOpen(true)
+                setIsRoomPickerOpen((isOpen) => (
+                  roomInputWasFocusedOnMouseDown.current ? !isOpen : true
+                ))
               }}
               onBlur={() => {
                 window.setTimeout(() => {
