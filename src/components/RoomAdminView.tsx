@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, Eye, EyeOff, Plus, Save, Settings } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Plus, Save, Search, Settings } from 'lucide-react'
 
 type AdminMode = 'deals' | 'wallets'
 const allDealTypes: RoomDealType[] = ['Agent', 'Direct', 'General']
+const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
 
 const dealTypeLabels: Record<RoomDealType, string> = {
   General: 'Общая',
@@ -18,6 +19,19 @@ const preferredDealTypeForRoom = (index: RoomKnowledgeIndex | null, roomKey: str
   ]))
   return existingTypes.includes('Agent') ? 'Agent' : existingTypes[0] || 'Agent'
 }
+
+const roomName = (profiles: RoomProfileInfo[], roomKey: string) =>
+  profiles.find((profile) => profile.room_key === roomKey)?.display_name || roomKey
+
+const sortRooms = (profiles: RoomProfileInfo[]) => [...profiles].sort((left, right) => {
+  const leftPinned = pinnedRoomOrder.indexOf(left.room_key)
+  const rightPinned = pinnedRoomOrder.indexOf(right.room_key)
+  const leftRank = leftPinned === -1 ? Number.POSITIVE_INFINITY : leftPinned
+  const rightRank = rightPinned === -1 ? Number.POSITIVE_INFINITY : rightPinned
+
+  if (leftRank !== rightRank) return leftRank - rightRank
+  return left.display_name.localeCompare(right.display_name, undefined, { sensitivity: 'base' })
+})
 
 const emptyWallet = (roomKey: string, dealType: RoomDealType): SaveRoomWalletInput => ({
   room_key: roomKey,
@@ -95,6 +109,24 @@ const hasWalletDraftContent = (wallet: SaveRoomWalletInput) => [
   wallet.verified_at,
 ].some((value) => String(value || '').trim())
 
+const hasDealDraftContent = (deal: SaveRoomDealInput) => [
+  deal.short_text,
+  deal.full_text,
+  deal.registration_url,
+  deal.promo_code,
+  deal.registration_note,
+].some((value) => String(value || '').trim())
+
+const isDealDraftComplete = (deal: SaveRoomDealInput) =>
+  Boolean(String(deal.short_text || '').trim() && String(deal.full_text || '').trim())
+
+const preservePageScrollAfterPaste = () => {
+  const scrollX = window.scrollX
+  const scrollY = window.scrollY
+  window.requestAnimationFrame(() => window.scrollTo(scrollX, scrollY))
+  window.setTimeout(() => window.scrollTo(scrollX, scrollY), 0)
+}
+
 export default function RoomAdminView({
   initialMode = 'deals',
   onClose,
@@ -105,6 +137,8 @@ export default function RoomAdminView({
   const [mode, setMode] = useState<AdminMode>(initialMode)
   const [index, setIndex] = useState<RoomKnowledgeIndex | null>(null)
   const [roomKey, setRoomKey] = useState('')
+  const [roomQuery, setRoomQuery] = useState('')
+  const [isRoomPickerOpen, setIsRoomPickerOpen] = useState(false)
   const [dealType, setDealType] = useState<RoomDealType>('Agent')
   const [language, setLanguage] = useState<RoomLanguage>('RU')
   const [deals, setDeals] = useState<RoomDealInfo[]>([])
@@ -125,10 +159,12 @@ export default function RoomAdminView({
 
   const loadIndex = async (preferredRoomKey?: string) => {
     const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
-    const nextRoomKey = preferredRoomKey || roomKey || nextIndex.profiles[0]?.room_key || ''
+    const sortedProfiles = sortRooms(nextIndex.profiles)
+    const nextRoomKey = preferredRoomKey || roomKey || sortedProfiles[0]?.room_key || ''
     setIndex(nextIndex)
     setRoomKey(nextRoomKey)
     setDealType(preferredDealTypeForRoom(nextIndex, nextRoomKey))
+    setRoomQuery(roomName(nextIndex.profiles, nextRoomKey))
   }
 
   useEffect(() => {
@@ -136,9 +172,11 @@ export default function RoomAdminView({
     window.electronAPI.getRoomKnowledgeAdminIndex()
       .then((nextIndex) => {
         if (!active) return
-        const nextRoomKey = nextIndex.profiles[0]?.room_key || ''
+        const sortedProfiles = sortRooms(nextIndex.profiles)
+        const nextRoomKey = sortedProfiles[0]?.room_key || ''
         setIndex(nextIndex)
         setRoomKey(nextRoomKey)
+        setRoomQuery(roomName(nextIndex.profiles, nextRoomKey))
         setDealType(preferredDealTypeForRoom(nextIndex, nextRoomKey))
       })
       .catch((err) => {
@@ -173,6 +211,21 @@ export default function RoomAdminView({
       ? 'Agent'
       : existingDealTypes[0] || 'Agent'
 
+  const filteredRoomProfiles = useMemo(() => {
+    const profiles = index?.profiles || []
+    const selectedRoomName = roomName(profiles, roomKey)
+    const rawQuery = roomQuery.trim()
+    const query = rawQuery && rawQuery !== selectedRoomName
+      ? rawQuery.toLowerCase()
+      : ''
+    const filteredProfiles = query ? profiles.filter((profile) => (
+      profile.display_name.toLowerCase().includes(query) ||
+      profile.room_key.toLowerCase().includes(query) ||
+      String(profile.network_name || '').toLowerCase().includes(query)
+    )) : profiles
+    return sortRooms(filteredProfiles)
+  }, [index, roomKey, roomQuery])
+
   useEffect(() => {
     if (!roomKey) return
     let active = true
@@ -205,7 +258,7 @@ export default function RoomAdminView({
     }
   }, [roomKey, activeDealType, existingDealTypes])
 
-  const roomName = index?.profiles.find((profile) => profile.room_key === roomKey)?.display_name || roomKey
+  const selectedRoomName = roomName(index?.profiles || [], roomKey)
   const selectedRoomProfile = index?.profiles.find((profile) => profile.room_key === roomKey)
 
   const showMessage = (text: string) => {
@@ -219,20 +272,58 @@ export default function RoomAdminView({
     setDealForm(nextDealForm)
   }
 
+  const selectRoom = (profile: RoomProfileInfo) => {
+    setRoomKey(profile.room_key)
+    setDealType(preferredDealTypeForRoom(index, profile.room_key))
+    setRoomQuery(profile.display_name)
+    setIsRoomPickerOpen(false)
+  }
+
   const saveDeal = async () => {
     if (!dealForm) return
-    const result = await window.electronAPI.saveRoomDeal(dealForm)
-    if (!result.success) {
+
+    const draftsToSave = new Map<string, SaveRoomDealInput>()
+    Object.values(dealDraftsRef.current)
+      .filter((draft) => (
+        draft.room_key === dealForm.room_key &&
+        draft.deal_type === dealForm.deal_type &&
+        hasDealDraftContent(draft)
+      ))
+      .forEach((draft) => {
+        draftsToSave.set(dealDraftKey(draft.room_key, draft.deal_type, draft.language), draft)
+      })
+
+    if (hasDealDraftContent(dealForm) || draftsToSave.size === 0) {
+      draftsToSave.set(dealDraftKey(dealForm.room_key, dealForm.deal_type, dealForm.language), dealForm)
+    }
+
+    const incompleteDraft = Array.from(draftsToSave.values()).find((draft) => !isDealDraftComplete(draft))
+    if (incompleteDraft) {
       setMessage('')
-      setError(result.error || 'Не удалось сохранить сделку')
+      setError(`Заполните короткую сделку и полные условия для ${incompleteDraft.language}`)
       return
     }
-    showMessage('Сделка сохранена')
+
+    for (const draft of draftsToSave.values()) {
+      const result = await window.electronAPI.saveRoomDeal(draft)
+      if (!result.success) {
+        setMessage('')
+        setError(result.error ? `${draft.language}: ${result.error}` : `Не удалось сохранить сделку ${draft.language}`)
+        return
+      }
+    }
+
+    const savedCount = draftsToSave.size
+    showMessage(savedCount > 1 ? `Сделки сохранены: ${savedCount}` : 'Сделка сохранена')
     await loadIndex()
+
+    for (const draft of draftsToSave.values()) {
+      delete dealDraftsRef.current[dealDraftKey(draft.room_key, draft.deal_type, draft.language)]
+    }
+
     const nextDeals = await window.electronAPI.getRoomDeals(dealForm.room_key, dealForm.language, dealForm.deal_type)
     const nextDealForm = nextDeals[0] ? dealToForm(nextDeals[0]) : dealForm
     setDeals(nextDeals)
-    dealDraftsRef.current[dealDraftKey(nextDealForm.room_key, nextDealForm.deal_type, nextDealForm.language)] = nextDealForm
     setDealForm(nextDealForm)
   }
 
@@ -264,10 +355,11 @@ export default function RoomAdminView({
     setIsAddingRoom(false)
     await loadIndex(normalizedRoomKey)
     setRoomKey(normalizedRoomKey)
-    setDealType('Agent')
+    setMode('deals')
+    setDealType('Direct')
     setLanguage('RU')
-    setDealForm(emptyDeal(normalizedRoomKey, 'Agent', 'RU'))
-    setWalletForm(emptyWallet(normalizedRoomKey, 'Agent'))
+    setDealForm(emptyDeal(normalizedRoomKey, 'Direct', 'RU'))
+    setWalletForm(emptyWallet(normalizedRoomKey, 'Direct'))
   }
 
   const updateSelectedRoomActive = async (isActive: boolean) => {
@@ -388,6 +480,14 @@ export default function RoomAdminView({
         </section>
       )}
 
+      {(message || error) && (
+        <div className={`fixed right-8 top-8 z-50 max-w-sm rounded-xl border px-4 py-3 text-sm shadow-2xl backdrop-blur ${error ? 'border-red-500/40 bg-red-950/90 text-red-100 shadow-red-950/30' : 'border-emerald-500/40 bg-emerald-950/90 text-emerald-100 shadow-emerald-950/30'}`}>
+          {error || message}
+        </div>
+      )}
+
+      {!isAddingRoom && (
+        <>
       <div className="mb-5 flex flex-wrap items-end gap-3">
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-400">Раздел</label>
@@ -396,22 +496,70 @@ export default function RoomAdminView({
             <ModeButton active={mode === 'deals'} onClick={() => setMode('deals')}>Сделки</ModeButton>
           </div>
         </div>
-        <div className="min-w-56">
+        <div className="relative min-w-56">
           <label className="mb-1 block text-sm font-medium text-slate-400">Рум</label>
           <div className="flex gap-2">
-            <select
-              value={roomKey}
-              onChange={(event) => {
-                const nextRoomKey = event.target.value
-                setRoomKey(nextRoomKey)
-                setDealType(preferredDealTypeForRoom(index, nextRoomKey))
-              }}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-            >
-              {(index?.profiles || []).map((profile) => (
-                <option key={profile.room_key} value={profile.room_key}>{profile.display_name}</option>
-              ))}
-            </select>
+            <div className="relative min-w-0 flex-1">
+              <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+              <input
+                type="text"
+                value={roomQuery}
+                onChange={(event) => {
+                  setRoomQuery(event.target.value)
+                  setIsRoomPickerOpen(true)
+                }}
+                onFocus={(event) => {
+                  event.target.select()
+                  setIsRoomPickerOpen(true)
+                }}
+                onClick={(event) => event.currentTarget.select()}
+                onBlur={() => {
+                  window.setTimeout(() => {
+                    setIsRoomPickerOpen(false)
+                    setRoomQuery(roomName(index?.profiles || [], roomKey))
+                  }, 120)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key === 'Enter' && filteredRoomProfiles[0]) {
+                    event.preventDefault()
+                    selectRoom(filteredRoomProfiles[0])
+                  }
+                  if (event.key === 'Escape') {
+                    setIsRoomPickerOpen(false)
+                    setRoomQuery(roomName(index?.profiles || [], roomKey))
+                  }
+                }}
+                placeholder="Найти рум"
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-10 pr-3 text-slate-100 outline-none focus:border-blue-500"
+              />
+              {isRoomPickerOpen && (
+                <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
+                  {filteredRoomProfiles.length ? (
+                    filteredRoomProfiles.map((profile) => (
+                      <button
+                        key={profile.room_key}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectRoom(profile)}
+                        className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
+                          profile.room_key === roomKey
+                            ? 'bg-blue-600/20 text-blue-200'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="font-semibold">{profile.display_name}</span>
+                          {!profile.is_active && <EyeOff size={14} className="shrink-0 text-slate-500" />}
+                        </div>
+                        {profile.network_name && <div className="text-xs text-slate-500">{profile.network_name}</div>}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-4 text-sm text-slate-500">Румы не найдены</div>
+                  )}
+                </div>
+              )}
+            </div>
             <button
               type="button"
               onClick={startAddRoom}
@@ -452,17 +600,11 @@ export default function RoomAdminView({
         )}
       </div>
 
-      {(message || error) && (
-        <div className={`mb-4 rounded-xl border px-4 py-3 text-sm ${error ? 'border-red-500/40 bg-red-500/10 text-red-200' : 'border-emerald-500/40 bg-emerald-500/10 text-emerald-200'}`}>
-          {error || message}
-        </div>
-      )}
-
       {mode === 'deals' ? (
         <DealEditor
           dealForm={dealForm}
           deals={deals}
-          roomName={roomName}
+          roomName={selectedRoomName}
           onChange={updateDealForm}
           onSave={saveDeal}
         />
@@ -475,6 +617,8 @@ export default function RoomAdminView({
           onChange={setWalletForm}
           onSave={saveWallet}
         />
+      )}
+        </>
       )}
     </div>
   )
@@ -515,27 +659,32 @@ function DealEditor({
           <textarea
             value={dealForm.short_text}
             onChange={(event) => onChange({ ...dealForm, short_text: event.target.value })}
+            onPaste={preservePageScrollAfterPaste}
             rows={4}
             className="min-h-28 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm leading-6 text-slate-100 outline-none focus:border-blue-500"
           />
         </Field>
-        <Field label="Полные условия">
+        <div>
+          <div className="mb-1 flex flex-wrap items-center justify-between gap-3">
+            <span className="block text-sm font-medium text-slate-400">Полные условия</span>
+            <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-300">
+              <input
+                type="checkbox"
+                checked={Boolean(dealForm.is_active)}
+                onChange={(event) => onChange({ ...dealForm, is_active: event.target.checked ? 1 : 0 })}
+                className="h-4 w-4"
+              />
+              Активна
+            </label>
+          </div>
           <textarea
             value={dealForm.full_text}
             onChange={(event) => onChange({ ...dealForm, full_text: event.target.value })}
+            onPaste={preservePageScrollAfterPaste}
             rows={16}
             className="min-h-96 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm leading-6 text-slate-100 outline-none focus:border-blue-500"
           />
-        </Field>
-        <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-300">
-          <input
-            type="checkbox"
-            checked={Boolean(dealForm.is_active)}
-            onChange={(event) => onChange({ ...dealForm, is_active: event.target.checked ? 1 : 0 })}
-            className="h-4 w-4"
-          />
-          Активна
-        </label>
+        </div>
       </div>
     </section>
   )

@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, BookOpen, Check, Copy, Settings } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { ArrowLeft, BookOpen, Check, Copy, Search, Settings } from 'lucide-react'
 import RoomAdminView from './RoomAdminView'
 
 type RoomInfoMode = 'wallets' | 'deals'
+const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
 
 const dealTypeLabels: Record<RoomDealType, string> = {
   General: 'Общая',
@@ -15,6 +16,16 @@ const roomName = (profiles: RoomProfileInfo[], roomKey: string) =>
 
 const uniqueDealTypes = (items: Array<{ deal_type: RoomDealType }>) =>
   Array.from(new Set(items.map((item) => item.deal_type))).sort()
+
+const sortRooms = (profiles: RoomProfileInfo[]) => [...profiles].sort((left, right) => {
+  const leftPinned = pinnedRoomOrder.indexOf(left.room_key)
+  const rightPinned = pinnedRoomOrder.indexOf(right.room_key)
+  const leftRank = leftPinned === -1 ? Number.POSITIVE_INFINITY : leftPinned
+  const rightRank = rightPinned === -1 ? Number.POSITIVE_INFINITY : rightPinned
+
+  if (leftRank !== rightRank) return leftRank - rightRank
+  return left.display_name.localeCompare(right.display_name, undefined, { sensitivity: 'base' })
+})
 
 const countryStatusLabels: Record<RoomCountryStatus, string> = {
   Available: 'доступен',
@@ -36,10 +47,12 @@ const dealCopyText = (deal: RoomDealInfo, kind: 'short' | 'full') => {
   return [deal.short_text, deal.full_text].filter(Boolean).join('\n\n')
 }
 
-export default function RoomInfoView() {
+export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
   const [mode, setMode] = useState<RoomInfoMode>('wallets')
   const [index, setIndex] = useState<RoomKnowledgeIndex | null>(null)
   const [selectedRoomKey, setSelectedRoomKey] = useState('')
+  const [roomQuery, setRoomQuery] = useState('')
+  const [isRoomPickerOpen, setIsRoomPickerOpen] = useState(false)
   const [selectedDealType, setSelectedDealType] = useState<RoomDealType>('General')
   const [selectedCountryCode, setSelectedCountryCode] = useState('')
   const [language, setLanguage] = useState<RoomLanguage>('RU')
@@ -48,15 +61,21 @@ export default function RoomInfoView() {
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState('')
   const [isAdminOpen, setIsAdminOpen] = useState(false)
+  const [isAdminMounted, setIsAdminMounted] = useState(false)
+  const [adminSessionKey, setAdminSessionKey] = useState(0)
   const [refreshToken, setRefreshToken] = useState(0)
+  const hasSeenHomeSignal = useRef(false)
 
   useEffect(() => {
     let active = true
     window.electronAPI.getRoomKnowledgeIndex()
       .then((result) => {
         if (!active) return
+        const sortedProfiles = sortRooms(result.profiles)
+        const firstRoom = sortedProfiles[0]
         setIndex(result)
-        setSelectedRoomKey(result.profiles[0]?.room_key || '')
+        setSelectedRoomKey(firstRoom?.room_key || '')
+        setRoomQuery(firstRoom?.display_name || '')
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -66,6 +85,15 @@ export default function RoomInfoView() {
       active = false
     }
   }, [refreshToken])
+
+  useEffect(() => {
+    if (!hasSeenHomeSignal.current) {
+      hasSeenHomeSignal.current = true
+      return
+    }
+    setIsAdminOpen(false)
+    setRefreshToken((value) => value + 1)
+  }, [homeSignal])
 
   const availableDealTypes = useMemo(() => {
     if (!index || !selectedRoomKey) return ['General'] as RoomDealType[]
@@ -77,6 +105,21 @@ export default function RoomInfoView() {
     const values = uniqueDealTypes(items)
     return values.length ? values : ['General'] as RoomDealType[]
   }, [index, selectedRoomKey])
+
+  const filteredRoomProfiles = useMemo(() => {
+    const profiles = index?.profiles || []
+    const selectedRoomName = roomName(profiles, selectedRoomKey)
+    const rawQuery = roomQuery.trim()
+    const query = rawQuery && rawQuery !== selectedRoomName
+      ? rawQuery.toLowerCase()
+      : ''
+    const filteredProfiles = query ? profiles.filter((profile) => (
+      profile.display_name.toLowerCase().includes(query) ||
+      profile.room_key.toLowerCase().includes(query) ||
+      String(profile.network_name || '').toLowerCase().includes(query)
+    )) : profiles
+    return sortRooms(filteredProfiles)
+  }, [index, roomQuery, selectedRoomKey])
 
   const roomCountryRows = useMemo(() => (
     (index?.countryOptions || [])
@@ -162,23 +205,33 @@ export default function RoomInfoView() {
     window.setTimeout(() => setCopied(''), 1400)
   }
 
+  const selectRoom = (profile: RoomProfileInfo) => {
+    setSelectedRoomKey(profile.room_key)
+    setSelectedCountryCode('')
+    setRoomQuery(profile.display_name)
+    setIsRoomPickerOpen(false)
+  }
+
   if (loading) {
     return <div className="mx-auto max-w-5xl text-slate-500">Загрузка справочника...</div>
   }
 
-  if (isAdminOpen) {
-    return (
-      <RoomAdminView
-        initialMode={mode === 'wallets' ? 'wallets' : 'deals'}
-        onClose={() => {
-          setIsAdminOpen(false)
-          setRefreshToken((value) => value + 1)
-        }}
-      />
-    )
-  }
-
   return (
+    <>
+      {isAdminMounted && (
+        <div className={isAdminOpen ? '' : 'hidden'}>
+          <RoomAdminView
+            key={adminSessionKey}
+            initialMode="deals"
+            onClose={() => {
+              setIsAdminOpen(false)
+              setRefreshToken((value) => value + 1)
+            }}
+          />
+        </div>
+      )}
+
+      {!isAdminOpen && (
     <div className="mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-8 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
@@ -187,7 +240,11 @@ export default function RoomInfoView() {
         </div>
         <button
           type="button"
-          onClick={() => setIsAdminOpen(true)}
+          onClick={() => {
+            setIsAdminMounted(true)
+            setAdminSessionKey((value) => value + 1)
+            setIsAdminOpen(true)
+          }}
           title="Редактировать справочник"
           aria-label="Редактировать справочник"
           className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-900/80 text-slate-300 transition-colors hover:border-blue-500 hover:text-white"
@@ -204,20 +261,66 @@ export default function RoomInfoView() {
             <ModeButton active={mode === 'deals'} onClick={() => setMode('deals')}>Сделка</ModeButton>
           </div>
         </div>
-        <div className="min-w-56">
+        <div className="relative min-w-56">
           <label className="mb-1 block text-sm font-medium text-slate-400">Рум</label>
-          <select
-            value={selectedRoomKey}
-            onChange={(event) => {
-              setSelectedRoomKey(event.target.value)
-              setSelectedCountryCode('')
-            }}
-            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-          >
-            {(index?.profiles || []).map((profile) => (
-              <option key={profile.room_key} value={profile.room_key}>{profile.display_name}</option>
-            ))}
-          </select>
+          <div className="relative">
+            <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              value={roomQuery}
+              onChange={(event) => {
+                setRoomQuery(event.target.value)
+                setIsRoomPickerOpen(true)
+              }}
+              onFocus={(event) => {
+                event.target.select()
+                setIsRoomPickerOpen(true)
+              }}
+              onClick={(event) => event.currentTarget.select()}
+              onBlur={() => {
+                window.setTimeout(() => {
+                  setIsRoomPickerOpen(false)
+                  setRoomQuery(roomName(index?.profiles || [], selectedRoomKey))
+                }, 120)
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && filteredRoomProfiles[0]) {
+                  event.preventDefault()
+                  selectRoom(filteredRoomProfiles[0])
+                }
+                if (event.key === 'Escape') {
+                  setIsRoomPickerOpen(false)
+                  setRoomQuery(roomName(index?.profiles || [], selectedRoomKey))
+                }
+              }}
+              placeholder="Найти рум"
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-10 pr-3 text-slate-100 outline-none focus:border-blue-500"
+            />
+          </div>
+          {isRoomPickerOpen && (
+            <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
+              {filteredRoomProfiles.length ? (
+                filteredRoomProfiles.map((profile) => (
+                  <button
+                    key={profile.room_key}
+                    type="button"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => selectRoom(profile)}
+                    className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
+                      profile.room_key === selectedRoomKey
+                        ? 'bg-blue-600/20 text-blue-200'
+                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                    }`}
+                  >
+                    <div className="font-semibold">{profile.display_name}</div>
+                    {profile.network_name && <div className="text-xs text-slate-500">{profile.network_name}</div>}
+                  </button>
+                ))
+              ) : (
+                <div className="px-3 py-4 text-sm text-slate-500">Румы не найдены</div>
+              )}
+            </div>
+          )}
         </div>
         {mode === 'deals' && roomCountryOptions.length > 0 && (
           <div className="min-w-56">
@@ -282,6 +385,8 @@ export default function RoomInfoView() {
         />
       )}
     </div>
+      )}
+    </>
   )
 }
 

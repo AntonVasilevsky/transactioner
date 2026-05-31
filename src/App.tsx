@@ -22,6 +22,7 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null)
   const [updateDismissed, setUpdateDismissed] = useState(false)
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNotesInfo | null>(null)
+  const [roomInfoHomeSignal, setRoomInfoHomeSignal] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -141,7 +142,10 @@ function App() {
             icon={<BookOpen size={20} />}
             label="Инфо по румам"
             active={currentView === 'roomInfo'}
-            onClick={() => setCurrentView('roomInfo')}
+            onClick={() => {
+              setCurrentView('roomInfo')
+              setRoomInfoHomeSignal((value) => value + 1)
+            }}
           />
         </div>
 
@@ -205,7 +209,7 @@ function App() {
             <AddPlayerView onSuccess={(p) => handlePlayerFound(p)} />
           )}
           {currentView === 'roomInfo' && (
-            <RoomInfoView />
+            <RoomInfoView homeSignal={roomInfoHomeSignal} />
           )}
           {currentView === 'form' && selectedPlayer && (
             <FormView
