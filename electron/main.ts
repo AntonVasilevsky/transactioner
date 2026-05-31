@@ -2,9 +2,9 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createDailyDatabaseBackup } from './backup'
+import { createDailyDatabaseBackup, createDatabaseSnapshotBackup } from './backup'
 import { convertUsdToEur, parseCurrencyAmount } from './currency'
-import { TransactionerDatabase, type RoomDealType, type RoomLanguage } from './database'
+import { TransactionerDatabase, type RoomDealType, type RoomLanguage, type SaveRoomDealInput, type SaveRoomProfileInput, type SaveRoomWalletInput } from './database'
 import { resolveTransaction } from './transactionResolver'
 import { checkForUpdate, isAllowedReleaseUrl } from './updates'
 
@@ -53,6 +53,17 @@ const runDailyBackup = () => {
   }
 }
 
+const runRoomEditBackup = () => {
+  try {
+    const result = createDatabaseSnapshotBackup(dbPath, backupDir, 'before-room-edit')
+    if (result.created) {
+      console.info('Room edit backup created', result.backupPath)
+    }
+  } catch (err) {
+    console.error('Room edit backup failed', err)
+  }
+}
+
 try {
   runDailyBackup()
   store = new TransactionerDatabase(dbPath)
@@ -88,6 +99,24 @@ ipcMain.handle('get-room-deals', (_, roomKey: string, language: RoomLanguage, de
 ipcMain.handle('get-room-country-availability', (_, roomKey: string) => (
   store?.getRoomCountryAvailability(roomKey) ?? []
 ))
+ipcMain.handle('save-room-profile', (_, data: SaveRoomProfileInput) => {
+  runRoomEditBackup()
+  const result = store?.saveRoomProfile(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('save-room-deal', (_, data: SaveRoomDealInput) => {
+  runRoomEditBackup()
+  const result = store?.saveRoomDeal(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('save-room-wallet', (_, data: SaveRoomWalletInput) => {
+  runRoomEditBackup()
+  const result = store?.saveRoomWallet(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
 ipcMain.handle('check-for-updates', () => checkForUpdate(app.getVersion()))
 ipcMain.handle('resolve-transaction', (_, input) => resolveTransaction(input))
 ipcMain.handle('convert-usd-to-eur', async (_, amountText: string) => {

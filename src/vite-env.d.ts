@@ -67,6 +67,45 @@ interface SavePlayerResult extends MutationResult {
   id?: number
 }
 
+interface SaveRoomProfileInput {
+  id?: number
+  room_key: string
+  display_name: string
+  network_name?: string | null
+  notes?: string | null
+  is_active?: number | boolean
+}
+
+interface SaveRoomDealInput {
+  id?: number
+  room_key: string
+  deal_type: RoomDealType
+  language: RoomLanguage
+  short_text: string
+  full_text: string
+  registration_url?: string | null
+  promo_code?: string | null
+  registration_note?: string | null
+  sort_order?: number
+  is_active?: number | boolean
+  updated_at?: string | null
+}
+
+interface SaveRoomWalletInput {
+  id?: number
+  room_key: string
+  deal_type: RoomDealType
+  currency: string
+  network: string
+  wallet_address: string
+  memo_tag?: string | null
+  fee_text?: string | null
+  note?: string | null
+  verified_at?: string | null
+  sort_order?: number
+  is_active?: number | boolean
+}
+
 interface UpdateCheckResult {
   available: boolean
   currentVersion: string
@@ -213,6 +252,9 @@ interface Window {
     getRoomWallets: (roomKey: string, dealType?: RoomDealType) => Promise<RoomWalletInfo[]>;
     getRoomDeals: (roomKey: string, language: RoomLanguage, dealType?: RoomDealType) => Promise<RoomDealInfo[]>;
     getRoomCountryAvailability: (roomKey: string) => Promise<RoomCountryAvailabilityInfo[]>;
+    saveRoomProfile: (data: SaveRoomProfileInput) => Promise<SavePlayerResult>;
+    saveRoomDeal: (data: SaveRoomDealInput) => Promise<SavePlayerResult>;
+    saveRoomWallet: (data: SaveRoomWalletInput) => Promise<SavePlayerResult>;
     checkForUpdates: () => Promise<UpdateCheckResult>;
     resolveTransaction: (input: ResolveTransactionInput) => Promise<ResolveTransactionResult>;
     convertUsdToEur: (amount: string) => Promise<CurrencyConversionResult>;

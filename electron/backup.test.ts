@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { createDailyDatabaseBackup } from './backup'
+import { createDailyDatabaseBackup, createDatabaseSnapshotBackup } from './backup'
 
 let tempDir = ''
 let dbPath = ''
@@ -50,5 +50,18 @@ describe('createDailyDatabaseBackup', () => {
     expect(result.created).toBe(false)
     expect(result.reason).toBe('source-missing')
     expect(existsSync(backupDir)).toBe(false)
+  })
+})
+
+describe('createDatabaseSnapshotBackup', () => {
+  it('creates a timestamped snapshot backup and updates latest copy', () => {
+    writeFileSync(dbPath, 'admin-edit-db')
+
+    const result = createDatabaseSnapshotBackup(dbPath, backupDir, 'before-room-edit', new Date(2026, 4, 28, 12, 34, 56))
+
+    expect(result.created).toBe(true)
+    expect(result.backupPath).toBe(path.join(backupDir, 'transactioner-before-room-edit-2026-05-28-123456.db'))
+    expect(readFileSync(result.backupPath!, 'utf8')).toBe('admin-edit-db')
+    expect(readFileSync(path.join(backupDir, 'transactioner-latest.db'), 'utf8')).toBe('admin-edit-db')
   })
 })

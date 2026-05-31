@@ -43,6 +43,45 @@ export interface SavePlayerResult extends MutationResult {
   id?: number
 }
 
+export interface SaveRoomProfileInput {
+  id?: number
+  room_key: string
+  display_name: string
+  network_name?: string | null
+  notes?: string | null
+  is_active?: number | boolean
+}
+
+export interface SaveRoomDealInput {
+  id?: number
+  room_key: string
+  deal_type: RoomDealType
+  language: RoomLanguage
+  short_text: string
+  full_text: string
+  registration_url?: string | null
+  promo_code?: string | null
+  registration_note?: string | null
+  sort_order?: number
+  is_active?: number | boolean
+  updated_at?: string | null
+}
+
+export interface SaveRoomWalletInput {
+  id?: number
+  room_key: string
+  deal_type: RoomDealType
+  currency: string
+  network: string
+  wallet_address: string
+  memo_tag?: string | null
+  fee_text?: string | null
+  note?: string | null
+  verified_at?: string | null
+  sort_order?: number
+  is_active?: number | boolean
+}
+
 export interface RoomProfileInfo {
   id: number
   room_key: string
@@ -244,6 +283,57 @@ export class TransactionerDatabase {
     return { profiles, dealOptions, paymentMethods, walletOptions, countryOptions }
   }
 
+  saveRoomProfile(data: SaveRoomProfileInput): SavePlayerResult {
+    try {
+      const roomKey = String(data.room_key || '').trim().toLowerCase()
+      const displayName = String(data.display_name || '').trim()
+
+      if (!roomKey) return { success: false, error: 'Заполните ключ рума' }
+      if (!/^[a-z0-9-]+$/.test(roomKey)) return { success: false, error: 'Ключ рума может содержать только латиницу, цифры и дефис' }
+      if (!displayName) return { success: false, error: 'Заполните название рума' }
+
+      const payload = {
+        id: data.id ? Number(data.id) : null,
+        roomKey,
+        displayName,
+        networkName: data.network_name ? String(data.network_name).trim() : null,
+        notes: data.notes ? String(data.notes).trim() : null,
+        isActive: data.is_active === false || data.is_active === 0 ? 0 : 1,
+      }
+
+      if (payload.id) {
+        const result = this.db.prepare(`
+          UPDATE room_profiles
+          SET room_key = @roomKey,
+              display_name = @displayName,
+              network_name = @networkName,
+              notes = @notes,
+              is_active = @isActive
+          WHERE id = @id
+        `).run(payload)
+        if (result.changes === 0) return { success: false, error: 'Рум не найден' }
+        return { success: true, id: payload.id }
+      }
+
+      const result = this.db.prepare(`
+        INSERT INTO room_profiles (room_key, display_name, network_name, notes, is_active)
+        VALUES (@roomKey, @displayName, @networkName, @notes, @isActive)
+        ON CONFLICT(room_key) DO UPDATE SET
+          display_name = excluded.display_name,
+          network_name = excluded.network_name,
+          notes = excluded.notes,
+          is_active = excluded.is_active
+      `).run(payload)
+      const id = Number(result.lastInsertRowid || (
+        this.db.prepare('SELECT id FROM room_profiles WHERE room_key = ? COLLATE NOCASE').get(roomKey) as { id: number } | undefined
+      )?.id)
+      return { success: true, id }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
   getRoomCountryAvailability(roomKey: string): RoomCountryAvailabilityInfo[] {
     const normalizedRoomKey = String(roomKey || '').trim()
     if (!normalizedRoomKey) return []
@@ -298,6 +388,168 @@ export class TransactionerDatabase {
         AND is_active = 1
       ORDER BY sort_order, deal_type COLLATE NOCASE
     `).all(normalizedRoomKey, language) as RoomDealInfo[]
+  }
+
+  saveRoomDeal(data: SaveRoomDealInput): SavePlayerResult {
+    try {
+      const roomKey = String(data.room_key || '').trim()
+      const dealType = data.deal_type || 'General'
+      const language = data.language || 'RU'
+      const shortText = String(data.short_text || '').trim()
+      const fullText = String(data.full_text || '').trim()
+      const now = new Date().toISOString().slice(0, 10)
+
+      if (!roomKey) return { success: false, error: 'Выберите рум' }
+      if (!shortText) return { success: false, error: 'Заполните короткую сделку' }
+      if (!fullText) return { success: false, error: 'Заполните полные условия' }
+
+      const payload = {
+        roomKey,
+        dealType,
+        language,
+        shortText,
+        fullText,
+        registrationUrl: data.registration_url ? String(data.registration_url).trim() : null,
+        promoCode: data.promo_code ? String(data.promo_code).trim() : null,
+        registrationNote: data.registration_note ? String(data.registration_note).trim() : null,
+        sortOrder: Number(data.sort_order || 0),
+        isActive: data.is_active === false || data.is_active === 0 ? 0 : 1,
+        updatedAt: data.updated_at || now
+      }
+
+      if (data.id) {
+        const result = this.db.prepare(`
+          UPDATE room_deals
+          SET room_key = @roomKey,
+              deal_type = @dealType,
+              language = @language,
+              short_text = @shortText,
+              full_text = @fullText,
+              registration_url = @registrationUrl,
+              promo_code = @promoCode,
+              registration_note = @registrationNote,
+              sort_order = @sortOrder,
+              is_active = @isActive,
+              updated_at = @updatedAt
+          WHERE id = @id
+        `).run({ ...payload, id: Number(data.id) })
+        if (result.changes === 0) return { success: false, error: 'Сделка не найдена' }
+        return { success: true, id: Number(data.id) }
+      }
+
+      const result = this.db.prepare(`
+        INSERT INTO room_deals (
+          room_key, deal_type, language, short_text, full_text, registration_url,
+          promo_code, registration_note, sort_order, is_active, updated_at
+        )
+        VALUES (
+          @roomKey, @dealType, @language, @shortText, @fullText, @registrationUrl,
+          @promoCode, @registrationNote, @sortOrder, @isActive, @updatedAt
+        )
+        ON CONFLICT(room_key, deal_type, language) DO UPDATE SET
+          short_text = excluded.short_text,
+          full_text = excluded.full_text,
+          registration_url = excluded.registration_url,
+          promo_code = excluded.promo_code,
+          registration_note = excluded.registration_note,
+          sort_order = excluded.sort_order,
+          is_active = excluded.is_active,
+          updated_at = excluded.updated_at
+      `).run(payload)
+      const id = Number(result.lastInsertRowid || (
+        this.db.prepare(`
+          SELECT id FROM room_deals
+          WHERE room_key = ? COLLATE NOCASE
+            AND deal_type = ? COLLATE NOCASE
+            AND language = ? COLLATE NOCASE
+        `).get(roomKey, dealType, language) as { id: number } | undefined
+      )?.id)
+      return { success: true, id }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  saveRoomWallet(data: SaveRoomWalletInput): SavePlayerResult {
+    try {
+      const roomKey = String(data.room_key || '').trim()
+      const dealType = data.deal_type || 'General'
+      const currency = String(data.currency || '').trim().toUpperCase()
+      const network = String(data.network || '').trim().toUpperCase()
+      const walletAddress = String(data.wallet_address || '').trim()
+
+      if (!roomKey) return { success: false, error: 'Выберите рум' }
+      if (!currency) return { success: false, error: 'Заполните монету' }
+      if (!network) return { success: false, error: 'Заполните сеть' }
+      if (!walletAddress) return { success: false, error: 'Заполните адрес кошелька' }
+
+      const payload = {
+        roomKey,
+        dealType,
+        currency,
+        network,
+        walletAddress,
+        memoTag: data.memo_tag ? String(data.memo_tag).trim() : null,
+        feeText: data.fee_text ? String(data.fee_text).trim() : null,
+        note: data.note ? String(data.note).trim() : null,
+        verifiedAt: data.verified_at ? String(data.verified_at).trim() : null,
+        isActive: data.is_active === false || data.is_active === 0 ? 0 : 1,
+        sortOrder: Number(data.sort_order || 0)
+      }
+
+      if (data.id) {
+        const result = this.db.prepare(`
+          UPDATE room_wallets
+          SET room_key = @roomKey,
+              deal_type = @dealType,
+              currency = @currency,
+              network = @network,
+              wallet_address = @walletAddress,
+              memo_tag = @memoTag,
+              fee_text = @feeText,
+              note = @note,
+              verified_at = @verifiedAt,
+              is_active = @isActive,
+              sort_order = @sortOrder
+          WHERE id = @id
+        `).run({ ...payload, id: Number(data.id) })
+        if (result.changes === 0) return { success: false, error: 'Кошелек не найден' }
+        return { success: true, id: Number(data.id) }
+      }
+
+      const result = this.db.prepare(`
+        INSERT INTO room_wallets (
+          room_key, deal_type, currency, network, wallet_address, memo_tag,
+          fee_text, note, verified_at, is_active, sort_order
+        )
+        VALUES (
+          @roomKey, @dealType, @currency, @network, @walletAddress, @memoTag,
+          @feeText, @note, @verifiedAt, @isActive, @sortOrder
+        )
+        ON CONFLICT(room_key, deal_type, currency, network, wallet_address) DO UPDATE SET
+          memo_tag = excluded.memo_tag,
+          fee_text = excluded.fee_text,
+          note = excluded.note,
+          verified_at = excluded.verified_at,
+          is_active = excluded.is_active,
+          sort_order = excluded.sort_order
+      `).run(payload)
+      const id = Number(result.lastInsertRowid || (
+        this.db.prepare(`
+          SELECT id FROM room_wallets
+          WHERE room_key = ? COLLATE NOCASE
+            AND deal_type = ? COLLATE NOCASE
+            AND currency = ? COLLATE NOCASE
+            AND network = ? COLLATE NOCASE
+            AND wallet_address = ? COLLATE NOCASE
+        `).get(roomKey, dealType, currency, network, walletAddress) as { id: number } | undefined
+      )?.id)
+      return { success: true, id }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
   }
 
   deletePlayer(id: number): MutationResult {
@@ -581,11 +833,7 @@ export class TransactionerDatabase {
       const insertProfile = this.db.prepare(`
         INSERT INTO room_profiles (room_key, display_name, network_name, is_active, notes)
         VALUES (@roomKey, @displayName, @networkName, @isActive, @notes)
-        ON CONFLICT(room_key) DO UPDATE SET
-          display_name = excluded.display_name,
-          network_name = excluded.network_name,
-          is_active = excluded.is_active,
-          notes = excluded.notes
+        ON CONFLICT(room_key) DO NOTHING
       `)
       const insertDeal = this.db.prepare(`
         INSERT INTO room_deals (
@@ -596,15 +844,7 @@ export class TransactionerDatabase {
           @roomKey, @dealType, @language, @shortText, @fullText, @registrationUrl,
           @promoCode, @registrationNote, @sortOrder, @isActive, @updatedAt
         )
-        ON CONFLICT(room_key, deal_type, language) DO UPDATE SET
-          short_text = excluded.short_text,
-          full_text = excluded.full_text,
-          registration_url = excluded.registration_url,
-          promo_code = excluded.promo_code,
-          registration_note = excluded.registration_note,
-          sort_order = excluded.sort_order,
-          is_active = excluded.is_active,
-          updated_at = excluded.updated_at
+        ON CONFLICT(room_key, deal_type, language) DO NOTHING
       `)
       const insertPaymentMethod = this.db.prepare(`
         INSERT INTO room_payment_methods (
@@ -615,12 +855,7 @@ export class TransactionerDatabase {
           @roomKey, @dealType, @operationType, @methodName, @currency, @network,
           @feeText, @limitsText, @note, @sortOrder, @isActive
         )
-        ON CONFLICT(room_key, deal_type, operation_type, method_name, currency, network) DO UPDATE SET
-          fee_text = excluded.fee_text,
-          limits_text = excluded.limits_text,
-          note = excluded.note,
-          sort_order = excluded.sort_order,
-          is_active = excluded.is_active
+        ON CONFLICT(room_key, deal_type, operation_type, method_name, currency, network) DO NOTHING
       `)
       const insertWallet = this.db.prepare(`
         INSERT INTO room_wallets (
@@ -631,13 +866,7 @@ export class TransactionerDatabase {
           @roomKey, @dealType, @currency, @network, @walletAddress, @memoTag,
           @feeText, @note, @verifiedAt, @isActive, @sortOrder
         )
-        ON CONFLICT(room_key, deal_type, currency, network, wallet_address) DO UPDATE SET
-          memo_tag = excluded.memo_tag,
-          fee_text = excluded.fee_text,
-          note = excluded.note,
-          verified_at = excluded.verified_at,
-          is_active = excluded.is_active,
-          sort_order = excluded.sort_order
+        ON CONFLICT(room_key, deal_type, currency, network, wallet_address) DO NOTHING
       `)
       const insertCountry = this.db.prepare(`
         INSERT INTO room_country_availability (
@@ -648,12 +877,7 @@ export class TransactionerDatabase {
           @roomKey, @countryCode, @countryName, @status, @dealType, @language,
           @note, @sourceDate, @sortOrder, @isActive
         )
-        ON CONFLICT(room_key, country_code, status, deal_type, language) DO UPDATE SET
-          country_name = excluded.country_name,
-          note = excluded.note,
-          source_date = excluded.source_date,
-          sort_order = excluded.sort_order,
-          is_active = excluded.is_active
+        ON CONFLICT(room_key, country_code, status, deal_type, language) DO NOTHING
       `)
 
       for (const profile of seed.profiles) {

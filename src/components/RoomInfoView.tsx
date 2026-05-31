@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { ArrowLeft, BookOpen, Check, Copy } from 'lucide-react'
+import { ArrowLeft, BookOpen, Check, Copy, Settings } from 'lucide-react'
+import RoomAdminView from './RoomAdminView'
 
 type RoomInfoMode = 'wallets' | 'deals'
 
@@ -46,6 +47,8 @@ export default function RoomInfoView() {
   const [deals, setDeals] = useState<RoomDealInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState('')
+  const [isAdminOpen, setIsAdminOpen] = useState(false)
+  const [refreshToken, setRefreshToken] = useState(0)
 
   useEffect(() => {
     let active = true
@@ -62,7 +65,7 @@ export default function RoomInfoView() {
     return () => {
       active = false
     }
-  }, [])
+  }, [refreshToken])
 
   const availableDealTypes = useMemo(() => {
     if (!index || !selectedRoomKey) return ['General'] as RoomDealType[]
@@ -119,10 +122,16 @@ export default function RoomInfoView() {
         ? 'Direct'
       : dealTypeChoices[0] || availableDealTypes[0]
 
+  const activeWalletDealType = availableDealTypes.includes('Agent')
+    ? 'Agent'
+    : availableDealTypes.includes(activeDealType)
+      ? activeDealType
+      : availableDealTypes[0]
+
   useEffect(() => {
     if (!selectedRoomKey) return
     let active = true
-    window.electronAPI.getRoomWallets(selectedRoomKey, activeDealType)
+    window.electronAPI.getRoomWallets(selectedRoomKey, activeWalletDealType)
       .then((result) => {
         if (active) {
           setWallets(result)
@@ -131,7 +140,7 @@ export default function RoomInfoView() {
     return () => {
       active = false
     }
-  }, [selectedRoomKey, activeDealType])
+  }, [selectedRoomKey, activeWalletDealType, refreshToken])
 
   useEffect(() => {
     if (!selectedRoomKey || countryBlocksDeals) {
@@ -145,7 +154,7 @@ export default function RoomInfoView() {
     return () => {
       active = false
     }
-  }, [selectedRoomKey, activeDealType, language, countryBlocksDeals])
+  }, [selectedRoomKey, activeDealType, language, countryBlocksDeals, refreshToken])
 
   const copyText = async (key: string, text: string) => {
     await navigator.clipboard.writeText(text)
@@ -157,11 +166,34 @@ export default function RoomInfoView() {
     return <div className="mx-auto max-w-5xl text-slate-500">Загрузка справочника...</div>
   }
 
+  if (isAdminOpen) {
+    return (
+      <RoomAdminView
+        initialMode={mode === 'wallets' ? 'wallets' : 'deals'}
+        onClose={() => {
+          setIsAdminOpen(false)
+          setRefreshToken((value) => value + 1)
+        }}
+      />
+    )
+  }
+
   return (
     <div className="mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-4 duration-500">
-      <div className="mb-8 flex items-center gap-3">
-        <BookOpen size={28} className="text-blue-400" />
-        <h2 className="text-2xl font-bold text-slate-100">Инфо по румам</h2>
+      <div className="mb-8 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3">
+          <BookOpen size={28} className="text-blue-400" />
+          <h2 className="text-2xl font-bold text-slate-100">Инфо по румам</h2>
+        </div>
+        <button
+          type="button"
+          onClick={() => setIsAdminOpen(true)}
+          title="Редактировать справочник"
+          aria-label="Редактировать справочник"
+          className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 bg-slate-900/80 text-slate-300 transition-colors hover:border-blue-500 hover:text-white"
+        >
+          <Settings size={18} />
+        </button>
       </div>
 
       <div className="mb-5 flex flex-wrap items-end gap-3">
@@ -204,7 +236,7 @@ export default function RoomInfoView() {
             </select>
           </div>
         )}
-        {(mode === 'deals' || dealTypeChoices.length > 1) && (
+        {mode === 'deals' && (
           <div className="min-w-44">
             <label className="mb-1 block text-sm font-medium text-slate-400">Тип сделки</label>
             <select
@@ -267,33 +299,6 @@ function ModeButton({ active, children, onClick }: { active: boolean, children: 
   )
 }
 
-function CopyButton({ copied, onClick, children }: { copied: boolean, onClick: () => void, children: React.ReactNode }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="inline-flex items-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:bg-slate-700 disabled:text-slate-500"
-    >
-      {copied ? <Check size={15} /> : <Copy size={15} />}
-      {children}
-    </button>
-  )
-}
-
-function IconCopyButton({ copied, onClick, label }: { copied: boolean, onClick: () => void, label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="inline-flex h-9 w-9 items-center justify-center rounded-lg bg-blue-600 text-white transition-colors hover:bg-blue-500"
-    >
-      {copied ? <Check size={16} /> : <Copy size={16} />}
-    </button>
-  )
-}
-
 function GhostIconCopyButton({ copied, onClick, label }: { copied: boolean, onClick: () => void, label: string }) {
   return (
     <button
@@ -331,13 +336,13 @@ function WalletsPanel({
       <section className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-lg font-bold text-slate-100">Кошельки</h3>
-          <div className="flex gap-2">
-            {wallets.length > 0 && (
-              <CopyButton copied={copied === 'wallets-all'} onClick={() => onCopy('wallets-all', walletListText)}>
-                Все
-              </CopyButton>
-            )}
-          </div>
+          {wallets.length > 0 && (
+            <GhostIconCopyButton
+              copied={copied === 'wallets-all'}
+              label="Скопировать все кошельки"
+              onClick={() => onCopy('wallets-all', walletListText)}
+            />
+          )}
         </div>
         {wallets.length ? (
           <div className="overflow-hidden rounded-lg border border-slate-700/60">
@@ -347,7 +352,7 @@ function WalletsPanel({
                   <th className="w-24 px-3 py-2">Монета</th>
                   <th className="w-24 px-3 py-2">Сеть</th>
                   <th className="px-3 py-2">Адрес</th>
-                  <th className="w-14 px-2 py-2 text-right">Копия</th>
+                  <th className="w-14 px-2 py-2 text-right" aria-label="Копирование" />
                 </tr>
               </thead>
               <tbody>
@@ -360,7 +365,7 @@ function WalletsPanel({
                     <td className="px-3 py-3 text-slate-300">{wallet.network}</td>
                     <td className="min-w-0 break-all px-3 py-3 font-mono text-xs text-slate-300">{wallet.wallet_address}</td>
                     <td className="px-2 py-3 text-right">
-                      <IconCopyButton
+                      <GhostIconCopyButton
                         copied={copied === `wallet-${wallet.id}`}
                         label={`Скопировать ${wallet.currency} ${wallet.network}`}
                         onClick={() => onCopy(`wallet-${wallet.id}`, walletCopyText(wallet))}

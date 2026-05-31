@@ -40,7 +40,7 @@
 ## NOT In Scope
 * Прямое подключение к Google Docs/Sheets: откладываем до появления стабильного процесса синка.
 * ИИ внутри приложения: откладываем, чтобы не зависеть от внешнего сервиса в ежедневной работе.
-* Редактирование справочника в UI: можно добавить позже, первый релиз может использовать seed.
+* Удаление записей из админки: используем флаг активности, чтобы случайно не терять данные.
 * Проверка страны при выборе сделки: следующий этап после MVP.
 * Автоматический импорт всех румов: первый релиз заполняем только нужные Champion, Nexa, RedStar.
 
@@ -157,7 +157,7 @@ getRoomWallets(roomKey: string, dealType?: string): Promise<RoomWalletInfo[]>
 getRoomDeals(roomKey: string, language: 'RU' | 'EN', dealType?: string): Promise<RoomDealInfo[]>
 ```
 
-Do not add write APIs in the first version unless the seed workflow becomes painful.
+Write APIs are now allowed for the local admin workflow. Seed data must not overwrite existing rows, otherwise admin edits would be lost on app restart.
 
 ## UI Plan
 Add `roomInfo` to `ViewState` and a sidebar item with a compact info icon.
@@ -170,6 +170,23 @@ Add `roomInfo` to `ViewState` and a sidebar item with a compact info icon.
 * copy buttons: all rows, selected row;
 * for deals: language selector RU/EN, deal type selector when needed, short/full blocks;
 * copy buttons: short, full.
+
+## Admin Editing
+The room info screen has an edit mode for local maintenance of high-change data.
+
+Admin V1:
+* add new room profiles;
+* edit existing room deals: short text, full text, active flag;
+* edit existing room wallets: currency, network, address, note, active flag;
+* add new wallet rows;
+* create first deal/wallet rows for newly added rooms;
+* create a timestamped database backup before each room edit save;
+* keep seed non-destructive with `ON CONFLICT DO NOTHING`, so app updates can add missing new records without overwriting local edits.
+
+Not in Admin V1:
+* hard delete rows; use inactive rows instead;
+* editing countries/FAQ;
+* remote sync between colleagues.
 
 ## Copy Formatting
 Wallet row:
@@ -247,6 +264,9 @@ Coverage target before merging:
   - Verify: `rg --files docs`
 - [x] **T6 (P2, human: ~1h / CC: ~20min)** — Country foundation — Add `room_country_availability`, read-only API, optional deal country filter, and tests.
   - Files: `electron/database.ts`, `electron/roomKnowledgeSeed.ts`, `electron/main.ts`, `electron/preload.ts`, `src/vite-env.d.ts`, `src/components/RoomInfoView.tsx`, `electron/database.test.ts`
+  - Verify: `npm run lint`, `npm run build`, `npm run test`
+- [x] **T7 (P1, human: ~3h / CC: ~45min)** — Admin — Add local editing for room deals and wallets with backup before save.
+  - Files: `electron/database.ts`, `electron/main.ts`, `electron/preload.ts`, `electron/backup.ts`, `src/vite-env.d.ts`, `src/components/RoomInfoView.tsx`, `src/components/RoomAdminView.tsx`
   - Verify: `npm run lint`, `npm run build`, `npm run test`
 
 ## Parallelization

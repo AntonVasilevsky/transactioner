@@ -403,6 +403,102 @@ describe('TransactionerDatabase', () => {
     expect(secondIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')).toHaveLength(3)
   })
 
+  it('keeps admin-edited room deals after reinitializing seed data', () => {
+    const deal = db.getRoomDeals('redstar', 'RU', 'General')[0]
+    const result = db.saveRoomDeal({
+      id: deal.id,
+      room_key: deal.room_key,
+      deal_type: deal.deal_type,
+      language: deal.language,
+      short_text: 'Manual short RedStar',
+      full_text: 'Manual full RedStar',
+      is_active: 1,
+      sort_order: deal.sort_order,
+    })
+
+    expect(result.success).toBe(true)
+
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+
+    const savedDeal = db.getRoomDeals('redstar', 'RU', 'General')[0]
+    expect(savedDeal.short_text).toBe('Manual short RedStar')
+    expect(savedDeal.full_text).toBe('Manual full RedStar')
+  })
+
+  it('creates new rooms and lets admins add the first deal template', () => {
+    const createdRoom = db.saveRoomProfile({
+      room_key: 'new-room',
+      display_name: 'New Room',
+      network_name: 'Test Network',
+      notes: 'Created from admin',
+      is_active: 1,
+    })
+
+    expect(createdRoom.success).toBe(true)
+
+    const createdDeal = db.saveRoomDeal({
+      room_key: 'new-room',
+      deal_type: 'Agent',
+      language: 'RU',
+      short_text: 'Короткая сделка New Room',
+      full_text: 'Полный шаблон New Room',
+      is_active: 1,
+      sort_order: 0,
+    })
+
+    expect(createdDeal.success).toBe(true)
+
+    const index = db.getRoomKnowledgeIndex()
+    const savedDeal = db.getRoomDeals('new-room', 'RU', 'Agent')[0]
+
+    expect(index.profiles.some((profile) => profile.room_key === 'new-room')).toBe(true)
+    expect(index.dealOptions).toContainEqual({ room_key: 'new-room', deal_type: 'Agent', language: 'RU' })
+    expect(savedDeal.short_text).toBe('Короткая сделка New Room')
+  })
+
+  it('rejects invalid room keys in admin room creation', () => {
+    const result = db.saveRoomProfile({
+      room_key: 'Bad Room!',
+      display_name: 'Bad Room',
+    })
+
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('латиницу')
+  })
+
+  it('saves room wallet edits and new wallet rows', () => {
+    const wallet = db.getRoomWallets('redstar', 'General')[0]
+    const edited = db.saveRoomWallet({
+      id: wallet.id,
+      room_key: wallet.room_key,
+      deal_type: wallet.deal_type,
+      currency: wallet.currency,
+      network: wallet.network,
+      wallet_address: '0xedited',
+      note: 'Edited in admin',
+      is_active: 1,
+      sort_order: wallet.sort_order,
+    })
+
+    expect(edited.success).toBe(true)
+    expect(db.getRoomWallets('redstar', 'General')[0].wallet_address).toBe('0xedited')
+
+    const created = db.saveRoomWallet({
+      room_key: 'redstar',
+      deal_type: 'General',
+      currency: 'USDC',
+      network: 'ERC20',
+      wallet_address: '0xnew-usdc',
+      note: 'New admin wallet',
+      is_active: 1,
+      sort_order: 999,
+    })
+
+    expect(created.success).toBe(true)
+    expect(db.getRoomWallets('redstar', 'General').some((row) => row.wallet_address === '0xnew-usdc')).toBe(true)
+  })
+
   it('returns active room deals filtered by room, language, and deal type', () => {
     db.close()
     const raw = new Database(dbPath)
