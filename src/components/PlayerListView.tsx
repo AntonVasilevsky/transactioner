@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Users, Clock, Search, Pencil, Database } from 'lucide-react'
+import { Users, Clock, Search, Pencil } from 'lucide-react'
 import { contactSearchKey } from '../utils/contactNormalization'
 
 const METHOD_COLORS: Record<string, string> = {
@@ -15,24 +15,13 @@ export default function PlayerListView({ onSelect, onEdit }: { onSelect: (player
   const [filter, setFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null)
-  const [storageLoading, setStorageLoading] = useState(true)
-  const [storageError, setStorageError] = useState(false)
 
   useEffect(() => {
     window.electronAPI.getAllPlayers().then(data => {
       setPlayers(data || [])
       setLoading(false)
     })
-    window.electronAPI.getStorageInfo()
-      .then((info) => {
-        setStorageInfo(info)
-        setStorageError(false)
-      })
-      .catch(() => {
-        setStorageInfo(null)
-        setStorageError(true)
-      })
-      .finally(() => setStorageLoading(false))
+    window.electronAPI.getStorageInfo().then(setStorageInfo).catch(() => setStorageInfo(null))
   }, [])
 
   const filtered = players.filter(p => {
@@ -108,33 +97,16 @@ export default function PlayerListView({ onSelect, onEdit }: { onSelect: (player
         </div>
       )}
 
-      <div className="mt-8 rounded-2xl border border-slate-700/70 bg-slate-800/70 p-4 text-xs leading-5 shadow-lg shadow-slate-950/20">
-        <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-200">
-          <Database size={16} className="text-blue-400" />
-          Файлы данных
-        </div>
-        {storageLoading ? (
-          <div className="text-slate-400">Загрузка путей...</div>
-        ) : storageError || !storageInfo ? (
-          <div className="text-rose-300">Не удалось получить адреса файлов данных.</div>
-        ) : (
-          <div className="space-y-3">
-            <StoragePath label="БД" value={storageInfo.databasePath} />
-            <StoragePath label="Бекап" value={storageInfo.latestBackupPath} />
+      {storageInfo && (
+        <div className="mt-8 border-t border-slate-800 pt-4 text-xs leading-5 text-slate-500">
+          <div className="min-w-0 break-all">
+            <span className="font-medium text-slate-400">Файл БД:</span> {storageInfo.databasePath}
           </div>
-        )}
-      </div>
-    </div>
-  )
-}
-
-function StoragePath({ label, value }: { label: string, value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="mb-1 font-semibold text-slate-300">{label}</div>
-      <div className="select-all break-all rounded-lg border border-slate-700/60 bg-slate-950/60 px-3 py-2 text-slate-300">
-        {value}
-      </div>
+          <div className="min-w-0 break-all">
+            <span className="font-medium text-slate-400">Файл бэкапа:</span> {storageInfo.latestBackupPath}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

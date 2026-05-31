@@ -136,6 +136,18 @@ room_country_availability(room_key, country_code, country_name, status, deal_typ
 room_faq_items(room_key, language, question, short_answer, full_answer, sort_order)
 ```
 
+## Future UX: Country Before Deal
+Possible next step for deal lookup: before selecting a room deal, let the operator optionally choose the player's country.
+
+Flow idea:
+* If country is selected first, the app filters/annotates available deals for that country.
+* If the room is unavailable in the selected country, show that clearly instead of a deal template.
+* If only the agent deal is available in that country, show only the agent deal.
+* If direct and agent deals are both available, show direct by default and add a reminder that the agent deal is also available.
+* If no country is selected, keep the current fast flow: search/select room -> show deal; if there are two deal types, ask the operator to choose.
+* Add a simple "back" step so the operator can recover after choosing the wrong country or wrong deal type.
+* Current implementation status: schema/API/UI foundation exists, but seed data for real countries is intentionally empty until availability is verified.
+
 ## IPC API
 Add read-only methods first:
 
@@ -221,18 +233,21 @@ Coverage target before merging:
 - [x] **T1 (P1, human: ~2h / CC: ~20min)** — Database — Add room knowledge tables and idempotent seed loading.
   - Files: `electron/database.ts`, new seed file, `electron/database.test.ts`
   - Verify: `npx vitest run electron/database.test.ts`, `npm run build`, `npm run test`
-- [ ] **T2 (P1, human: ~1h / CC: ~15min)** — IPC — Expose read-only room knowledge APIs.
+- [x] **T2 (P1, human: ~1h / CC: ~15min)** — IPC — Expose read-only room knowledge APIs.
   - Files: `electron/main.ts`, `electron/preload.ts`, `src/vite-env.d.ts`
   - Verify: `npm run build`
-- [ ] **T3 (P1, human: ~3h / CC: ~35min)** — UI — Add `RoomInfoView` with wallets/deals modes and copy flows.
+- [x] **T3 (P1, human: ~3h / CC: ~35min)** — UI — Add `RoomInfoView` with wallets/deals modes and copy flows.
   - Files: `src/App.tsx`, `src/components/RoomInfoView.tsx`, maybe `src/index.css`
   - Verify: manual QA in dev app
-- [ ] **T4 (P2, human: ~1h / CC: ~15min)** — Data — Fill first seed data for Champion, Nexa, RedStar.
+- [x] **T4 (P2, human: ~1h / CC: ~15min)** — Data — Fill first seed data for Champion, Nexa, RedStar.
   - Files: seed file, `docs/room_knowledge_plan.md`
-  - Verify: manual copy output matches source examples
+  - Verify: seed includes Champion/RedStar/Nexa deals, payment methods, and wallets; database tests cover Nexa deal/wallet presence
 - [ ] **T5 (P2, human: ~30min / CC: ~10min)** — Docs — Rename `docs/ deal-examples.txt` to remove leading space and document source format.
   - Files: `docs/deal-examples.txt`, `docs/project_specification.md`
   - Verify: `rg --files docs`
+- [x] **T6 (P2, human: ~1h / CC: ~20min)** — Country foundation — Add `room_country_availability`, read-only API, optional deal country filter, and tests.
+  - Files: `electron/database.ts`, `electron/roomKnowledgeSeed.ts`, `electron/main.ts`, `electron/preload.ts`, `src/vite-env.d.ts`, `src/components/RoomInfoView.tsx`, `electron/database.test.ts`
+  - Verify: `npm run lint`, `npm run build`, `npm run test`
 
 ## Parallelization
 Sequential implementation is better for the first pass. Database schema and seed shape drive IPC and UI. After T1 lands, T2 and T3 can be split, but the total feature is small enough that one worktree is safer.

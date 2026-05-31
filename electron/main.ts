@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDailyDatabaseBackup } from './backup'
 import { convertUsdToEur, parseCurrencyAmount } from './currency'
-import { TransactionerDatabase } from './database'
+import { TransactionerDatabase, type RoomDealType, type RoomLanguage } from './database'
 import { resolveTransaction } from './transactionResolver'
 import { checkForUpdate, isAllowedReleaseUrl } from './updates'
 
@@ -72,6 +72,22 @@ ipcMain.handle('get-storage-info', () => ({
   backupDir,
   latestBackupPath,
 }))
+ipcMain.handle('get-room-knowledge-index', () => store?.getRoomKnowledgeIndex() ?? {
+  profiles: [],
+  dealOptions: [],
+  paymentMethods: [],
+  walletOptions: [],
+  countryOptions: [],
+})
+ipcMain.handle('get-room-wallets', (_, roomKey: string, dealType?: RoomDealType) => (
+  store?.getRoomWallets(roomKey, dealType) ?? []
+))
+ipcMain.handle('get-room-deals', (_, roomKey: string, language: RoomLanguage, dealType?: RoomDealType) => (
+  store?.getRoomDeals(roomKey, language, dealType) ?? []
+))
+ipcMain.handle('get-room-country-availability', (_, roomKey: string) => (
+  store?.getRoomCountryAvailability(roomKey) ?? []
+))
 ipcMain.handle('check-for-updates', () => checkForUpdate(app.getVersion()))
 ipcMain.handle('resolve-transaction', (_, input) => resolveTransaction(input))
 ipcMain.handle('convert-usd-to-eur', async (_, amountText: string) => {

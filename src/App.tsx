@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Download, Search, UserPlus, ChevronRight, Users, X } from 'lucide-react'
+import { BookOpen, Download, Search, UserPlus, ChevronRight, Users, X } from 'lucide-react'
 
 // Views
 import SearchPlayerView from './components/SearchPlayerView'
@@ -7,8 +7,9 @@ import AddPlayerView from './components/AddPlayerView'
 import FormView from './components/FormView'
 import PlayerListView from './components/PlayerListView'
 import EditPlayerView from './components/EditPlayerView'
+import RoomInfoView from './components/RoomInfoView'
 
-export type ViewState = 'search' | 'add' | 'form' | 'list' | 'edit'
+export type ViewState = 'search' | 'add' | 'form' | 'list' | 'edit' | 'roomInfo'
 export type OperationType = 'Deposit' | 'Withdrawal'
 
 function App() {
@@ -136,6 +137,12 @@ function App() {
             active={currentView === 'add'} 
             onClick={() => setCurrentView('add')} 
           />
+          <NavItem
+            icon={<BookOpen size={20} />}
+            label="Инфо по румам"
+            active={currentView === 'roomInfo'}
+            onClick={() => setCurrentView('roomInfo')}
+          />
         </div>
 
         {appInfo?.version && (
@@ -196,6 +203,9 @@ function App() {
           )}
           {currentView === 'add' && (
             <AddPlayerView onSuccess={(p) => handlePlayerFound(p)} />
+          )}
+          {currentView === 'roomInfo' && (
+            <RoomInfoView />
           )}
           {currentView === 'form' && selectedPlayer && (
             <FormView

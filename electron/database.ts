@@ -5,6 +5,7 @@ import { roomKnowledgeSeed, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
 export type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
 export type RoomDealType = 'General' | 'Direct' | 'Agent'
 export type RoomLanguage = 'RU' | 'EN'
+export type RoomCountryStatus = 'Available' | 'Unavailable' | 'Check'
 
 export interface AccountInput {
   roomName: string
@@ -96,11 +97,26 @@ export interface RoomWalletInfo {
   sort_order: number
 }
 
+export interface RoomCountryAvailabilityInfo {
+  id: number
+  room_key: string
+  country_code: string
+  country_name: string
+  status: RoomCountryStatus
+  deal_type: RoomDealType | ''
+  language: RoomLanguage | ''
+  note?: string | null
+  source_date?: string | null
+  sort_order: number
+  is_active: number
+}
+
 export interface RoomKnowledgeIndex {
   profiles: RoomProfileInfo[]
   dealOptions: Array<{ room_key: string; deal_type: RoomDealType; language: RoomLanguage }>
   paymentMethods: RoomPaymentMethodInfo[]
   walletOptions: Array<{ room_key: string; deal_type: RoomDealType; currency: string; network: string; is_active: number }>
+  countryOptions: RoomCountryAvailabilityInfo[]
 }
 
 interface DbPlayer {
@@ -219,8 +235,25 @@ export class TransactionerDatabase {
       FROM room_wallets
       ORDER BY room_key COLLATE NOCASE, sort_order, currency COLLATE NOCASE, network COLLATE NOCASE
     `).all() as RoomKnowledgeIndex['walletOptions']
+    const countryOptions = this.db.prepare(`
+      SELECT * FROM room_country_availability
+      WHERE is_active = 1
+      ORDER BY room_key COLLATE NOCASE, sort_order, country_name COLLATE NOCASE, deal_type COLLATE NOCASE
+    `).all() as RoomCountryAvailabilityInfo[]
 
-    return { profiles, dealOptions, paymentMethods, walletOptions }
+    return { profiles, dealOptions, paymentMethods, walletOptions, countryOptions }
+  }
+
+  getRoomCountryAvailability(roomKey: string): RoomCountryAvailabilityInfo[] {
+    const normalizedRoomKey = String(roomKey || '').trim()
+    if (!normalizedRoomKey) return []
+
+    return this.db.prepare(`
+      SELECT * FROM room_country_availability
+      WHERE room_key = ? COLLATE NOCASE
+        AND is_active = 1
+      ORDER BY sort_order, country_name COLLATE NOCASE, deal_type COLLATE NOCASE
+    `).all(normalizedRoomKey) as RoomCountryAvailabilityInfo[]
   }
 
   getRoomWallets(roomKey: string, dealType?: RoomDealType): RoomWalletInfo[] {
@@ -296,32 +329,29 @@ export class TransactionerDatabase {
         const seenContacts = new Set<string>()
         for (const contact of contacts) {
           const contactValueKey = contactSearchKey(contact.contactValue)
-          const key = `${contact.contactMethod.toLowerCase()}::${contactValueKey}`
-          if (seenContacts.has(key)) {
-            throw new Error(`Контакт ${contact.contactMethod}: ${contact.contactValue} указан несколько раз`)
+          if (seenContacts.has(contactValueKey)) {
+            throw new Error(`Контакт ${contact.contactValue} указан несколько раз`)
           }
-          seenContacts.add(key)
+          seenContacts.add(contactValueKey)
 
           const existingContact = (this.db.prepare(`
             SELECT * FROM player_contacts
-            WHERE contact_method = ? COLLATE NOCASE
-          `).all(contact.contactMethod) as DbContact[])
+          `).all() as DbContact[])
             .find(existing => contactSearchKey(existing.contact_value) === contactValueKey)
 
           if (existingContact && (!playerId || existingContact.player_id !== playerId)) {
-            throw new Error(`Контакт ${contact.contactMethod}: ${contact.contactValue} уже привязан к другому игроку`)
+            throw new Error(`Контакт ${contact.contactValue} уже привязан к другому игроку`)
           }
         }
 
         const usernameKey = contactSearchKey(username)
         const existingPrimary = (this.db.prepare(`
           SELECT * FROM players
-          WHERE contact_method = ? COLLATE NOCASE
-        `).all(contactMethod) as DbPlayer[])
+        `).all() as DbPlayer[])
           .find(existing => contactSearchKey(existing.messenger_username) === usernameKey)
 
         if (existingPrimary && (!playerId || existingPrimary.id !== playerId)) {
-          throw new Error(`Игрок ${contactMethod}: ${username} уже существует`)
+          throw new Error(`Игрок с контактом ${username} уже существует`)
         }
 
         let resolvedPlayerId = playerId
@@ -501,6 +531,20 @@ export class TransactionerDatabase {
         sort_order INTEGER NOT NULL DEFAULT 0,
         UNIQUE(room_key, deal_type, currency, network, wallet_address)
       );
+      CREATE TABLE IF NOT EXISTS room_country_availability (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_key TEXT NOT NULL,
+        country_code TEXT NOT NULL,
+        country_name TEXT NOT NULL,
+        status TEXT NOT NULL,
+        deal_type TEXT NOT NULL DEFAULT '',
+        language TEXT NOT NULL DEFAULT '',
+        note TEXT,
+        source_date TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        UNIQUE(room_key, country_code, status, deal_type, language)
+      );
     `)
 
     this.migrate()
@@ -526,6 +570,8 @@ export class TransactionerDatabase {
     this.db.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_player_contacts_unique_nocase
       ON player_contacts(contact_method COLLATE NOCASE, contact_value COLLATE NOCASE);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_player_contacts_value_unique_nocase
+      ON player_contacts(contact_value COLLATE NOCASE);
     `)
     this.seedRoomKnowledge(roomKnowledgeSeed)
   }
@@ -593,6 +639,22 @@ export class TransactionerDatabase {
           is_active = excluded.is_active,
           sort_order = excluded.sort_order
       `)
+      const insertCountry = this.db.prepare(`
+        INSERT INTO room_country_availability (
+          room_key, country_code, country_name, status, deal_type, language,
+          note, source_date, sort_order, is_active
+        )
+        VALUES (
+          @roomKey, @countryCode, @countryName, @status, @dealType, @language,
+          @note, @sourceDate, @sortOrder, @isActive
+        )
+        ON CONFLICT(room_key, country_code, status, deal_type, language) DO UPDATE SET
+          country_name = excluded.country_name,
+          note = excluded.note,
+          source_date = excluded.source_date,
+          sort_order = excluded.sort_order,
+          is_active = excluded.is_active
+      `)
 
       for (const profile of seed.profiles) {
         insertProfile.run({
@@ -651,6 +713,21 @@ export class TransactionerDatabase {
           sortOrder: wallet.sortOrder || 0
         })
       }
+
+      for (const country of seed.countries) {
+        insertCountry.run({
+          roomKey: country.roomKey,
+          countryCode: country.countryCode.trim().toUpperCase(),
+          countryName: country.countryName,
+          status: country.status,
+          dealType: country.dealType || '',
+          language: country.language || '',
+          note: country.note || null,
+          sourceDate: country.sourceDate || null,
+          sortOrder: country.sortOrder || 0,
+          isActive: country.isActive === false ? 0 : 1
+        })
+      }
     })
 
     seedRooms()
@@ -659,13 +736,13 @@ export class TransactionerDatabase {
   private migratePrimaryContacts() {
     const duplicatePrimaryContacts = this.db.prepare(`
       SELECT
-        LOWER(contact_method) AS method_key,
+        '' AS method_key,
         LOWER(messenger_username) AS value_key,
         GROUP_CONCAT(id) AS player_ids,
         COUNT(*) AS duplicate_count
       FROM players
       WHERE messenger_username IS NOT NULL AND messenger_username != ''
-      GROUP BY method_key, value_key
+      GROUP BY value_key
       HAVING duplicate_count > 1
     `).all() as DuplicateContactRow[]
 
@@ -687,25 +764,23 @@ export class TransactionerDatabase {
           WHERE duplicate.id != p.id
             AND duplicate.messenger_username IS NOT NULL
             AND duplicate.messenger_username != ''
-            AND duplicate.contact_method = p.contact_method COLLATE NOCASE
             AND duplicate.messenger_username = p.messenger_username COLLATE NOCASE
         )
         AND NOT EXISTS (
           SELECT 1
           FROM player_contacts existing
-          WHERE existing.contact_method = p.contact_method COLLATE NOCASE
-            AND existing.contact_value = p.messenger_username COLLATE NOCASE
+          WHERE existing.contact_value = p.messenger_username COLLATE NOCASE
         )
     `).run()
 
     const duplicateMigratedContacts = this.db.prepare(`
       SELECT
-        LOWER(contact_method) AS method_key,
+        '' AS method_key,
         LOWER(contact_value) AS value_key,
         GROUP_CONCAT(player_id) AS player_ids,
         COUNT(*) AS duplicate_count
       FROM player_contacts
-      GROUP BY method_key, value_key
+      GROUP BY value_key
       HAVING duplicate_count > 1
     `).all() as DuplicateContactRow[]
 

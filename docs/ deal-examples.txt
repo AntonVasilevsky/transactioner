@@ -120,3 +120,130 @@ Withdrawals and deposits are done through us only via a request in this chat
 Available transaction methods through us:
 Deposit:  BTC / TRC20 / ERC20 / Skrill - no fee;
 Withdrawal: BTC / TRC20 / ERC20 - no fee,  Skrill - 1% fee.
+
+Redstar
+
+В Redstar от нас вип-статус Star=35% рейкбека со старта + 5% релоад-бонус + майнинг + iPoker Tools бесплатно + помощь с депом/выводом. Ниже отправляю подробности нашей сделки.
+
+
+Полные условия нашей сделки и ссылка на Redstar:
+- Бонус на первый депозит, 200% до 2000$ (даст 10% рб чистыми);
+- Еженедельные гонки с призовым фондом €12,500 для игроков в спины (т.н. Twister).
+
+- Нашим игрокам присваивается вип-уровень Star со старта (35% рейкбека) Очки рб начинают сгорать через 60 дней, не забывайте обменивать их, мы рекомендуем делать обмен раз в месяц, не позже 30 числа, после игровой сессии;
+- Ежемесячный релоад бонус, который даёт 5% рейкбека (макс 300$ на 60 дней, отбивается частями по 1 евро за 200 очков);
+- Игрокам с 3к+ рейка в месяц доступен 10% релоад-бонус;
+- Помощь с депозитом и выводом, чтобы избежать комиссии в руме.
+
+Также от нас, бесплатно:
+- Свежий майнинг NLH 50-5к;
+- iPoker Tools;
+- Фирменный лейаут WPD.
+
+Перед регистрацией обязательно нужно почистить cookies или использовать чистый браузер (т.е. тот, который обычно не используется).
+Переходим по ссылке:
+https://c.rsppartners.com/clickthrgh?btag=a_8499b_28l_9 
+В поле "Регистрационный код" введите WPDEALS
+ 
+По завершении регистрации нам нужен логин, чтобы проверить привязку и активность сделки.
+We offer a VIP Star status = 35% rakeback from the start + 5% reload bonus + hand histories + iPoker tools + dep/withdraw help in Redstar. Below, I’m sending the template of our deal.
+
+Full conditions of our deal and a link for Redstar:
+- Our players are granted Star VIP-level from the start (35% rakeback by granting points to exchange). The points start to expire after 60 days, so make sure to exchange them regularly. We recommend doing the exchange once a month, no later than the 30th, after your playing session;
+
+- First deposit bonus 200% up to $2000 (gives 10% pure rakeback);
+- Weekly races with €12,500 prize pool for spin’n’go players (called Twister in iPoker).
+
+- Monthly reload bonus up to $300, playthrough period: 60 days, released as 1 euro per 200 points (gives 5% rakeback);
+- 10% reload bonus for players with 3k+ rake per month;
+- Help with deposit and withdrawal to avoid poker room fees.
+
+Our players also get free:
+- Fresh NLH 50-5k hand histories;
+- iPoker Tools;
+- WPD branded layout.
+
+Before registering you have to delete cookies or use a “clean” browser (any that is not usually used).
+Follow the link:
+https://c.rsppartners.com/clickthrgh?btag=a_8499b_28l_9
+Register code: WPDEALS
+After successful registration send us your login to check the tracking and deal status.
+
+
+NEXA (для игроков WPT Global под агентской кассой)
+
+В NEXA от нас доплата 40% net revenue по агентской кассе для игроков, за которых рум заплатит комиссию. 
+
+Полные условия нашей сделки и ссылка на NEXA:
+- Доплата от нас - 40% от net revenue ежемесячно (т.е. от чистой прибыли рума, после вычета всех их "расходов" на игрока, включая страховки и оверлеи);
+- Бонус на первый депозит 100%;
+- Лидерборды внутри рума и релоад-бонусы.
+
+Важно! С 01.08.24 мы не можем гарантировать рейкбек, поскольку рум прекратил выплаты аффилейтам за игроков, которых  AI FairGame считает профессионалами. Если рум заплатит комиссию за вас по итогам месяца, то мы выплатим рейкбек согласно сделке.
+
+Все транзакции в руме только через нас, путём р2р переводов.
+Для транзакций мы используем USDT в сети TRC20 | ERC20 | BEP20 и USDC в сети ERC20.
+
+Перед регистрацией обязательно нужно почистить cookies или использовать чистый браузер (т.е. тот, который обычно не используется).
+Качаем клиент:
+Nexa Poker Windows
+https://downloads.nexapoker.com/latest/NEXAPOKER.exe
+Nexa Poker Mac OS
+https://downloads.nexapoker.com/latest/NEXAPOKER.dmg
+Nexa Poker Android
+https://downloads.nexapoker.com/latest/NEXAPOKER.apk
+Nexa Poker iOS Store
+https://web.gei3ohci.com//#/enter?pid=75ZBNec&w=26&lang=en-us
+
+Бонус код: VIPRB (в поле "BONUS CODE (OPTIONAL)" вводить обязательно).
+
+Если вашей страны нет в списке на выбор, то выбираете любую, которая ближе географически к вашей. В форме регистрации вводим все свои данные (кроме страны, если её нет в списке). 
+
+Верификацию нужно проходить только по запросу рума.
+Верификация упрощённая - только личность, адрес верифицировать не нужно и заполнять тоже (если получили письмо о полной верификации, можно его игнорировать - оно автоматическое).
+
+Любой софт в руме запрещён, включая ВПН.
+
+По завершении регистрации нам нужен юзернейм, ID аккаунта и почта в руме, чтобы проверить привязку и активность сделки.
+
+Также нам нужен ваш кошелек для доплат: USDT, USDC, Skrill.
+
+
+
+In NEXA we offer a 40% extra net revenue rakeback via Agent Cashier for players for whom the room pays commissions. 
+
+Full conditions of our deal and a link for NEXA:
+- Our extra rakeback is 40% of net revenue every month (i.e. of pure profit of the poker room after deducting all the room “expenses” on a player including insurances and overlays);
+- First deposit bonus 100% up to $5000;
+- Leaderboards and reload bonuses.
+
+Attention! Starting from 01.08.24 we are not able to guarantee rakeback due to NEXA introducing an AI system dividing players into Pro and Non-pro. Pro players are not being paid extra commission. If NEXA pays the commission for you at the end of the month, we will provide the rakeback as agreed.
+
+All transactions in the room are done exclusively through us via p2p.
+For such transactions we use USDT in TRC20 and BEP20 networks and USDC in ERC20 networks.
+
+Before registering you have to delete cookies or use a “clean” browser (any that is not usually used).
+Download the client:
+Nexa Poker Windows
+https://downloads.nexapoker.com/latest/NEXAPOKER.exe
+Nexa Poker Mac OS
+https://downloads.nexapoker.com/latest/NEXAPOKER.dmg
+Nexa Poker Android
+https://downloads.nexapoker.com/latest/NEXAPOKER.apk
+Nexa Poker iOS Store
+https://web.gei3ohci.com//#/enter?pid=75ZBNec&w=26&lang=en-us
+
+Bonus code: VIPRB (put into "BONUS CODE (OPTIONAL)") is mandatory.
+
+If your country is not in the list then choose any country that is close to yours geographically. Enter your actual data into the registration form (except the country of residence if it was not available to choose).
+
+Verification is only required at the poker room’s request.
+The Verification process is simplified - only an ID verification. Address verification is not to be done and not to be filled up (if you receive an email requesting full verification - it can be ignored).
+
+Any third party software is prohibited to use, VPN included.
+
+After successful registration we need your username, an account ID and an email to check the tracking and deal status.
+
+Also we need your wallet for extra rakeback: USDT, USDC, Skrill.
+
+

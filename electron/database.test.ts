@@ -86,6 +86,29 @@ describe('TransactionerDatabase', () => {
     expect(duplicate.error).toContain('уже привязан')
   })
 
+  it('blocks duplicate contact values across different messenger methods', () => {
+    const first = db.savePlayer(basePlayer({
+      messenger_username: '+123',
+      contact_method: 'TG',
+      contacts: [{ contactMethod: 'TG', contactValue: '+123' }],
+      accounts: [{ roomName: 'RedStar', roomUsername: 'tg player' }]
+    }))
+    const duplicate = db.savePlayer(basePlayer({
+      messenger_username: '+123',
+      contact_method: 'WA',
+      contacts: [{ contactMethod: 'WA', contactValue: '+123' }],
+      accounts: [{ roomName: 'RedStar', roomUsername: 'wa player' }]
+    }))
+
+    expect(first.success).toBe(true)
+    expect(duplicate.success).toBe(false)
+    expect(duplicate.error).toContain('уже привязан')
+
+    const player = db.getPlayerById(first.id!)
+    expect(player?.player.contact_method).toBe('TG')
+    expect(player?.accounts[0].room_username).toBe('tg player')
+  })
+
   it('lets the same player be edited without tripping duplicate contact checks', () => {
     const saved = db.savePlayer(basePlayer())
     const edited = db.savePlayer(basePlayer({
@@ -316,6 +339,43 @@ describe('TransactionerDatabase', () => {
     expect(() => new TransactionerDatabase(dbPath)).toThrow('duplicate players')
   })
 
+  it('surfaces legacy duplicate primary contact values across methods during migration', () => {
+    db.close()
+    const dbPath = path.join(tempDir, 'cross-method-duplicates.db')
+    const legacy = new Database(dbPath)
+    legacy.exec(`
+      CREATE TABLE players (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        messenger_username TEXT NOT NULL,
+        contact_method TEXT NOT NULL DEFAULT 'TG',
+        default_wallet TEXT,
+        default_wallet_network TEXT,
+        last_used_at INTEGER DEFAULT 0
+      );
+      CREATE TABLE accounts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id INTEGER NOT NULL,
+        room_name TEXT NOT NULL,
+        room_username TEXT,
+        room_player_id TEXT,
+        email TEXT
+      );
+      CREATE TABLE player_contacts (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        player_id INTEGER NOT NULL,
+        contact_method TEXT NOT NULL,
+        contact_value TEXT NOT NULL,
+        is_primary INTEGER NOT NULL DEFAULT 0,
+        UNIQUE(contact_method, contact_value)
+      );
+      INSERT INTO players (messenger_username, contact_method) VALUES ('+123', 'TG');
+      INSERT INTO players (messenger_username, contact_method) VALUES ('+123', 'WA');
+    `)
+    legacy.close()
+
+    expect(() => new TransactionerDatabase(dbPath)).toThrow('duplicate players')
+  })
+
   it('creates room knowledge tables and seeds initial room data idempotently', () => {
     const firstIndex = db.getRoomKnowledgeIndex()
 
@@ -325,6 +385,15 @@ describe('TransactionerDatabase', () => {
       'redstar'
     ])
     expect(firstIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')).toHaveLength(3)
+    expect(firstIndex.dealOptions.filter((deal) => deal.room_key === 'nexa')).toEqual([
+      { room_key: 'nexa', deal_type: 'Agent', language: 'RU' },
+      { room_key: 'nexa', deal_type: 'Agent', language: 'EN' },
+    ])
+    expect(firstIndex.walletOptions.filter((wallet) => wallet.room_key === 'nexa')).toHaveLength(5)
+    expect(db.getRoomDeals('champion-poker', 'RU', 'Agent')[0].full_text).toContain('https://online.championpoker.com/promoRedirect')
+    expect(db.getRoomDeals('champion-poker', 'EN', 'Direct')[0].full_text).toContain('https://online.championpoker.com/promoRedirect')
+    expect(db.getRoomDeals('redstar', 'RU', 'General')[0].full_text).toContain('WPDEALS')
+    expect(db.getRoomDeals('redstar', 'EN', 'General')[0].full_text).toContain('https://c.rsppartners.com/clickthrgh')
 
     db.close()
     db = new TransactionerDatabase(dbPath)
@@ -341,27 +410,27 @@ describe('TransactionerDatabase', () => {
       INSERT INTO room_deals (
         room_key, deal_type, language, short_text, full_text, sort_order, is_active
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run('redstar', 'General', 'RU', 'Коротко RedStar', 'Полный шаблон RedStar', 10, 1)
+    `).run('test-room', 'General', 'RU', 'Коротко Test', 'Полный шаблон Test', 10, 1)
     raw.prepare(`
       INSERT INTO room_deals (
         room_key, deal_type, language, short_text, full_text, sort_order, is_active
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run('redstar', 'General', 'EN', 'Short RedStar', 'Full RedStar', 20, 1)
+    `).run('test-room', 'General', 'EN', 'Short Test', 'Full Test', 20, 1)
     raw.prepare(`
       INSERT INTO room_deals (
         room_key, deal_type, language, short_text, full_text, sort_order, is_active
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run('redstar', 'Agent', 'RU', 'Старый короткий', 'Старый полный', 30, 0)
+    `).run('test-room', 'Agent', 'RU', 'Старый короткий', 'Старый полный', 30, 0)
     raw.close()
 
     db = new TransactionerDatabase(dbPath)
-    const ruDeals = db.getRoomDeals('redstar', 'RU')
-    const enDeals = db.getRoomDeals('redstar', 'EN', 'General')
+    const ruDeals = db.getRoomDeals('test-room', 'RU')
+    const enDeals = db.getRoomDeals('test-room', 'EN', 'General')
 
     expect(ruDeals).toHaveLength(1)
-    expect(ruDeals[0].short_text).toBe('Коротко RedStar')
+    expect(ruDeals[0].short_text).toBe('Коротко Test')
     expect(enDeals).toHaveLength(1)
-    expect(enDeals[0].short_text).toBe('Short RedStar')
+    expect(enDeals[0].short_text).toBe('Short Test')
   })
 
   it('returns room wallets filtered by room and deal type while preserving inactive rows for warnings', () => {
@@ -371,27 +440,51 @@ describe('TransactionerDatabase', () => {
       INSERT INTO room_wallets (
         room_key, deal_type, currency, network, wallet_address, fee_text, verified_at, is_active, sort_order
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run('redstar', 'General', 'USDT', 'ERC20', '0xactive', 'без комиссии', '2026-02-16', 1, 20)
+    `).run('test-room', 'General', 'USDT', 'ERC20', '0xactive', 'без комиссии', '2026-02-16', 1, 20)
     raw.prepare(`
       INSERT INTO room_wallets (
         room_key, deal_type, currency, network, wallet_address, fee_text, verified_at, is_active, sort_order
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run('redstar', 'General', 'USDT', 'TRC20', 'Tinactive', 'не актуально', '2025-05-25', 0, 10)
+    `).run('test-room', 'General', 'USDT', 'TRC20', 'Tinactive', 'не актуально', '2025-05-25', 0, 10)
     raw.prepare(`
       INSERT INTO room_wallets (
         room_key, deal_type, currency, network, wallet_address, fee_text, verified_at, is_active, sort_order
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run('redstar', 'Agent', 'BTC', 'BTC', 'bc1agent', 'без комиссии', '2026-02-16', 1, 30)
+    `).run('test-room', 'Agent', 'BTC', 'BTC', 'bc1agent', 'без комиссии', '2026-02-16', 1, 30)
     raw.close()
 
     db = new TransactionerDatabase(dbPath)
-    const generalWallets = db.getRoomWallets('redstar', 'General')
-    const agentWallets = db.getRoomWallets('redstar', 'Agent')
+    const generalWallets = db.getRoomWallets('test-room', 'General')
+    const agentWallets = db.getRoomWallets('test-room', 'Agent')
 
     expect(generalWallets).toHaveLength(2)
     expect(generalWallets.map((wallet) => wallet.wallet_address)).toEqual(['0xactive', 'Tinactive'])
     expect(generalWallets[1].is_active).toBe(0)
     expect(agentWallets).toHaveLength(1)
     expect(agentWallets[0].wallet_address).toBe('bc1agent')
+  })
+
+  it('returns country availability rows for room deal filtering', () => {
+    db.close()
+    const raw = new Database(dbPath)
+    raw.prepare(`
+      INSERT INTO room_country_availability (
+        room_key, country_code, country_name, status, deal_type, language, note, source_date, sort_order, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('test-room', 'TH', 'Thailand', 'Available', 'Agent', 'RU', 'Only agent deal is available', '2026-05-31', 20, 1)
+    raw.prepare(`
+      INSERT INTO room_country_availability (
+        room_key, country_code, country_name, status, deal_type, language, note, source_date, sort_order, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('test-room', 'BR', 'Brazil', 'Unavailable', '', '', 'Room is not available', '2026-05-31', 10, 1)
+    raw.close()
+
+    db = new TransactionerDatabase(dbPath)
+    const index = db.getRoomKnowledgeIndex()
+    const availability = db.getRoomCountryAvailability('test-room')
+
+    expect(index.countryOptions.filter((country) => country.room_key === 'test-room')).toHaveLength(2)
+    expect(availability.map((country) => country.country_code)).toEqual(['BR', 'TH'])
+    expect(availability[1].deal_type).toBe('Agent')
   })
 })
