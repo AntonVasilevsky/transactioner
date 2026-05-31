@@ -90,6 +90,13 @@ ipcMain.handle('get-room-knowledge-index', () => store?.getRoomKnowledgeIndex() 
   walletOptions: [],
   countryOptions: [],
 })
+ipcMain.handle('get-room-knowledge-admin-index', () => store?.getRoomKnowledgeAdminIndex() ?? {
+  profiles: [],
+  dealOptions: [],
+  paymentMethods: [],
+  walletOptions: [],
+  countryOptions: [],
+})
 ipcMain.handle('get-room-wallets', (_, roomKey: string, dealType?: RoomDealType) => (
   store?.getRoomWallets(roomKey, dealType) ?? []
 ))

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, Plus, Save, Settings } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, Plus, Save, Settings } from 'lucide-react'
 
 type AdminMode = 'deals' | 'wallets'
 const allDealTypes: RoomDealType[] = ['Agent', 'Direct', 'General']
@@ -124,7 +124,7 @@ export default function RoomAdminView({
   const dealDraftsRef = useRef<Record<string, SaveRoomDealInput>>({})
 
   const loadIndex = async (preferredRoomKey?: string) => {
-    const nextIndex = await window.electronAPI.getRoomKnowledgeIndex()
+    const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
     const nextRoomKey = preferredRoomKey || roomKey || nextIndex.profiles[0]?.room_key || ''
     setIndex(nextIndex)
     setRoomKey(nextRoomKey)
@@ -133,7 +133,7 @@ export default function RoomAdminView({
 
   useEffect(() => {
     let active = true
-    window.electronAPI.getRoomKnowledgeIndex()
+    window.electronAPI.getRoomKnowledgeAdminIndex()
       .then((nextIndex) => {
         if (!active) return
         const nextRoomKey = nextIndex.profiles[0]?.room_key || ''
@@ -206,6 +206,7 @@ export default function RoomAdminView({
   }, [roomKey, activeDealType, existingDealTypes])
 
   const roomName = index?.profiles.find((profile) => profile.room_key === roomKey)?.display_name || roomKey
+  const selectedRoomProfile = index?.profiles.find((profile) => profile.room_key === roomKey)
 
   const showMessage = (text: string) => {
     setError('')
@@ -267,6 +268,25 @@ export default function RoomAdminView({
     setLanguage('RU')
     setDealForm(emptyDeal(normalizedRoomKey, 'Agent', 'RU'))
     setWalletForm(emptyWallet(normalizedRoomKey, 'Agent'))
+  }
+
+  const updateSelectedRoomActive = async (isActive: boolean) => {
+    if (!selectedRoomProfile) return
+    const result = await window.electronAPI.saveRoomProfile({
+      id: selectedRoomProfile.id,
+      room_key: selectedRoomProfile.room_key,
+      display_name: selectedRoomProfile.display_name,
+      network_name: selectedRoomProfile.network_name || '',
+      notes: selectedRoomProfile.notes || '',
+      is_active: isActive ? 1 : 0,
+    })
+    if (!result.success) {
+      setMessage('')
+      setError(result.error || 'Не удалось обновить рум')
+      return
+    }
+    showMessage(isActive ? 'Рум включен в инфо' : 'Рум скрыт из инфо')
+    await loadIndex(selectedRoomProfile.room_key)
   }
 
   const saveWallet = async () => {
@@ -358,6 +378,12 @@ export default function RoomAdminView({
                 className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
               />
             </Field>
+            <Field label="Видимость">
+              <RoomVisibilityButton
+                active={Boolean(roomForm.is_active)}
+                onClick={() => setRoomForm({ ...roomForm, is_active: roomForm.is_active ? 0 : 1 })}
+              />
+            </Field>
           </div>
         </section>
       )}
@@ -397,6 +423,12 @@ export default function RoomAdminView({
             </button>
           </div>
         </div>
+        {selectedRoomProfile && (
+          <RoomVisibilityButton
+            active={Boolean(selectedRoomProfile.is_active)}
+            onClick={() => updateSelectedRoomActive(!selectedRoomProfile.is_active)}
+          />
+        )}
         <div className="min-w-44">
           <label className="mb-1 block text-sm font-medium text-slate-400">Тип сделки</label>
           <select
@@ -645,6 +677,26 @@ function Field({ label, children }: { label: string, children: ReactNode }) {
       <span className="mb-1 block text-sm font-medium text-slate-400">{label}</span>
       {children}
     </label>
+  )
+}
+
+function RoomVisibilityButton({ active, onClick }: { active: boolean, onClick: () => void }) {
+  const label = active ? 'Скрыть из инфо по румам' : 'Показывать в инфо по румам'
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={label}
+      aria-label={label}
+      className={`inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border transition-colors ${
+        active
+          ? 'border-blue-500/60 bg-blue-500/15 text-blue-300 hover:bg-blue-500/25'
+          : 'border-slate-700 bg-slate-900 text-slate-500 hover:border-blue-500 hover:text-slate-300'
+      }`}
+    >
+      {active ? <Eye size={19} /> : <EyeOff size={19} />}
+    </button>
   )
 }
 

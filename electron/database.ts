@@ -253,9 +253,17 @@ export class TransactionerDatabase {
   }
 
   getRoomKnowledgeIndex(): RoomKnowledgeIndex {
+    return this.getRoomKnowledgeIndexData(false)
+  }
+
+  getRoomKnowledgeAdminIndex(): RoomKnowledgeIndex {
+    return this.getRoomKnowledgeIndexData(true)
+  }
+
+  private getRoomKnowledgeIndexData(includeInactiveProfiles: boolean): RoomKnowledgeIndex {
     const profiles = this.db.prepare(`
       SELECT * FROM room_profiles
-      WHERE is_active = 1
+      ${includeInactiveProfiles ? '' : 'WHERE is_active = 1'}
       ORDER BY display_name COLLATE NOCASE
     `).all() as RoomProfileInfo[]
     const dealOptions = this.db.prepare(`

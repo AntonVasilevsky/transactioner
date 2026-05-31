@@ -249,6 +249,7 @@ interface Window {
     getAppInfo: () => Promise<AppInfo>;
     getStorageInfo: () => Promise<StorageInfo>;
     getRoomKnowledgeIndex: () => Promise<RoomKnowledgeIndex>;
+    getRoomKnowledgeAdminIndex: () => Promise<RoomKnowledgeIndex>;
     getRoomWallets: (roomKey: string, dealType?: RoomDealType) => Promise<RoomWalletInfo[]>;
     getRoomDeals: (roomKey: string, language: RoomLanguage, dealType?: RoomDealType) => Promise<RoomDealInfo[]>;
     getRoomCountryAvailability: (roomKey: string) => Promise<RoomCountryAvailabilityInfo[]>;

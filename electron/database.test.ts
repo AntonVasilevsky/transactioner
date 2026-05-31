@@ -467,6 +467,18 @@ describe('TransactionerDatabase', () => {
     expect(result.error).toContain('латиницу')
   })
 
+  it('hides inactive rooms from public room info while keeping them in admin', () => {
+    const createdRoom = db.saveRoomProfile({
+      room_key: 'hidden-room',
+      display_name: 'Hidden Room',
+      is_active: 0,
+    })
+
+    expect(createdRoom.success).toBe(true)
+    expect(db.getRoomKnowledgeIndex().profiles.some((profile) => profile.room_key === 'hidden-room')).toBe(false)
+    expect(db.getRoomKnowledgeAdminIndex().profiles.some((profile) => profile.room_key === 'hidden-room')).toBe(true)
+  })
+
   it('saves room wallet edits and new wallet rows', () => {
     const wallet = db.getRoomWallets('redstar', 'General')[0]
     const edited = db.saveRoomWallet({
