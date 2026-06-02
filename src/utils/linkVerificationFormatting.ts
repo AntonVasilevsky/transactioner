@@ -63,18 +63,20 @@ export const buildLinkVerificationTemplateValues = (values: {
   roomName: string
   playerData: string
   messenger: string
+  messengerUsername: string
   username: string
   roomId: string
   email: string
 }) => {
   const username = values.username.trim()
   const roomId = values.roomId.trim()
+  const messengerUsername = values.messengerUsername.trim()
   return {
     room_name: values.roomName,
     player_data: values.playerData.trim(),
     messenger: values.messenger.trim(),
-    messenger_username: username,
-    messenger_usermane: username,
+    messenger_username: messengerUsername,
+    messenger_usermane: messengerUsername,
     username,
     nick: username,
     id: roomId,

@@ -31,6 +31,7 @@ export interface LinkVerificationRoomRule {
   templateKeys: string[]
   defaultTemplateKey: string
   requiredFields: LinkVerificationFieldKey[]
+  sheet2RoomUsernameField: LinkVerificationFieldKey
   persistPlayerInMainDb: boolean
   deal: DealRule
 }
@@ -187,6 +188,7 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     templateKeys: ['nexa'],
     defaultTemplateKey: 'nexa',
     requiredFields: ['nick', 'roomId', 'email', 'messengerUsername'],
+    sheet2RoomUsernameField: 'roomId',
     persistPlayerInMainDb: true,
     deal: dealRuleIndex.get('nexa')!
   },
@@ -196,6 +198,7 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     templateKeys: ['default'],
     defaultTemplateKey: 'default',
     requiredFields: ['username', 'messengerUsername'],
+    sheet2RoomUsernameField: 'username',
     persistPlayerInMainDb: true,
     deal: dealRuleIndex.get('championpoker')!
   },
@@ -205,6 +208,7 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     templateKeys: ['redstar'],
     defaultTemplateKey: 'redstar',
     requiredFields: ['username'],
+    sheet2RoomUsernameField: 'username',
     persistPlayerInMainDb: true,
     deal: dealRuleIndex.get('redstar') || { dealText: '', directusDealSchema: '' }
   },
@@ -214,6 +218,7 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     templateKeys: ['wptg'],
     defaultTemplateKey: 'wptg',
     requiredFields: ['roomId', 'nick', 'email'],
+    sheet2RoomUsernameField: 'roomId',
     persistPlayerInMainDb: false,
     deal: dealRuleIndex.get('wptg')!
   },
@@ -223,6 +228,7 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     templateKeys: ['888-confirmation', '888-check'],
     defaultTemplateKey: '888-check',
     requiredFields: ['username', 'messengerUsername'],
+    sheet2RoomUsernameField: 'username',
     persistPlayerInMainDb: false,
     deal: dealRuleIndex.get('888')!
   },
@@ -232,6 +238,7 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     templateKeys: ['ton'],
     defaultTemplateKey: 'ton',
     requiredFields: ['nick', 'messengerUsername', 'roomId'],
+    sheet2RoomUsernameField: 'roomId',
     persistPlayerInMainDb: false,
     deal: dealRuleIndex.get('tonpoker')!
   },
@@ -241,6 +248,7 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     templateKeys: ['partypoker'],
     defaultTemplateKey: 'partypoker',
     requiredFields: ['email', 'userId'],
+    sheet2RoomUsernameField: 'userId',
     persistPlayerInMainDb: false,
     deal: dealRuleIndex.get('partypoker')!
   },
@@ -250,6 +258,7 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     templateKeys: ['bwin'],
     defaultTemplateKey: 'bwin',
     requiredFields: ['email', 'userId'],
+    sheet2RoomUsernameField: 'userId',
     persistPlayerInMainDb: false,
     deal: dealRuleIndex.get('bwin')!
   },
@@ -259,6 +268,7 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     templateKeys: ['gutspoker'],
     defaultTemplateKey: 'gutspoker',
     requiredFields: ['nick', 'roomId'],
+    sheet2RoomUsernameField: 'roomId',
     persistPlayerInMainDb: false,
     deal: dealRuleIndex.get('gutspoker')!
   }
@@ -292,6 +302,7 @@ export const resolveLinkVerificationRoomRule = (roomName: string): ResolvedLinkV
 
   const useIdInDefault = DEFAULT_ID_ROOMS.has(normalized)
   const requiredFields: LinkVerificationFieldKey[] = useIdInDefault ? ['roomId', 'messengerUsername'] : ['username', 'messengerUsername']
+  const sheet2RoomUsernameField: LinkVerificationFieldKey = useIdInDefault ? 'roomId' : 'username'
   const deal = dealRuleIndex.get(normalized) || fallbackDeal
 
   return {
@@ -300,6 +311,7 @@ export const resolveLinkVerificationRoomRule = (roomName: string): ResolvedLinkV
     templateKeys: ['default'],
     defaultTemplateKey: 'default',
     requiredFields,
+    sheet2RoomUsernameField,
     persistPlayerInMainDb: CORE_ROOMS.has(normalized),
     deal,
     templates: [LINK_VERIFICATION_TEMPLATES.default]

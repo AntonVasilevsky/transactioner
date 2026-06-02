@@ -15,8 +15,7 @@ import {
   composePlayerDataByRule,
   getLinkVerificationUsernameFieldLabel,
   normalizeMessengerLabel,
-  toDirectusMessenger,
-  uniqueNonEmpty
+  toDirectusMessenger
 } from '../utils/linkVerificationFormatting'
 
 const formatDate = (date: Date) => {
@@ -115,8 +114,8 @@ export default function LinkVerificationView() {
     : effectivePlayerData
 
   const autoSheet2RoomUsername = useMemo(
-    () => uniqueNonEmpty([username, roomId])[0] || '',
-    [roomId, username]
+    () => fieldValues[rule.sheet2RoomUsernameField]?.trim() || '',
+    [fieldValues, rule.sheet2RoomUsernameField]
   )
 
   const sheet2RoomUsername = isSheet2RoomUsernameManual
@@ -128,6 +127,7 @@ export default function LinkVerificationView() {
       roomName,
       playerData: effectivePlayerData,
       messenger: selectedMessenger,
+      messengerUsername,
       username,
       roomId,
       email
@@ -137,6 +137,7 @@ export default function LinkVerificationView() {
     effectivePlayerData,
     email,
     selectedMessenger,
+    messengerUsername,
     roomId,
     roomName,
     selectedTemplate.body,

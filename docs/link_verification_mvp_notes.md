@@ -138,6 +138,9 @@ Observed examples confirm:
   - numeric ID
   - repeated multi-value list
   - empty for some deal types (e.g. race-like cases).
+- For link-verification generated rows, `roomUsername` is selected by room rule:
+  - ID-based verification rooms use `Room ID` (e.g. Nexa, WPTG, TON Poker, Guts Poker, BCPoker, BetOnline, Grompoker, RPTBET Poker, TigerGaming, VBet Poker).
+  - Login/User ID verification rooms use the first `Username` field value (e.g. RedStar, 888 Poker, PartyPoker, bwin, Champion Poker, default username rooms).
 - `Сделки` examples:
   - `% Net Revenue`
   - `% Gross`

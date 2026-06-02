@@ -10,7 +10,7 @@ import {
   normalizeMessengerLabel,
   toDirectusMessenger
 } from '../utils/linkVerificationFormatting'
-import { LINK_VERIFICATION_TEMPLATES } from '../utils/linkVerificationRules'
+import { LINK_VERIFICATION_TEMPLATES, resolveLinkVerificationRoomRule } from '../utils/linkVerificationRules'
 
 describe('LinkVerificationView helpers', () => {
   it('replaces placeholders in request template from form values', () => {
@@ -81,6 +81,7 @@ describe('LinkVerificationView helpers', () => {
       roomName: 'RedStar',
       playerData: 'hero-login / 1483304 / hero@example.com',
       messenger: '',
+      messengerUsername: '@hero-contact',
       username: 'hero-login',
       roomId: '1483304',
       email: 'hero@example.com'
@@ -94,11 +95,49 @@ describe('LinkVerificationView helpers', () => {
     expect(text).toBe('login=hero-login; nick=hero-login; user=hero-login; id=1483304; mail=hero@example.com; data=hero-login / 1483304 / hero@example.com')
   })
 
+  it('uses contact field for messenger placeholders in request templates', () => {
+    const values = buildLinkVerificationTemplateValues({
+      roomName: 'Nexa',
+      playerData: 'hero-nick / 1483304 / hero@example.com',
+      messenger: 'Telegram',
+      messengerUsername: '@hero-contact',
+      username: 'hero-nick',
+      roomId: '1483304',
+      email: 'hero@example.com'
+    })
+
+    const text = buildLinkVerificationRequestText(
+      LINK_VERIFICATION_TEMPLATES.nexa.body,
+      values
+    )
+
+    expect(text).toContain('hero-nick / 1483304 / hero@example.com')
+    expect(text).toContain('messenger: @hero-contact')
+    expect(text).not.toContain('messenger: hero-nick')
+  })
+
   it('renames the username field for room-specific identity wording', () => {
     expect(getLinkVerificationUsernameFieldLabel('RedStar')).toBe('Login')
     expect(getLinkVerificationUsernameFieldLabel('PartyPoker')).toBe('User ID')
     expect(getLinkVerificationUsernameFieldLabel('Nexa')).toBe('Nick')
     expect(getLinkVerificationUsernameFieldLabel('Champion Poker')).toBe('Username')
+  })
+
+  it('selects sheet2 roomUsername from the room-specific verification identifier', () => {
+    const fields = buildLinkVerificationFieldValues({
+      username: 'hero-nick',
+      roomId: '1483304',
+      email: 'hero@example.com'
+    })
+
+    expect(fields[resolveLinkVerificationRoomRule('Nexa').sheet2RoomUsernameField]).toBe('1483304')
+    expect(fields[resolveLinkVerificationRoomRule('WPTG').sheet2RoomUsernameField]).toBe('1483304')
+    expect(fields[resolveLinkVerificationRoomRule('TON Poker').sheet2RoomUsernameField]).toBe('1483304')
+    expect(fields[resolveLinkVerificationRoomRule('Guts Poker').sheet2RoomUsernameField]).toBe('1483304')
+    expect(fields[resolveLinkVerificationRoomRule('BCPoker').sheet2RoomUsernameField]).toBe('1483304')
+    expect(fields[resolveLinkVerificationRoomRule('PartyPoker').sheet2RoomUsernameField]).toBe('hero-nick')
+    expect(fields[resolveLinkVerificationRoomRule('RedStar').sheet2RoomUsernameField]).toBe('hero-nick')
+    expect(fields[resolveLinkVerificationRoomRule('Basepoker').sheet2RoomUsernameField]).toBe('hero-nick')
   })
 
   it('builds complete sheet1 tsv row from verification fields', () => {
