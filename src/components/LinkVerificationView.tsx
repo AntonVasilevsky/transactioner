@@ -1,0 +1,768 @@
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { CheckCircle2, Copy, Link2, Search } from 'lucide-react'
+import {
+  LINK_VERIFICATION_ROOM_SUGGESTIONS,
+  type LinkVerificationFieldKey,
+  LINK_VERIFICATION_TEMPLATES,
+  linkVerificationRoomRules,
+  resolveLinkVerificationRoomRule
+} from '../utils/linkVerificationRules'
+
+const formatDate = (date: Date) => {
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const year = String(date.getFullYear())
+  return `${day}.${month}.${year}`
+}
+
+const today = () => formatDate(new Date())
+const messengerOptions = ['Telegram', 'WA', 'Discord', 'Teams', 'Email', 'Site', 'Jivo']
+
+const normalizeMessengerLabel = (value: string) => {
+  const lowered = value.trim().toLowerCase()
+  if (lowered === 'tg') return 'Telegram'
+  if (lowered === 'wa') return 'WA'
+  return value.trim() || 'Telegram'
+}
+
+const toDirectusMessenger = (messenger: string, login: string) => {
+  const base = messenger.trim().toLowerCase()
+  const prefix = base.includes('telegram')
+    ? 'telegram'
+    : base === 'wa' || base.includes('whatsapp')
+      ? 'whatsapp'
+      : base.includes('site')
+        ? 'site'
+        : base || 'messenger'
+  return `${prefix}: ${login.trim()}`
+}
+
+const composeDefaultPlayerData = (values: {
+  username: string
+  nick: string
+  roomId: string
+  email: string
+  userId: string
+}) => {
+  const parts = [values.username, values.nick, values.roomId, values.email, values.userId]
+    .map((value) => value.trim())
+    .filter(Boolean)
+  return parts.join(' / ')
+}
+
+const orderedFieldKeys: LinkVerificationFieldKey[] = ['username', 'nick', 'roomId', 'email', 'userId']
+
+export const uniqueNonEmpty = (values: string[]) => {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const rawValue of values) {
+    const value = rawValue.trim()
+    if (!value) continue
+    const key = value.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    result.push(value)
+  }
+  return result
+}
+
+export const composePlayerDataByRule = (
+  requiredFields: LinkVerificationFieldKey[],
+  fieldValues: Record<LinkVerificationFieldKey, string>
+) => {
+  const preferred = requiredFields.map((key) => fieldValues[key] || '')
+  const fallback = orderedFieldKeys.map((key) => fieldValues[key] || '')
+  return uniqueNonEmpty([...preferred, ...fallback]).join(' / ')
+}
+
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+const replaceTemplateValue = (input: string, key: string, value: string) =>
+  input.replace(new RegExp(escapeRegExp(`<${key}>`), 'gi'), value)
+
+export const buildLinkVerificationRequestText = (
+  templateBody: string,
+  values: Record<string, string>
+) => {
+  let result = templateBody
+  for (const [key, value] of Object.entries(values)) {
+    result = replaceTemplateValue(result, key, value)
+  }
+  return result
+}
+
+export const buildSheet1Tsv = (values: {
+  date: string
+  manager: string
+  messenger: string
+  messengerUsername: string
+  roomName: string
+  loginNickId: string
+  status: string
+  deliveredToPlayer: string
+  updateChat: boolean
+}) => [
+  values.date.trim(),
+  values.manager.trim(),
+  normalizeMessengerLabel(values.messenger),
+  values.messengerUsername.trim(),
+  values.roomName.trim(),
+  values.loginNickId.trim(),
+  values.status.trim() || 'Check',
+  values.deliveredToPlayer.trim(),
+  values.updateChat ? 'TRUE' : 'FALSE'
+].join('\t')
+
+export default function LinkVerificationView() {
+  const [roomName, setRoomName] = useState('Nexa')
+  const [roomQuery, setRoomQuery] = useState('Nexa')
+  const [isRoomPickerOpen, setIsRoomPickerOpen] = useState(false)
+  const [templateKey, setTemplateKey] = useState('nexa')
+  const [date, setDate] = useState(today())
+  const [manager, setManager] = useState('Антон')
+  const [selectedMessenger, setSelectedMessenger] = useState('')
+  const [messengerQuery, setMessengerQuery] = useState('')
+  const [isMessengerPickerOpen, setIsMessengerPickerOpen] = useState(false)
+  const [messengerUsername, setMessengerUsername] = useState('')
+  const [username, setUsername] = useState('')
+  const [nick, setNick] = useState('')
+  const [roomId, setRoomId] = useState('')
+  const [email, setEmail] = useState('')
+  const [userId, setUserId] = useState('')
+  const [isPlayerDataManual, setIsPlayerDataManual] = useState(false)
+  const [playerDataManual, setPlayerDataManual] = useState('')
+  const [isSheet2NickManual, setIsSheet2NickManual] = useState(false)
+  const [sheet2NickManual, setSheet2NickManual] = useState('')
+  const [isSheet2RoomUsernameManual, setIsSheet2RoomUsernameManual] = useState(false)
+  const [sheet2RoomUsernameManual, setSheet2RoomUsernameManual] = useState('')
+  const [status, setStatus] = useState('Check')
+  const [deliveredToPlayer, setDeliveredToPlayer] = useState('')
+  const [updateChat, setUpdateChat] = useState(false)
+  const [sheet2Kind, setSheet2Kind] = useState<'Новый' | 'Старый'>('Новый')
+  const [source, setSource] = useState('Telegram')
+  const [language, setLanguage] = useState<'RU' | 'ENG'>('RU')
+  const [country, setCountry] = useState('')
+  const [nameNick, setNameNick] = useState('')
+  const [accountOnWpd, setAccountOnWpd] = useState('')
+  const [directusUsername, setDirectusUsername] = useState('')
+  const [registrationDate, setRegistrationDate] = useState(today())
+  const [dealText, setDealText] = useState('')
+  const [dealSchema, setDealSchema] = useState('')
+  const [wallet, setWallet] = useState('')
+  const [paymentSystem, setPaymentSystem] = useState('')
+  const [paymentCurrency, setPaymentCurrency] = useState('')
+  const [paymentAddress, setPaymentAddress] = useState('')
+  const [copiedKey, setCopiedKey] = useState<'request' | 'sheet1' | 'sheet2' | ''>('')
+  const roomInputWasFocusedOnMouseDown = useRef(false)
+  const messengerInputWasFocusedOnMouseDown = useRef(false)
+
+  useEffect(() => {
+    const storedManager = localStorage.getItem('transactioner.linkVerification.manager')
+    if (storedManager?.trim()) {
+      setManager(storedManager.trim())
+    }
+  }, [])
+
+  useEffect(() => {
+    localStorage.setItem('transactioner.linkVerification.manager', manager.trim())
+  }, [manager])
+
+  const rule = useMemo(() => resolveLinkVerificationRoomRule(roomName), [roomName])
+  const templateOptions = rule.templates
+  const selectedTemplate = LINK_VERIFICATION_TEMPLATES[templateKey] || templateOptions[0] || LINK_VERIFICATION_TEMPLATES.default
+
+  useEffect(() => {
+    if (!templateOptions.some((template) => template.key === templateKey)) {
+      setTemplateKey(rule.defaultTemplateKey)
+    }
+  }, [rule.defaultTemplateKey, templateKey, templateOptions])
+
+  useEffect(() => {
+    setDealText(rule.deal.dealText || '')
+    setDealSchema(rule.deal.directusDealSchema || '')
+  }, [rule.deal.dealText, rule.deal.directusDealSchema])
+
+  useEffect(() => {
+    const normalized = normalizeMessengerLabel(selectedMessenger)
+    setSource((current) => (current.trim() ? current : normalized))
+  }, [selectedMessenger])
+
+  const filteredMessengerOptions = useMemo(() => {
+    const query = messengerQuery.trim().toLowerCase()
+    if (!query) return messengerOptions
+    return messengerOptions.filter((option) => option.toLowerCase().includes(query))
+  }, [messengerQuery])
+
+  const selectMessenger = (value: string) => {
+    setSelectedMessenger(value)
+    setMessengerQuery(value)
+    setIsMessengerPickerOpen(false)
+  }
+
+  const defaultPlayerData = useMemo(() => composeDefaultPlayerData({
+    username,
+    nick,
+    roomId,
+    email,
+    userId
+  }), [email, nick, roomId, userId, username])
+
+  const fieldValues = useMemo<Record<LinkVerificationFieldKey, string>>(() => ({
+    username: username.trim(),
+    nick: nick.trim(),
+    roomId: roomId.trim(),
+    email: email.trim(),
+    userId: userId.trim(),
+    messengerUsername: messengerUsername.trim()
+  }), [email, messengerUsername, nick, roomId, userId, username])
+
+  const ruleBasedPlayerData = useMemo(
+    () => composePlayerDataByRule(rule.requiredFields, fieldValues),
+    [fieldValues, rule.requiredFields]
+  )
+
+  const effectivePlayerData = isPlayerDataManual
+    ? playerDataManual.trim()
+    : (ruleBasedPlayerData || defaultPlayerData)
+
+  const sheet1LoginNickId = effectivePlayerData || defaultPlayerData
+
+  const sheet2NickLoginId = isSheet2NickManual
+    ? sheet2NickManual.trim()
+    : (effectivePlayerData || defaultPlayerData)
+
+  const autoSheet2RoomUsername = useMemo(
+    () => uniqueNonEmpty([username, roomId, nick])[0] || '',
+    [nick, roomId, username]
+  )
+
+  const sheet2RoomUsername = isSheet2RoomUsernameManual
+    ? sheet2RoomUsernameManual.trim()
+    : autoSheet2RoomUsername
+
+  const requestText = useMemo(() => {
+    const values: Record<string, string> = {
+      room_name: roomName,
+      player_data: effectivePlayerData || defaultPlayerData,
+      messenger: selectedMessenger.trim(),
+      messenger_username: messengerUsername.trim(),
+      messenger_usermane: messengerUsername.trim(),
+      username: username.trim(),
+      nick: nick.trim(),
+      id: roomId.trim(),
+      email: email.trim(),
+      login: username.trim(),
+      user_id: userId.trim()
+    }
+    return buildLinkVerificationRequestText(selectedTemplate.body, values)
+  }, [
+    defaultPlayerData,
+    effectivePlayerData,
+    email,
+    selectedMessenger,
+    messengerUsername,
+    nick,
+    roomId,
+    roomName,
+    selectedTemplate.body,
+    userId,
+    username
+  ])
+
+  const sheet1Tsv = useMemo(() => {
+    return buildSheet1Tsv({
+      date,
+      manager,
+      messenger: selectedMessenger,
+      messengerUsername,
+      roomName: rule.canonicalRoomName,
+      loginNickId: sheet1LoginNickId,
+      status,
+      deliveredToPlayer,
+      updateChat
+    })
+  }, [date, deliveredToPlayer, manager, messengerUsername, rule.canonicalRoomName, selectedMessenger, sheet1LoginNickId, status, updateChat])
+
+  const sheet2Tsv = useMemo(() => {
+    const row = [
+      sheet2Kind,
+      date.trim(),
+      source.trim(),
+      language,
+      country.trim(),
+      normalizeMessengerLabel(selectedMessenger),
+      messengerUsername.trim(),
+      toDirectusMessenger(selectedMessenger, messengerUsername),
+      nameNick.trim(),
+      accountOnWpd.trim(),
+      directusUsername.trim(),
+      manager.trim(),
+      registrationDate.trim(),
+      rule.canonicalRoomName,
+      rule.canonicalRoomName,
+      sheet2NickLoginId.trim(),
+      sheet2RoomUsername.trim(),
+      dealText.trim(),
+      dealSchema,
+      wallet.trim(),
+      paymentSystem.trim(),
+      paymentCurrency.trim(),
+      paymentAddress.trim(),
+      paymentAddress.trim()
+    ]
+    return row.join('\t')
+  }, [
+    accountOnWpd,
+    country,
+    date,
+    dealSchema,
+    dealText,
+    directusUsername,
+    language,
+    manager,
+    selectedMessenger,
+    messengerUsername,
+    nameNick,
+    paymentAddress,
+    paymentCurrency,
+    paymentSystem,
+    registrationDate,
+    rule.canonicalRoomName,
+    sheet2Kind,
+    sheet2NickLoginId,
+    sheet2RoomUsername,
+    source,
+    wallet
+  ])
+
+  const roomOptions = useMemo(() => {
+    const names = new Set<string>()
+    for (const item of linkVerificationRoomRules) names.add(item.canonicalRoomName)
+    for (const item of LINK_VERIFICATION_ROOM_SUGGESTIONS) names.add(item)
+    return Array.from(names).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
+  }, [])
+
+  const filteredRoomOptions = useMemo(() => {
+    const query = roomQuery.trim().toLowerCase()
+    if (!query) return roomOptions
+    return roomOptions.filter((name) => name.toLowerCase().includes(query))
+  }, [roomOptions, roomQuery])
+
+  const selectRoom = (name: string) => {
+    setRoomName(name)
+    setRoomQuery(name)
+    setIsRoomPickerOpen(false)
+  }
+
+  const copy = async (key: 'request' | 'sheet1' | 'sheet2', value: string) => {
+    await navigator.clipboard.writeText(value)
+    setCopiedKey(key)
+    window.setTimeout(() => setCopiedKey(''), 1500)
+  }
+
+  return (
+    <div className="max-w-7xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500 pb-10">
+      <div className="mb-6">
+        <h2 className="text-3xl font-bold mb-2 bg-gradient-to-r from-cyan-400 to-blue-400 bg-clip-text text-transparent">
+          Проверка привязки
+        </h2>
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="relative text-sm text-slate-400">
+              <label className="mb-1 block">Рум</label>
+              <div className="relative">
+                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  value={roomQuery}
+                  onChange={(event) => {
+                    setRoomQuery(event.target.value)
+                    setIsRoomPickerOpen(true)
+                  }}
+                  onFocus={(event) => {
+                    event.target.select()
+                    setIsRoomPickerOpen(true)
+                  }}
+                  onMouseDown={(event) => {
+                    roomInputWasFocusedOnMouseDown.current = document.activeElement === event.currentTarget
+                  }}
+                  onClick={(event) => {
+                    event.currentTarget.select()
+                    setIsRoomPickerOpen((isOpen) => (
+                      roomInputWasFocusedOnMouseDown.current ? !isOpen : true
+                    ))
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => {
+                      setIsRoomPickerOpen(false)
+                      setRoomQuery(roomName)
+                    }, 120)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && filteredRoomOptions[0]) {
+                      event.preventDefault()
+                      selectRoom(filteredRoomOptions[0])
+                    }
+                    if (event.key === 'Escape') {
+                      setIsRoomPickerOpen(false)
+                      setRoomQuery(roomName)
+                    }
+                  }}
+                  placeholder="Найти рум"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-9 pr-3 text-slate-100 outline-none focus:border-blue-500"
+                />
+              </div>
+              {isRoomPickerOpen && (
+                <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
+                  {filteredRoomOptions.length ? (
+                    filteredRoomOptions.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectRoom(name)}
+                        className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
+                          name === roomName
+                            ? 'bg-blue-600/20 text-blue-200'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {name}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-4 text-sm text-slate-500">Румы не найдены</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            <label className="text-sm text-slate-400">
+              Шаблон
+              <select
+                value={selectedTemplate.key}
+                onChange={(event) => setTemplateKey(event.target.value)}
+                className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500"
+              >
+                {templateOptions.map((template) => (
+                  <option key={template.key} value={template.key}>{template.label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3">
+            <div className="relative text-sm text-slate-400">
+              <label className="mb-1 block">Мессенджер</label>
+              <div className="relative">
+                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                <input
+                  type="text"
+                  value={messengerQuery}
+                  onChange={(event) => {
+                    setMessengerQuery(event.target.value)
+                    setIsMessengerPickerOpen(true)
+                  }}
+                  onFocus={(event) => {
+                    event.target.select()
+                    setIsMessengerPickerOpen(true)
+                  }}
+                  onMouseDown={(event) => {
+                    messengerInputWasFocusedOnMouseDown.current = document.activeElement === event.currentTarget
+                  }}
+                  onClick={(event) => {
+                    event.currentTarget.select()
+                    setIsMessengerPickerOpen((isOpen) => (
+                      messengerInputWasFocusedOnMouseDown.current ? !isOpen : true
+                    ))
+                  }}
+                  onBlur={() => {
+                    window.setTimeout(() => {
+                      setIsMessengerPickerOpen(false)
+                      setMessengerQuery(selectedMessenger)
+                    }, 120)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && filteredMessengerOptions[0]) {
+                      event.preventDefault()
+                      selectMessenger(filteredMessengerOptions[0])
+                    }
+                    if (event.key === 'Escape') {
+                      setIsMessengerPickerOpen(false)
+                      setMessengerQuery(selectedMessenger)
+                    }
+                  }}
+                  placeholder="Выбрать мессенджер"
+                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-9 pr-3 text-slate-100 outline-none focus:border-blue-500"
+                />
+              </div>
+              {isMessengerPickerOpen && (
+                <div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
+                  {filteredMessengerOptions.length ? (
+                    filteredMessengerOptions.map((option) => (
+                      <button
+                        key={option}
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => selectMessenger(option)}
+                        className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
+                          option === selectedMessenger
+                            ? 'bg-blue-600/20 text-blue-200'
+                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                        }`}
+                      >
+                        {option}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-4 text-sm text-slate-500">Мессенджеры не найдены</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <label className="text-sm text-slate-400">
+              Логин в мессенджере
+              <input value={messengerUsername} onChange={(event) => setMessengerUsername(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+            </label>
+            <label className="text-sm text-slate-400">
+              Username
+              <input value={username} onChange={(event) => setUsername(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+            </label>
+            <label className="text-sm text-slate-400">
+              Nick
+              <input value={nick} onChange={(event) => setNick(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+            </label>
+            <label className="text-sm text-slate-400">
+              Room ID
+              <input value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+            </label>
+            <label className="text-sm text-slate-400">
+              Email
+              <input value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+            </label>
+            <label className="text-sm text-slate-400">
+              User ID
+              <input value={userId} onChange={(event) => setUserId(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+            </label>
+          </div>
+
+          <label className="block text-sm text-slate-400">
+            <div className="flex items-center justify-between">
+              <span>Player Data (для {'<player_data>'})</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsPlayerDataManual(false)
+                  setPlayerDataManual('')
+                }}
+                className="text-xs text-blue-300 hover:text-blue-200"
+              >
+                Авто
+              </button>
+            </div>
+            <input
+              value={isPlayerDataManual ? playerDataManual : (ruleBasedPlayerData || defaultPlayerData)}
+              onChange={(event) => {
+                setIsPlayerDataManual(true)
+                setPlayerDataManual(event.target.value)
+              }}
+              className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500"
+            />
+          </label>
+
+          <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-400">
+            <div className="flex items-center gap-2 text-slate-300"><Link2 size={14} /> Правило рума: {rule.canonicalRoomName}</div>
+            <div className="mt-2">Обязательные поля: {rule.requiredFields.join(', ') || '—'}</div>
+            <div className="mt-1">Сохранение игрока в базу: {rule.persistPlayerInMainDb ? 'Да (core room)' : 'Нет (generator only)'}</div>
+            {selectedTemplate.channel === 'email' && selectedTemplate.recipientEmail && (
+              <div className="mt-1">Куда отправлять: {selectedTemplate.recipientEmail}{selectedTemplate.ccEmails?.length ? ` | CC: ${selectedTemplate.ccEmails.join(', ')}` : ''}</div>
+            )}
+          </div>
+        </div>
+
+        <div className="space-y-6">
+          <OutputCard
+            title="Шаблон запроса"
+            value={requestText}
+            copied={copiedKey === 'request'}
+            onCopy={() => copy('request', requestText)}
+          />
+
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
+            <h3 className="font-semibold text-slate-200">Таблица 1</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <label className="text-sm text-slate-400">
+                Дата
+                <input value={date} onChange={(event) => setDate(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                Менеджер
+                <input value={manager} onChange={(event) => setManager(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                Статус
+                <input value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                Передано игроку
+                <input value={deliveredToPlayer} onChange={(event) => setDeliveredToPlayer(event.target.value)} placeholder="Да / Нет" className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-slate-300 mt-7">
+                <input type="checkbox" checked={updateChat} onChange={(event) => setUpdateChat(event.target.checked)} />
+                Передали в update chat
+              </label>
+            </div>
+            <OutputCard
+              title="TSV — Таблица 1"
+              value={sheet1Tsv}
+              copied={copiedKey === 'sheet1'}
+              onCopy={() => copy('sheet1', sheet1Tsv)}
+              compact
+            />
+          </div>
+
+          <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
+            <h3 className="font-semibold text-slate-200">Таблица 2</h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <label className="text-sm text-slate-400">
+                Тип строки
+                <select value={sheet2Kind} onChange={(event) => setSheet2Kind(event.target.value as 'Новый' | 'Старый')} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
+                  <option value="Новый">Новый</option>
+                  <option value="Старый">Старый</option>
+                </select>
+              </label>
+              <label className="text-sm text-slate-400">
+                Источник
+                <input value={source} onChange={(event) => setSource(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                Язык
+                <select value={language} onChange={(event) => setLanguage(event.target.value as 'RU' | 'ENG')} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
+                  <option value="RU">RU</option>
+                  <option value="ENG">ENG</option>
+                </select>
+              </label>
+              <label className="text-sm text-slate-400">
+                Страна
+                <input value={country} onChange={(event) => setCountry(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                Имя\ник
+                <input value={nameNick} onChange={(event) => setNameNick(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                Акк на WPD
+                <input value={accountOnWpd} onChange={(event) => setAccountOnWpd(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                directusUsername
+                <input value={directusUsername} onChange={(event) => setDirectusUsername(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                Даты реги.
+                <input value={registrationDate} onChange={(event) => setRegistrationDate(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                Ник\Логин\ID
+                <input
+                  value={isSheet2NickManual ? sheet2NickManual : sheet2NickLoginId}
+                  onChange={(event) => {
+                    setIsSheet2NickManual(true)
+                    setSheet2NickManual(event.target.value)
+                  }}
+                  className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="text-sm text-slate-400">
+                roomUsername
+                <input
+                  value={isSheet2RoomUsernameManual ? sheet2RoomUsernameManual : sheet2RoomUsername}
+                  onChange={(event) => {
+                    setIsSheet2RoomUsernameManual(true)
+                    setSheet2RoomUsernameManual(event.target.value)
+                  }}
+                  className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500"
+                />
+              </label>
+              <label className="text-sm text-slate-400">
+                Сделки
+                <input value={dealText} onChange={(event) => setDealText(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400 md:col-span-3">
+                directusDealSchema
+                <textarea value={dealSchema} onChange={(event) => setDealSchema(event.target.value)} className="mt-1 w-full min-h-[72px] bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                Кошелек
+                <input value={wallet} onChange={(event) => setWallet(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                directusPaymentSystem
+                <input value={paymentSystem} onChange={(event) => setPaymentSystem(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400">
+                directusPaymentCurrency
+                <input value={paymentCurrency} onChange={(event) => setPaymentCurrency(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+              <label className="text-sm text-slate-400 md:col-span-3">
+                Адрес
+                <input value={paymentAddress} onChange={(event) => setPaymentAddress(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              </label>
+            </div>
+            <OutputCard
+              title="TSV — Таблица 2"
+              value={sheet2Tsv}
+              copied={copiedKey === 'sheet2'}
+              onCopy={() => copy('sheet2', sheet2Tsv)}
+              compact
+            />
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OutputCard({
+  title,
+  value,
+  copied,
+  onCopy,
+  compact = false
+}: {
+  title: string
+  value: string
+  copied: boolean
+  onCopy: () => void
+  compact?: boolean
+}) {
+  return (
+    <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
+      <div className="flex items-center justify-between mb-3">
+        <h3 className="font-semibold text-slate-200">{title}</h3>
+        <button
+          onClick={onCopy}
+          className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
+            copied ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'
+          }`}
+        >
+          {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
+          {copied ? 'Скопировано' : 'Копировать'}
+        </button>
+      </div>
+      <textarea
+        readOnly
+        value={value}
+        className={`w-full bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-200 font-mono outline-none ${
+          compact ? 'min-h-[92px]' : 'min-h-[180px]'
+        }`}
+      />
+    </div>
+  )
+}
