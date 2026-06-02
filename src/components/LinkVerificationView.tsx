@@ -2,11 +2,22 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { CheckCircle2, Copy, Link2, Search } from 'lucide-react'
 import {
   LINK_VERIFICATION_ROOM_SUGGESTIONS,
-  type LinkVerificationFieldKey,
   LINK_VERIFICATION_TEMPLATES,
   linkVerificationRoomRules,
   resolveLinkVerificationRoomRule
 } from '../utils/linkVerificationRules'
+import {
+  buildLinkVerificationFieldValues,
+  buildLinkVerificationRequestText,
+  buildLinkVerificationTemplateValues,
+  buildCenteredGoogleSheetsRowHtml,
+  buildSheet1Tsv,
+  composePlayerDataByRule,
+  getLinkVerificationUsernameFieldLabel,
+  normalizeMessengerLabel,
+  toDirectusMessenger,
+  uniqueNonEmpty
+} from '../utils/linkVerificationFormatting'
 
 const formatDate = (date: Date) => {
   const day = String(date.getDate()).padStart(2, '0')
@@ -17,106 +28,29 @@ const formatDate = (date: Date) => {
 
 const today = () => formatDate(new Date())
 const messengerOptions = ['Telegram', 'WA', 'Discord', 'Teams', 'Email', 'Site', 'Jivo']
+const statusOptions = ['Check', 'Ok', 'Denied', 'Retag']
+const initialRoomName = 'Nexa'
+const initialRule = resolveLinkVerificationRoomRule(initialRoomName)
 
-export const normalizeMessengerLabel = (value: string) => {
-  const lowered = value.trim().toLowerCase()
-  if (!lowered) return ''
-  if (lowered === 'tg') return 'Telegram'
-  if (lowered === 'wa') return 'WA'
-  return value.trim() || 'Telegram'
+const initialManager = () => {
+  if (typeof window === 'undefined') return 'Антон'
+  return localStorage.getItem('transactioner.linkVerification.manager')?.trim() || 'Антон'
 }
-
-export const toDirectusMessenger = (messenger: string, login: string) => {
-  const base = messenger.trim().toLowerCase()
-  const username = login.trim()
-  if (!base || !username) return ''
-  const prefix = base.includes('telegram')
-    ? 'telegram'
-    : base === 'wa' || base.includes('whatsapp')
-      ? 'whatsapp'
-      : base.includes('site')
-        ? 'site'
-        : base || 'messenger'
-  return `${prefix}: ${username}`
-}
-
-export const uniqueNonEmpty = (values: string[]) => {
-  const seen = new Set<string>()
-  const result: string[] = []
-  for (const rawValue of values) {
-    const value = rawValue.trim()
-    if (!value) continue
-    const key = value.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    result.push(value)
-  }
-  return result
-}
-
-export const composePlayerDataByRule = (
-  requiredFields: LinkVerificationFieldKey[],
-  fieldValues: Record<LinkVerificationFieldKey, string>
-) => {
-  return uniqueNonEmpty(requiredFields.map((key) => fieldValues[key] || '')).join(' / ')
-}
-
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-
-const replaceTemplateValue = (input: string, key: string, value: string) =>
-  input.replace(new RegExp(escapeRegExp(`<${key}>`), 'gi'), value)
-
-export const buildLinkVerificationRequestText = (
-  templateBody: string,
-  values: Record<string, string>
-) => {
-  let result = templateBody
-  for (const [key, value] of Object.entries(values)) {
-    result = replaceTemplateValue(result, key, value)
-  }
-  return result
-}
-
-export const buildSheet1Tsv = (values: {
-  date: string
-  manager: string
-  messenger: string
-  messengerUsername: string
-  roomName: string
-  loginNickId: string
-  status: string
-  deliveredToPlayer: string
-  updateChat: boolean
-}) => [
-  values.date.trim(),
-  values.manager.trim(),
-  normalizeMessengerLabel(values.messenger),
-  values.messengerUsername.trim(),
-  values.roomName.trim(),
-  values.loginNickId.trim(),
-  values.status.trim() || 'Check',
-  values.deliveredToPlayer.trim(),
-  values.updateChat ? 'TRUE' : 'FALSE'
-].join('\t')
 
 export default function LinkVerificationView() {
-  const [roomName, setRoomName] = useState('Nexa')
-  const [roomQuery, setRoomQuery] = useState('Nexa')
+  const [roomName, setRoomName] = useState(initialRoomName)
+  const [roomQuery, setRoomQuery] = useState(initialRoomName)
   const [isRoomPickerOpen, setIsRoomPickerOpen] = useState(false)
-  const [templateKey, setTemplateKey] = useState('nexa')
+  const [templateKey, setTemplateKey] = useState(initialRule.defaultTemplateKey)
   const [date, setDate] = useState(today())
-  const [manager, setManager] = useState('Антон')
+  const [manager, setManager] = useState(initialManager)
   const [selectedMessenger, setSelectedMessenger] = useState('')
   const [messengerQuery, setMessengerQuery] = useState('')
   const [isMessengerPickerOpen, setIsMessengerPickerOpen] = useState(false)
   const [messengerUsername, setMessengerUsername] = useState('')
   const [username, setUsername] = useState('')
-  const [nick, setNick] = useState('')
   const [roomId, setRoomId] = useState('')
   const [email, setEmail] = useState('')
-  const [userId, setUserId] = useState('')
-  const [isPlayerDataManual, setIsPlayerDataManual] = useState(false)
-  const [playerDataManual, setPlayerDataManual] = useState('')
   const [isSheet2NickManual, setIsSheet2NickManual] = useState(false)
   const [sheet2NickManual, setSheet2NickManual] = useState('')
   const [isSheet2RoomUsernameManual, setIsSheet2RoomUsernameManual] = useState(false)
@@ -132,8 +66,8 @@ export default function LinkVerificationView() {
   const [accountOnWpd, setAccountOnWpd] = useState('')
   const [directusUsername, setDirectusUsername] = useState('')
   const [registrationDate, setRegistrationDate] = useState(today())
-  const [dealText, setDealText] = useState('')
-  const [dealSchema, setDealSchema] = useState('')
+  const [dealText, setDealText] = useState(initialRule.deal.dealText || '')
+  const [dealSchema, setDealSchema] = useState(initialRule.deal.directusDealSchema || '')
   const [wallet, setWallet] = useState('')
   const [paymentSystem, setPaymentSystem] = useState('')
   const [paymentCurrency, setPaymentCurrency] = useState('')
@@ -143,35 +77,13 @@ export default function LinkVerificationView() {
   const messengerInputWasFocusedOnMouseDown = useRef(false)
 
   useEffect(() => {
-    const storedManager = localStorage.getItem('transactioner.linkVerification.manager')
-    if (storedManager?.trim()) {
-      setManager(storedManager.trim())
-    }
-  }, [])
-
-  useEffect(() => {
     localStorage.setItem('transactioner.linkVerification.manager', manager.trim())
   }, [manager])
 
   const rule = useMemo(() => resolveLinkVerificationRoomRule(roomName), [roomName])
   const templateOptions = rule.templates
   const selectedTemplate = LINK_VERIFICATION_TEMPLATES[templateKey] || templateOptions[0] || LINK_VERIFICATION_TEMPLATES.default
-
-  useEffect(() => {
-    if (!templateOptions.some((template) => template.key === templateKey)) {
-      setTemplateKey(rule.defaultTemplateKey)
-    }
-  }, [rule.defaultTemplateKey, templateKey, templateOptions])
-
-  useEffect(() => {
-    setDealText(rule.deal.dealText || '')
-    setDealSchema(rule.deal.directusDealSchema || '')
-  }, [rule.deal.dealText, rule.deal.directusDealSchema])
-
-  useEffect(() => {
-    const normalized = normalizeMessengerLabel(selectedMessenger)
-    setSource((current) => (current.trim() ? current : normalized))
-  }, [selectedMessenger])
+  const usernameFieldLabel = getLinkVerificationUsernameFieldLabel(rule.canonicalRoomName, selectedTemplate.key)
 
   const filteredMessengerOptions = useMemo(() => {
     const query = messengerQuery.trim().toLowerCase()
@@ -182,34 +94,29 @@ export default function LinkVerificationView() {
   const selectMessenger = (value: string) => {
     setSelectedMessenger(value)
     setMessengerQuery(value)
+    setSource((current) => (current.trim() ? current : normalizeMessengerLabel(value)))
     setIsMessengerPickerOpen(false)
   }
 
-  const fieldValues = useMemo<Record<LinkVerificationFieldKey, string>>(() => ({
-    username: username.trim(),
-    nick: nick.trim(),
-    roomId: roomId.trim(),
-    email: email.trim(),
-    userId: userId.trim(),
-    messengerUsername: messengerUsername.trim()
-  }), [email, messengerUsername, nick, roomId, userId, username])
+  const fieldValues = useMemo(
+    () => buildLinkVerificationFieldValues({ username, roomId, email }),
+    [email, roomId, username]
+  )
 
   const ruleBasedPlayerData = useMemo(
     () => composePlayerDataByRule(rule.requiredFields, fieldValues),
     [fieldValues, rule.requiredFields]
   )
 
-  const effectivePlayerData = isPlayerDataManual
-    ? playerDataManual.trim()
-    : ruleBasedPlayerData
+  const effectivePlayerData = ruleBasedPlayerData
 
   const sheet2NickLoginId = isSheet2NickManual
     ? sheet2NickManual.trim()
     : effectivePlayerData
 
   const autoSheet2RoomUsername = useMemo(
-    () => uniqueNonEmpty([username, roomId, nick])[0] || '',
-    [nick, roomId, username]
+    () => uniqueNonEmpty([username, roomId])[0] || '',
+    [roomId, username]
   )
 
   const sheet2RoomUsername = isSheet2RoomUsernameManual
@@ -217,30 +124,22 @@ export default function LinkVerificationView() {
     : autoSheet2RoomUsername
 
   const requestText = useMemo(() => {
-    const values: Record<string, string> = {
-      room_name: roomName,
-      player_data: effectivePlayerData,
-      messenger: selectedMessenger.trim(),
-      messenger_username: messengerUsername.trim(),
-      messenger_usermane: messengerUsername.trim(),
-      username: username.trim(),
-      nick: nick.trim(),
-      id: roomId.trim(),
-      email: email.trim(),
-      login: username.trim(),
-      user_id: userId.trim()
-    }
+    const values = buildLinkVerificationTemplateValues({
+      roomName,
+      playerData: effectivePlayerData,
+      messenger: selectedMessenger,
+      username,
+      roomId,
+      email
+    })
     return buildLinkVerificationRequestText(selectedTemplate.body, values)
   }, [
     effectivePlayerData,
     email,
     selectedMessenger,
-    messengerUsername,
-    nick,
     roomId,
     roomName,
     selectedTemplate.body,
-    userId,
     username
   ])
 
@@ -310,6 +209,9 @@ export default function LinkVerificationView() {
     wallet
   ])
 
+  const sheet1Html = useMemo(() => buildCenteredGoogleSheetsRowHtml(sheet1Tsv), [sheet1Tsv])
+  const sheet2Html = useMemo(() => buildCenteredGoogleSheetsRowHtml(sheet2Tsv), [sheet2Tsv])
+
   const roomOptions = useMemo(() => {
     const names = new Set<string>()
     for (const item of linkVerificationRoomRules) names.add(item.canonicalRoomName)
@@ -324,13 +226,30 @@ export default function LinkVerificationView() {
   }, [roomOptions, roomQuery])
 
   const selectRoom = (name: string) => {
+    const nextRule = resolveLinkVerificationRoomRule(name)
     setRoomName(name)
     setRoomQuery(name)
+    setTemplateKey(nextRule.defaultTemplateKey)
+    setDealText(nextRule.deal.dealText || '')
+    setDealSchema(nextRule.deal.directusDealSchema || '')
     setIsRoomPickerOpen(false)
   }
 
-  const copy = async (key: 'request' | 'sheet1' | 'sheet2', value: string) => {
-    await navigator.clipboard.writeText(value)
+  const copy = async (key: 'request' | 'sheet1' | 'sheet2', value: string, htmlValue?: string) => {
+    if (htmlValue && 'ClipboardItem' in window && navigator.clipboard.write) {
+      try {
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/plain': new Blob([value], { type: 'text/plain' }),
+            'text/html': new Blob([htmlValue], { type: 'text/html' })
+          })
+        ])
+      } catch {
+        await navigator.clipboard.writeText(value)
+      }
+    } else {
+      await navigator.clipboard.writeText(value)
+    }
     setCopiedKey(key)
     window.setTimeout(() => setCopiedKey(''), 1500)
   }
@@ -429,7 +348,22 @@ export default function LinkVerificationView() {
             </label>
           </div>
 
-          <div className="grid grid-cols-1 gap-3">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <label className="text-sm text-slate-400">
+              {usernameFieldLabel}
+              <input value={username} onChange={(event) => setUsername(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+            </label>
+            <label className="text-sm text-slate-400">
+              Room ID
+              <input value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+            </label>
+            <label className="text-sm text-slate-400">
+              Email
+              <input value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+            </label>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="relative text-sm text-slate-400">
               <label className="mb-1 block">Мессенджер</label>
               <div className="relative">
@@ -498,62 +432,15 @@ export default function LinkVerificationView() {
                 </div>
               )}
             </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <label className="text-sm text-slate-400">
-              Логин в мессенджере
+              Контакт
               <input value={messengerUsername} onChange={(event) => setMessengerUsername(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
             </label>
-            <label className="text-sm text-slate-400">
-              Username
-              <input value={username} onChange={(event) => setUsername(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
-            </label>
-            <label className="text-sm text-slate-400">
-              Nick
-              <input value={nick} onChange={(event) => setNick(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
-            </label>
-            <label className="text-sm text-slate-400">
-              Room ID
-              <input value={roomId} onChange={(event) => setRoomId(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
-            </label>
-            <label className="text-sm text-slate-400">
-              Email
-              <input value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
-            </label>
-            <label className="text-sm text-slate-400">
-              User ID
-              <input value={userId} onChange={(event) => setUserId(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
-            </label>
           </div>
-
-          <label className="block text-sm text-slate-400">
-            <div className="flex items-center justify-between">
-              <span>Player Data (для {'<player_data>'})</span>
-            <button
-                type="button"
-                onClick={() => {
-                  setIsPlayerDataManual(false)
-                  setPlayerDataManual('')
-                }}
-                className="text-xs text-blue-300 hover:text-blue-200"
-              >
-                Авто
-              </button>
-            </div>
-            <input
-              value={isPlayerDataManual ? playerDataManual : ruleBasedPlayerData}
-              onChange={(event) => {
-                setIsPlayerDataManual(true)
-                setPlayerDataManual(event.target.value)
-              }}
-              className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500"
-            />
-          </label>
 
           <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-400">
             <div className="flex items-center gap-2 text-slate-300"><Link2 size={14} /> Правило рума: {rule.canonicalRoomName}</div>
-            <div className="mt-2">Обязательные поля: {rule.requiredFields.join(', ') || '—'}</div>
+            <div className="mt-2">Данные для запроса: {usernameFieldLabel}, Room ID, Email</div>
             <div className="mt-1">Сохранение игрока в базу: {rule.persistPlayerInMainDb ? 'Да (core room)' : 'Нет (generator only)'}</div>
             {selectedTemplate.channel === 'email' && selectedTemplate.recipientEmail && (
               <div className="mt-1">Куда отправлять: {selectedTemplate.recipientEmail}{selectedTemplate.ccEmails?.length ? ` | CC: ${selectedTemplate.ccEmails.join(', ')}` : ''}</div>
@@ -582,7 +469,11 @@ export default function LinkVerificationView() {
               </label>
               <label className="text-sm text-slate-400">
                 Статус
-                <input value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+                <select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
+                  {statusOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
+                </select>
               </label>
               <label className="text-sm text-slate-400">
                 Передано игроку
@@ -597,7 +488,7 @@ export default function LinkVerificationView() {
               title="TSV — Таблица 1"
               value={sheet1Tsv}
               copied={copiedKey === 'sheet1'}
-              onCopy={() => copy('sheet1', sheet1Tsv)}
+              onCopy={() => copy('sheet1', sheet1Tsv, sheet1Html)}
               compact
             />
           </div>
@@ -694,7 +585,7 @@ export default function LinkVerificationView() {
               title="TSV — Таблица 2"
               value={sheet2Tsv}
               copied={copiedKey === 'sheet2'}
-              onCopy={() => copy('sheet2', sheet2Tsv)}
+              onCopy={() => copy('sheet2', sheet2Tsv, sheet2Html)}
               compact
             />
           </div>
