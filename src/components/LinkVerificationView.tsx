@@ -18,15 +18,18 @@ const formatDate = (date: Date) => {
 const today = () => formatDate(new Date())
 const messengerOptions = ['Telegram', 'WA', 'Discord', 'Teams', 'Email', 'Site', 'Jivo']
 
-const normalizeMessengerLabel = (value: string) => {
+export const normalizeMessengerLabel = (value: string) => {
   const lowered = value.trim().toLowerCase()
+  if (!lowered) return ''
   if (lowered === 'tg') return 'Telegram'
   if (lowered === 'wa') return 'WA'
   return value.trim() || 'Telegram'
 }
 
-const toDirectusMessenger = (messenger: string, login: string) => {
+export const toDirectusMessenger = (messenger: string, login: string) => {
   const base = messenger.trim().toLowerCase()
+  const username = login.trim()
+  if (!base || !username) return ''
   const prefix = base.includes('telegram')
     ? 'telegram'
     : base === 'wa' || base.includes('whatsapp')
@@ -34,23 +37,8 @@ const toDirectusMessenger = (messenger: string, login: string) => {
       : base.includes('site')
         ? 'site'
         : base || 'messenger'
-  return `${prefix}: ${login.trim()}`
+  return `${prefix}: ${username}`
 }
-
-const composeDefaultPlayerData = (values: {
-  username: string
-  nick: string
-  roomId: string
-  email: string
-  userId: string
-}) => {
-  const parts = [values.username, values.nick, values.roomId, values.email, values.userId]
-    .map((value) => value.trim())
-    .filter(Boolean)
-  return parts.join(' / ')
-}
-
-const orderedFieldKeys: LinkVerificationFieldKey[] = ['username', 'nick', 'roomId', 'email', 'userId']
 
 export const uniqueNonEmpty = (values: string[]) => {
   const seen = new Set<string>()
@@ -70,9 +58,7 @@ export const composePlayerDataByRule = (
   requiredFields: LinkVerificationFieldKey[],
   fieldValues: Record<LinkVerificationFieldKey, string>
 ) => {
-  const preferred = requiredFields.map((key) => fieldValues[key] || '')
-  const fallback = orderedFieldKeys.map((key) => fieldValues[key] || '')
-  return uniqueNonEmpty([...preferred, ...fallback]).join(' / ')
+  return uniqueNonEmpty(requiredFields.map((key) => fieldValues[key] || '')).join(' / ')
 }
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
@@ -199,14 +185,6 @@ export default function LinkVerificationView() {
     setIsMessengerPickerOpen(false)
   }
 
-  const defaultPlayerData = useMemo(() => composeDefaultPlayerData({
-    username,
-    nick,
-    roomId,
-    email,
-    userId
-  }), [email, nick, roomId, userId, username])
-
   const fieldValues = useMemo<Record<LinkVerificationFieldKey, string>>(() => ({
     username: username.trim(),
     nick: nick.trim(),
@@ -223,13 +201,11 @@ export default function LinkVerificationView() {
 
   const effectivePlayerData = isPlayerDataManual
     ? playerDataManual.trim()
-    : (ruleBasedPlayerData || defaultPlayerData)
-
-  const sheet1LoginNickId = effectivePlayerData || defaultPlayerData
+    : ruleBasedPlayerData
 
   const sheet2NickLoginId = isSheet2NickManual
     ? sheet2NickManual.trim()
-    : (effectivePlayerData || defaultPlayerData)
+    : effectivePlayerData
 
   const autoSheet2RoomUsername = useMemo(
     () => uniqueNonEmpty([username, roomId, nick])[0] || '',
@@ -243,7 +219,7 @@ export default function LinkVerificationView() {
   const requestText = useMemo(() => {
     const values: Record<string, string> = {
       room_name: roomName,
-      player_data: effectivePlayerData || defaultPlayerData,
+      player_data: effectivePlayerData,
       messenger: selectedMessenger.trim(),
       messenger_username: messengerUsername.trim(),
       messenger_usermane: messengerUsername.trim(),
@@ -256,7 +232,6 @@ export default function LinkVerificationView() {
     }
     return buildLinkVerificationRequestText(selectedTemplate.body, values)
   }, [
-    defaultPlayerData,
     effectivePlayerData,
     email,
     selectedMessenger,
@@ -276,12 +251,12 @@ export default function LinkVerificationView() {
       messenger: selectedMessenger,
       messengerUsername,
       roomName: rule.canonicalRoomName,
-      loginNickId: sheet1LoginNickId,
+      loginNickId: effectivePlayerData,
       status,
       deliveredToPlayer,
       updateChat
     })
-  }, [date, deliveredToPlayer, manager, messengerUsername, rule.canonicalRoomName, selectedMessenger, sheet1LoginNickId, status, updateChat])
+  }, [date, deliveredToPlayer, effectivePlayerData, manager, messengerUsername, rule.canonicalRoomName, selectedMessenger, status, updateChat])
 
   const sheet2Tsv = useMemo(() => {
     const row = [
@@ -555,7 +530,7 @@ export default function LinkVerificationView() {
           <label className="block text-sm text-slate-400">
             <div className="flex items-center justify-between">
               <span>Player Data (для {'<player_data>'})</span>
-              <button
+            <button
                 type="button"
                 onClick={() => {
                   setIsPlayerDataManual(false)
@@ -567,7 +542,7 @@ export default function LinkVerificationView() {
               </button>
             </div>
             <input
-              value={isPlayerDataManual ? playerDataManual : (ruleBasedPlayerData || defaultPlayerData)}
+              value={isPlayerDataManual ? playerDataManual : ruleBasedPlayerData}
               onChange={(event) => {
                 setIsPlayerDataManual(true)
                 setPlayerDataManual(event.target.value)

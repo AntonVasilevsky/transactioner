@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildLinkVerificationRequestText,
   buildSheet1Tsv,
-  composePlayerDataByRule
+  composePlayerDataByRule,
+  normalizeMessengerLabel,
+  toDirectusMessenger
 } from './LinkVerificationView'
 import { LINK_VERIFICATION_TEMPLATES } from '../utils/linkVerificationRules'
 
@@ -38,6 +40,22 @@ describe('LinkVerificationView helpers', () => {
     expect(result).toBe('hero-user / 1483304 / hero@example.com / @hero')
   })
 
+  it('does not leak unrelated fields into player_data', () => {
+    const result = composePlayerDataByRule(
+      ['nick', 'roomId', 'email'],
+      {
+        username: 'should-not-appear',
+        nick: 'hero-nick',
+        roomId: '1483304',
+        email: 'hero@example.com',
+        userId: 'should-not-appear-either',
+        messengerUsername: '@hero'
+      }
+    )
+
+    expect(result).toBe('hero-nick / 1483304 / hero@example.com')
+  })
+
   it('builds complete sheet1 tsv row from verification fields', () => {
     const row = buildSheet1Tsv({
       date: '02.06.2026',
@@ -53,5 +71,20 @@ describe('LinkVerificationView helpers', () => {
 
     expect(row).toBe('02.06.2026\tАнтон\tTelegram\t@hero\tWPTG\tHero / 1483304 / hero@example.com\tCheck\t\tFALSE')
   })
-})
 
+  it('keeps messenger blank when the field is empty', () => {
+    expect(normalizeMessengerLabel('')).toBe('')
+    expect(buildSheet1Tsv({
+      date: '02.06.2026',
+      manager: 'Антон',
+      messenger: '',
+      messengerUsername: '',
+      roomName: 'WPTG',
+      loginNickId: 'Hero / 1483304 / hero@example.com',
+      status: 'Check',
+      deliveredToPlayer: '',
+      updateChat: false
+    })).toBe('02.06.2026\tАнтон\t\t\tWPTG\tHero / 1483304 / hero@example.com\tCheck\t\tFALSE')
+    expect(toDirectusMessenger('', '@hero')).toBe('')
+  })
+})
