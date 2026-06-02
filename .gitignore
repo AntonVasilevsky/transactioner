@@ -29,3 +29,4 @@ build/private/*
 *.sln
 *.sw?
 .gbrain-source
+.gstack/
