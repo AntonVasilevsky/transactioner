@@ -142,6 +142,7 @@ const CORE_ROOMS = new Set(['nexa', 'championpoker', 'redstar'])
 
 const dealByRoomAlias: Array<{ aliases: string[]; deal: DealRule }> = [
   { aliases: ['nexa', 'nexapoker'], deal: { dealText: '40% Net Revenue', directusDealSchema: netRamp('40') } },
+  { aliases: ['redstar', 'redstarpoker'], deal: { dealText: 'Standard', directusDealSchema: 'standard' } },
   { aliases: ['wptglobal', 'wptg'], deal: { dealText: '30% Net Revenue', directusDealSchema: netRamp('30') } },
   { aliases: ['1win'], deal: { dealText: '30% Gross', directusDealSchema: grossRamp('30') } },
   { aliases: ['888', '888poker'], deal: { dealText: '20% Net Revenue', directusDealSchema: netRamp('20'), notes: 'Limit: 2 years from registration; non-rakeback deal also exists.' } },

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, BookOpen, Check, Copy, Search, Settings } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Info, Search, Settings } from 'lucide-react'
 import RoomAdminView from './RoomAdminView'
 
 type RoomInfoMode = 'wallets' | 'deals'
@@ -236,7 +236,7 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     <div className="mx-auto max-w-5xl animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="mb-8 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <BookOpen size={28} className="text-blue-400" />
+          <Info size={28} className="text-blue-400" />
           <h2 className="text-2xl font-bold text-slate-100">Инфо по румам</h2>
         </div>
         <button

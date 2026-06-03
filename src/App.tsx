@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { BookOpen, Download, Search, UserPlus, ChevronRight, Users, X, Link2 } from 'lucide-react'
+import { Info, Download, Search, UserPlus, ChevronRight, Users, X, Link2 } from 'lucide-react'
 
 // Views
 import SearchPlayerView from './components/SearchPlayerView'
@@ -140,7 +140,7 @@ function App() {
             onClick={() => setCurrentView('add')} 
           />
           <NavItem
-            icon={<BookOpen size={20} />}
+            icon={<Info size={20} />}
             label="Инфо по румам"
             active={currentView === 'roomInfo'}
             onClick={() => {

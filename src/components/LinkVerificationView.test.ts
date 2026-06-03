@@ -164,6 +164,11 @@ Telegram: @AlexanderChazov
     expect(fields[resolveLinkVerificationRoomRule('Basepoker').sheet2RoomUsernameField]).toBe('hero-nick')
   })
 
+  it('uses Standard as the default RedStar sheet2 deal', () => {
+    expect(resolveLinkVerificationRoomRule('RedStar').deal.dealText).toBe('Standard')
+    expect(resolveLinkVerificationRoomRule('RedStar').deal.directusDealSchema).toBe('standard')
+  })
+
   it('sorts room picker options by core rooms first and registration frequency after', () => {
     const result = sortLinkVerificationRoomOptions(
       ['ACR', 'Nexa', 'RedStar', 'Champion Poker', 'Basepoker', 'WPTG', 'BetOnline'],

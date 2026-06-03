@@ -59,7 +59,9 @@ export default function LinkVerificationView() {
   const [deliveredToPlayer, setDeliveredToPlayer] = useState('')
   const [updateChat, setUpdateChat] = useState(false)
   const [sheet2Kind, setSheet2Kind] = useState<'Новый' | 'Старый'>('Новый')
-  const [source, setSource] = useState('Telegram')
+  const [source, setSource] = useState('')
+  const [sourceQuery, setSourceQuery] = useState('')
+  const [isSourcePickerOpen, setIsSourcePickerOpen] = useState(false)
   const [language, setLanguage] = useState<'RU' | 'ENG'>('RU')
   const [country, setCountry] = useState('')
   const [nameNick, setNameNick] = useState('')
@@ -75,6 +77,8 @@ export default function LinkVerificationView() {
   const [roomRegistrationStats, setRoomRegistrationStats] = useState<RoomRegistrationStat[]>([])
   const [copiedKey, setCopiedKey] = useState<'request' | 'sheet1' | 'sheet2' | ''>('')
   const messengerInputWasFocusedOnMouseDown = useRef(false)
+  const sourceInputWasFocusedOnMouseDown = useRef(false)
+  const sourceWasSelectedManually = useRef(false)
 
   useEffect(() => {
     localStorage.setItem('transactioner.linkVerification.manager', manager.trim())
@@ -100,16 +104,39 @@ export default function LinkVerificationView() {
   const usernameFieldLabel = getLinkVerificationUsernameFieldLabel(rule.canonicalRoomName, selectedTemplate.key)
 
   const filteredMessengerOptions = useMemo(() => {
-    const query = messengerQuery.trim().toLowerCase()
+    const rawQuery = messengerQuery.trim()
+    const query = rawQuery && rawQuery !== selectedMessenger
+      ? rawQuery.toLowerCase()
+      : ''
     if (!query) return messengerOptions
     return messengerOptions.filter((option) => option.toLowerCase().includes(query))
-  }, [messengerQuery])
+  }, [messengerQuery, selectedMessenger])
 
   const selectMessenger = (value: string) => {
+    const normalizedValue = normalizeMessengerLabel(value)
     setSelectedMessenger(value)
     setMessengerQuery(value)
-    setSource((current) => (current.trim() ? current : normalizeMessengerLabel(value)))
+    if (!sourceWasSelectedManually.current) {
+      setSource(normalizedValue)
+      setSourceQuery(normalizedValue)
+    }
     setIsMessengerPickerOpen(false)
+  }
+
+  const filteredSourceOptions = useMemo(() => {
+    const rawQuery = sourceQuery.trim()
+    const query = rawQuery && rawQuery !== source
+      ? rawQuery.toLowerCase()
+      : ''
+    if (!query) return messengerOptions
+    return messengerOptions.filter((option) => option.toLowerCase().includes(query))
+  }, [source, sourceQuery])
+
+  const selectSource = (value: string) => {
+    sourceWasSelectedManually.current = true
+    setSource(value)
+    setSourceQuery(value)
+    setIsSourcePickerOpen(false)
   }
 
   const fieldValues = useMemo(
@@ -518,9 +545,75 @@ export default function LinkVerificationView() {
                   <option value="Старый">Старый</option>
                 </select>
               </label>
-              <label className="text-sm text-slate-400">
-                Источник
-                <input value={source} onChange={(event) => setSource(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+              <label className="relative text-sm text-slate-400">
+                <span className="mb-1 block">Источник</span>
+                <div className="relative">
+                  <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input
+                    type="text"
+                    value={sourceQuery}
+                    onChange={(event) => {
+                      sourceWasSelectedManually.current = true
+                      setSource(event.target.value)
+                      setSourceQuery(event.target.value)
+                      setIsSourcePickerOpen(true)
+                    }}
+                    onFocus={(event) => {
+                      event.target.select()
+                      setIsSourcePickerOpen(true)
+                    }}
+                    onMouseDown={(event) => {
+                      sourceInputWasFocusedOnMouseDown.current = document.activeElement === event.currentTarget
+                    }}
+                    onClick={(event) => {
+                      event.currentTarget.select()
+                      setIsSourcePickerOpen((isOpen) => (
+                        sourceInputWasFocusedOnMouseDown.current ? !isOpen : true
+                      ))
+                    }}
+                    onBlur={() => {
+                      window.setTimeout(() => {
+                        setIsSourcePickerOpen(false)
+                        setSourceQuery(source)
+                      }, 120)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && filteredSourceOptions[0]) {
+                        event.preventDefault()
+                        selectSource(filteredSourceOptions[0])
+                      }
+                      if (event.key === 'Escape') {
+                        setIsSourcePickerOpen(false)
+                        setSourceQuery(source)
+                      }
+                    }}
+                    placeholder="Выбрать источник"
+                    className="w-full rounded-lg border border-slate-700 bg-slate-900 py-3 pl-9 pr-3 text-slate-100 outline-none focus:border-blue-500"
+                  />
+                </div>
+                {isSourcePickerOpen && (
+                  <div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
+                    {filteredSourceOptions.length ? (
+                      filteredSourceOptions.map((option) => (
+                        <button
+                          key={option}
+                          type="button"
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={() => selectSource(option)}
+                          className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
+                            option === source
+                              ? 'bg-blue-600/20 text-blue-200'
+                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
+                          }`}
+                        >
+                          {option}
+                        </button>
+                      ))
+                    ) : (
+                      <div className="px-3 py-4 text-sm text-slate-500">Источники не найдены</div>
+                    )}
+                  </div>
+                )}
               </label>
               <label className="text-sm text-slate-400">
                 Язык
