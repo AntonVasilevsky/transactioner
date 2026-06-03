@@ -15,6 +15,7 @@ import {
   composePlayerDataByRule,
   getLinkVerificationUsernameFieldLabel,
   normalizeMessengerLabel,
+  sortLinkVerificationRoomOptions,
   toDirectusMessenger
 } from '../utils/linkVerificationFormatting'
 
@@ -71,13 +72,27 @@ export default function LinkVerificationView() {
   const [paymentSystem, setPaymentSystem] = useState('')
   const [paymentCurrency, setPaymentCurrency] = useState('')
   const [paymentAddress, setPaymentAddress] = useState('')
+  const [roomRegistrationStats, setRoomRegistrationStats] = useState<RoomRegistrationStat[]>([])
   const [copiedKey, setCopiedKey] = useState<'request' | 'sheet1' | 'sheet2' | ''>('')
-  const roomInputWasFocusedOnMouseDown = useRef(false)
   const messengerInputWasFocusedOnMouseDown = useRef(false)
 
   useEffect(() => {
     localStorage.setItem('transactioner.linkVerification.manager', manager.trim())
   }, [manager])
+
+  useEffect(() => {
+    let active = true
+    window.electronAPI.getRoomRegistrationStats()
+      .then((stats) => {
+        if (active) setRoomRegistrationStats(stats || [])
+      })
+      .catch(() => {
+        if (active) setRoomRegistrationStats([])
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const rule = useMemo(() => resolveLinkVerificationRoomRule(roomName), [roomName])
   const templateOptions = rule.templates
@@ -217,14 +232,18 @@ export default function LinkVerificationView() {
     const names = new Set<string>()
     for (const item of linkVerificationRoomRules) names.add(item.canonicalRoomName)
     for (const item of LINK_VERIFICATION_ROOM_SUGGESTIONS) names.add(item)
-    return Array.from(names).sort((left, right) => left.localeCompare(right, undefined, { sensitivity: 'base' }))
-  }, [])
+    for (const item of roomRegistrationStats) names.add(item.roomName)
+    return sortLinkVerificationRoomOptions(Array.from(names), roomRegistrationStats)
+  }, [roomRegistrationStats])
 
   const filteredRoomOptions = useMemo(() => {
-    const query = roomQuery.trim().toLowerCase()
+    const rawQuery = roomQuery.trim()
+    const query = rawQuery && rawQuery !== roomName
+      ? rawQuery.toLowerCase()
+      : ''
     if (!query) return roomOptions
     return roomOptions.filter((name) => name.toLowerCase().includes(query))
-  }, [roomOptions, roomQuery])
+  }, [roomName, roomOptions, roomQuery])
 
   const selectRoom = (name: string) => {
     const nextRule = resolveLinkVerificationRoomRule(name)
@@ -281,14 +300,9 @@ export default function LinkVerificationView() {
                     event.target.select()
                     setIsRoomPickerOpen(true)
                   }}
-                  onMouseDown={(event) => {
-                    roomInputWasFocusedOnMouseDown.current = document.activeElement === event.currentTarget
-                  }}
                   onClick={(event) => {
                     event.currentTarget.select()
-                    setIsRoomPickerOpen((isOpen) => (
-                      roomInputWasFocusedOnMouseDown.current ? !isOpen : true
-                    ))
+                    setIsRoomPickerOpen(true)
                   }}
                   onBlur={() => {
                     window.setTimeout(() => {

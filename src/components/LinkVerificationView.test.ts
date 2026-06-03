@@ -8,6 +8,7 @@ import {
   composePlayerDataByRule,
   getLinkVerificationUsernameFieldLabel,
   normalizeMessengerLabel,
+  sortLinkVerificationRoomOptions,
   toDirectusMessenger
 } from '../utils/linkVerificationFormatting'
 import { LINK_VERIFICATION_TEMPLATES, resolveLinkVerificationRoomRule } from '../utils/linkVerificationRules'
@@ -116,6 +117,29 @@ describe('LinkVerificationView helpers', () => {
     expect(text).not.toContain('messenger: hero-nick')
   })
 
+  it('uses the selected messenger name in default request templates', () => {
+    const values = buildLinkVerificationTemplateValues({
+      roomName: 'ACR',
+      playerData: 'UnReal2023',
+      messenger: 'TG',
+      messengerUsername: '@AlexanderChazov',
+      username: 'UnReal2023',
+      roomId: '',
+      email: ''
+    })
+
+    const text = buildLinkVerificationRequestText(
+      LINK_VERIFICATION_TEMPLATES.default.body,
+      values
+    )
+
+    expect(text).toBe(`Проверка привязки ACR
+UnReal2023
+Telegram: @AlexanderChazov
+@kapitonov`)
+    expect(text).not.toContain('messenger: @AlexanderChazov')
+  })
+
   it('renames the username field for room-specific identity wording', () => {
     expect(getLinkVerificationUsernameFieldLabel('RedStar')).toBe('Login')
     expect(getLinkVerificationUsernameFieldLabel('PartyPoker')).toBe('User ID')
@@ -138,6 +162,28 @@ describe('LinkVerificationView helpers', () => {
     expect(fields[resolveLinkVerificationRoomRule('PartyPoker').sheet2RoomUsernameField]).toBe('hero-nick')
     expect(fields[resolveLinkVerificationRoomRule('RedStar').sheet2RoomUsernameField]).toBe('hero-nick')
     expect(fields[resolveLinkVerificationRoomRule('Basepoker').sheet2RoomUsernameField]).toBe('hero-nick')
+  })
+
+  it('sorts room picker options by core rooms first and registration frequency after', () => {
+    const result = sortLinkVerificationRoomOptions(
+      ['ACR', 'Nexa', 'RedStar', 'Champion Poker', 'Basepoker', 'WPTG', 'BetOnline'],
+      [
+        { roomName: 'Basepoker', registrationCount: 2 },
+        { roomName: 'WPTG', registrationCount: 7 },
+        { roomName: 'BetOnline', registrationCount: 4 },
+        { roomName: 'ACR', registrationCount: 7 }
+      ]
+    )
+
+    expect(result).toEqual([
+      'Nexa',
+      'Champion Poker',
+      'RedStar',
+      'ACR',
+      'WPTG',
+      'BetOnline',
+      'Basepoker'
+    ])
   })
 
   it('builds complete sheet1 tsv row from verification fields', () => {

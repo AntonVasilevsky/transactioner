@@ -55,6 +55,41 @@ describe('TransactionerDatabase', () => {
     expect(player?.accounts.map((account) => account.room_name).sort()).toEqual(['Nexa', 'RedStar'])
   })
 
+  it('counts room registrations from saved accounts for room ordering', () => {
+    const first = db.savePlayer(basePlayer({
+      messenger_username: '@test1',
+      contacts: [{ contactMethod: 'TG', contactValue: '@test1' }],
+      accounts: [
+        { roomName: 'RedStar', roomUsername: 'redstar test1' },
+        { roomName: 'Nexa', roomUsername: 'nexa test1' }
+      ]
+    }))
+    const second = db.savePlayer(basePlayer({
+      messenger_username: '@test2',
+      contacts: [{ contactMethod: 'TG', contactValue: '@test2' }],
+      accounts: [
+        { roomName: 'Nexa', roomUsername: 'nexa test2' },
+        { roomName: 'ACR', roomUsername: 'acr test2' }
+      ]
+    }))
+    const third = db.savePlayer(basePlayer({
+      messenger_username: '@test3',
+      contacts: [{ contactMethod: 'TG', contactValue: '@test3' }],
+      accounts: [
+        { roomName: 'Nexa', roomUsername: 'nexa test3' }
+      ]
+    }))
+
+    expect(first.success).toBe(true)
+    expect(second.success).toBe(true)
+    expect(third.success).toBe(true)
+    expect(db.getRoomRegistrationStats()).toEqual([
+      { roomName: 'Nexa', registrationCount: 3 },
+      { roomName: 'ACR', registrationCount: 1 },
+      { roomName: 'RedStar', registrationCount: 1 }
+    ])
+  })
+
   it('blocks adding a duplicate contact instead of overwriting the existing player', () => {
     const first = db.savePlayer(basePlayer())
     const duplicate = db.savePlayer(basePlayer({

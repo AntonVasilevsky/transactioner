@@ -50,7 +50,7 @@ export const LINK_VERIFICATION_TEMPLATES: Record<string, LinkVerificationTemplat
     channel: 'messenger',
     body: `Проверка привязки <room_name>
 <player_data>
-messenger: <messenger_usermane>
+<messenger>: <messenger_username>
 @kapitonov`
   },
   wptg: {

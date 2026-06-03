@@ -2,8 +2,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Copy, CheckCircle2 } from 'lucide-react'
 import type { OperationType } from '../App'
 import { normalizeContactText } from '../utils/contactNormalization'
-
-type AmountCurrency = 'EUR' | 'USD'
+import {
+  championDepositTemplateAmount,
+  championWithdrawalTemplateAmount,
+  type AmountCurrency
+} from '../utils/transactionTemplateFormatting'
 
 const shouldUseAmountCurrency = (targetAccount: Account | null, targetOperationType: OperationType) =>
   targetAccount?.roomName === 'Nexa' || (targetAccount?.roomName === 'RedStar' && targetOperationType === 'Deposit')
@@ -13,6 +16,9 @@ const isChampionWithdrawal = (targetAccount: Account | null, targetOperationType
 
 const isChampionDeposit = (targetAccount: Account | null, targetOperationType: OperationType) =>
   targetAccount?.roomName === 'Champion Poker' && targetOperationType === 'Deposit'
+
+const isChampionOperation = (targetAccount: Account | null, targetOperationType: OperationType) =>
+  isChampionDeposit(targetAccount, targetOperationType) || isChampionWithdrawal(targetAccount, targetOperationType)
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -32,13 +38,11 @@ const isBitcoinDepositInput = (amountValue: string, txValue: string) => {
   return /\bbtc\b|\bbitcoin\b|blockstream\.info|mempool\.space|blockchain\.com\/(?:btc\/)?tx|blockchair\.com\/bitcoin/.test(combined)
 }
 
-const cleanCurrencyNumber = (value: string) => String(value || '')
-  .trim()
-  .replace(/^(?:EUR|USD)\s+/i, '')
-  .replace(/^[€$]\s*/, '')
-
 const getInitialAmount = (targetAccount: Account | null, targetOperationType: OperationType) =>
   shouldUseAmountCurrency(targetAccount, targetOperationType) ? '$' : ''
+
+const getInitialAmountCurrency = (targetAccount: Account | null, targetOperationType: OperationType): AmountCurrency =>
+  isChampionOperation(targetAccount, targetOperationType) ? 'EUR' : 'USD'
 
 interface FormViewProps {
   player: Player
@@ -64,8 +68,8 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   
   // Form fields state
   const [amount, setAmount] = useState(() => getInitialAmount(account, operationType))
-  const [amountCurrency, setAmountCurrency] = useState<AmountCurrency>(() => isChampionWithdrawal(account, operationType) ? 'EUR' : 'USD')
-  const [convertedWithdrawalAmount, setConvertedWithdrawalAmount] = useState('')
+  const [amountCurrency, setAmountCurrency] = useState<AmountCurrency>(() => getInitialAmountCurrency(account, operationType))
+  const [convertedAmount, setConvertedAmount] = useState('')
   const [amountConversionStatus, setAmountConversionStatus] = useState<'idle' | 'loading' | 'converted' | 'error'>('idle')
   const [amountConversionMessage, setAmountConversionMessage] = useState('')
   const [txId, setTxId] = useState('')
@@ -87,7 +91,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
   const resetAmountConversion = () => {
     amountConversionRunRef.current += 1
-    setConvertedWithdrawalAmount('')
+    setConvertedAmount('')
     setAmountConversionStatus('idle')
     setAmountConversionMessage('')
   }
@@ -95,7 +99,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const handleOperationChange = (nextOperationType: OperationType) => {
     amountEditedRef.current = false
     setAmount(getInitialAmount(account, nextOperationType))
-    setAmountCurrency(isChampionWithdrawal(account, nextOperationType) ? 'EUR' : 'USD')
+    setAmountCurrency(getInitialAmountCurrency(account, nextOperationType))
     resetAmountConversion()
     setMissingFields([])
     if (nextOperationType !== 'Deposit') {
@@ -118,7 +122,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const handleAccountSelect = (nextAccount: Account) => {
     amountEditedRef.current = false
     setAmount(getInitialAmount(nextAccount, operationType))
-    setAmountCurrency(isChampionWithdrawal(nextAccount, operationType) ? 'EUR' : 'USD')
+    setAmountCurrency(getInitialAmountCurrency(nextAccount, operationType))
     resetAmountConversion()
     setMissingFields([])
     onAccountSelect(nextAccount)
@@ -127,7 +131,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const handleAmountChange = (value: string) => {
     amountEditedRef.current = true
     setAmount(value)
-    if (isChampionWithdrawal(account, operationType) && amountCurrency === 'USD') {
+    if (isChampionOperation(account, operationType) && amountCurrency === 'USD') {
       resetAmountConversion()
     }
   }
@@ -168,11 +172,16 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           const resolvedAmount = account.roomName === 'Champion Poker'
             ? result.convertedDisplayAmount || result.displayAmount
             : result.displayAmount
-          if (result.network === 'bitcoin' && !amountEditedRef.current) {
+          if (result.network === 'bitcoin' && !resolvedAmount && !amountEditedRef.current) {
             setAmount('')
           }
-          if (!amountEditedRef.current && resolvedAmount) {
+          if (resolvedAmount) {
             setAmount(resolvedAmount)
+            amountEditedRef.current = false
+            if (account.roomName === 'Champion Poker' && result.convertedDisplayAmount) {
+              setAmountCurrency('EUR')
+              resetAmountConversion()
+            }
           }
           setTxResolveStatus('resolved')
           setTxResolveMessage(
@@ -203,7 +212,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
   useEffect(() => {
     const rawAmount = amount.trim()
-    if (!isChampionWithdrawal(account, operationType) || amountCurrency !== 'USD' || !rawAmount) {
+    if (!isChampionOperation(account, operationType) || amountCurrency !== 'USD' || !rawAmount) {
       return
     }
 
@@ -218,8 +227,10 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           if (cancelled || amountConversionRunRef.current !== runId) return
 
           if (result.success && result.convertedDisplayAmount) {
-            const templateAmount = result.convertedAmount ? `EUR ${result.convertedAmount}` : result.convertedDisplayAmount
-            setConvertedWithdrawalAmount(templateAmount)
+            const templateAmount = isChampionDeposit(account, operationType)
+              ? result.convertedDisplayAmount
+              : result.convertedAmount ? `EUR ${result.convertedAmount}` : result.convertedDisplayAmount
+            setConvertedAmount(templateAmount)
             setAmountConversionStatus('converted')
             setAmountConversionMessage(
               result.fxDate
@@ -229,13 +240,13 @@ export default function FormView({ player, account, onAccountSelect, operationTy
             return
           }
 
-          setConvertedWithdrawalAmount('')
+          setConvertedAmount('')
           setAmountConversionStatus('error')
           setAmountConversionMessage(result.error || 'Не удалось конвертировать сумму')
         })
         .catch((err) => {
           if (cancelled || amountConversionRunRef.current !== runId) return
-          setConvertedWithdrawalAmount('')
+          setConvertedAmount('')
           setAmountConversionStatus('error')
           setAmountConversionMessage(err instanceof Error ? err.message : String(err))
         })
@@ -247,18 +258,10 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     }
   }, [account, amount, amountCurrency, operationType])
 
-  const amountWithCurrency = (value: string, currency: AmountCurrency) => {
-    const trimmed = value.trim()
-    if (!trimmed) return value
-    const amountValue = cleanCurrencyNumber(trimmed)
-    return `${currency} ${amountValue}`
-  }
-
   const getTemplateAmount = () => {
-    if (isChampionDeposit(account, operationType)) return amount
+    if (isChampionDeposit(account, operationType)) return championDepositTemplateAmount(amount, amountCurrency, convertedAmount)
     if (!isChampionWithdrawal(account, operationType)) return amount
-    if (amountCurrency === 'USD') return convertedWithdrawalAmount || amountWithCurrency(amount, 'USD')
-    return amountWithCurrency(amount, 'EUR')
+    return championWithdrawalTemplateAmount(amount, amountCurrency, convertedAmount)
   }
 
   const generateTemplate = () => {
@@ -319,7 +322,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     if (!isDeposit && !wallet.trim()) missing.push('wallet')
 
     if (roomName === 'Champion Poker' && !account.email?.trim()) missing.push('email')
-    if (isChampionWithdrawal(account, operationType) && amountCurrency === 'USD' && amount.trim() && !convertedWithdrawalAmount) missing.push('convertedAmount')
+    if (isChampionOperation(account, operationType) && amountCurrency === 'USD' && amount.trim() && !convertedAmount) missing.push('convertedAmount')
     if (roomName === 'Nexa' && !account.roomPlayerId?.trim()) missing.push('roomPlayerId')
     if (roomName !== 'RedStar' && !contactValue.trim()) missing.push('contactValue')
 
@@ -492,7 +495,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           <div>
             <div className="mb-1 flex items-center justify-between gap-3">
               <label className="block text-sm font-medium text-slate-400">Сумма</label>
-              {isChampionWithdrawal(account, operationType) && (
+              {isChampionOperation(account, operationType) && (
                 <div className="flex shrink-0 items-center rounded-lg bg-slate-900 p-1">
                   <button
                     type="button"
@@ -520,10 +523,10 @@ export default function FormView({ player, account, onAccountSelect, operationTy
               type="text"
               value={amount}
               onChange={e => handleAmountChange(e.target.value)}
-              placeholder={isChampionWithdrawal(account, operationType) ? (amountCurrency === 'EUR' ? '€500' : '$500') : '$500'}
+              placeholder={isChampionOperation(account, operationType) ? (amountCurrency === 'EUR' ? '€500' : '$500') : '$500'}
               className={inputClass('amount', amount)}
             />
-            {isChampionWithdrawal(account, operationType) && amountCurrency === 'USD' && amountConversionMessage && (
+            {isChampionOperation(account, operationType) && amountCurrency === 'USD' && amountConversionMessage && (
               <p className={`mt-2 text-xs ${
                 amountConversionStatus === 'converted'
                   ? 'text-emerald-400'

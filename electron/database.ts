@@ -43,6 +43,11 @@ export interface SavePlayerResult extends MutationResult {
   id?: number
 }
 
+export interface RoomRegistrationStat {
+  roomName: string
+  registrationCount: number
+}
+
 export interface SaveRoomProfileInput {
   id?: number
   room_key: string
@@ -244,6 +249,18 @@ export class TransactionerDatabase {
       GROUP BY p.id
       ORDER BY p.last_used_at DESC
     `).all()
+  }
+
+  getRoomRegistrationStats(): RoomRegistrationStat[] {
+    return this.db.prepare(`
+      SELECT
+        room_name AS roomName,
+        COUNT(*) AS registrationCount
+      FROM accounts
+      WHERE TRIM(room_name) != ''
+      GROUP BY room_name
+      ORDER BY registrationCount DESC, room_name COLLATE NOCASE
+    `).all() as RoomRegistrationStat[]
   }
 
   getPlayerById(id: number) {

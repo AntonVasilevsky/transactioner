@@ -120,6 +120,11 @@ interface StorageInfo {
   latestBackupPath: string
 }
 
+interface RoomRegistrationStat {
+  roomName: string
+  registrationCount: number
+}
+
 interface RoomProfileInfo {
   id: number
   room_key: string
@@ -245,6 +250,7 @@ interface Window {
     searchPlayer: (username: string) => Promise<PlayerPayload | PlayerPayload[] | null>;
     savePlayer: (data: SavePlayerInput) => Promise<SavePlayerResult>;
     getAllPlayers: () => Promise<Player[]>;
+    getRoomRegistrationStats: () => Promise<RoomRegistrationStat[]>;
     getPlayerById: (id: number) => Promise<PlayerPayload | null>;
     getAppInfo: () => Promise<AppInfo>;
     getStorageInfo: () => Promise<StorageInfo>;

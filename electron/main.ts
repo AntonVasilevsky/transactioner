@@ -74,6 +74,7 @@ try {
 
 ipcMain.handle('search-player', (_, username: string) => store?.searchPlayer(username) ?? null)
 ipcMain.handle('get-all-players', () => store?.getAllPlayers() ?? [])
+ipcMain.handle('get-room-registration-stats', () => store?.getRoomRegistrationStats() ?? [])
 ipcMain.handle('get-player-by-id', (_, id: number) => store?.getPlayerById(id) ?? null)
 ipcMain.handle('get-app-info', () => ({
   version: app.getVersion(),

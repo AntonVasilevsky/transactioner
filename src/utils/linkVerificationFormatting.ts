@@ -1,5 +1,19 @@
 import type { LinkVerificationFieldKey } from './linkVerificationRules'
 
+export interface RoomRegistrationStatLike {
+  roomName?: string | null
+  room_name?: string | null
+  registrationCount?: number | null
+  registration_count?: number | null
+}
+
+export const CORE_LINK_VERIFICATION_ROOMS = ['Nexa', 'Champion Poker', 'RedStar']
+
+const normalizeRoomFrequencyKey = (value: string) => value
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '')
+
 export const normalizeMessengerLabel = (value: string) => {
   const lowered = value.trim().toLowerCase()
   if (!lowered) return ''
@@ -34,6 +48,54 @@ export const uniqueNonEmpty = (values: string[]) => {
     result.push(value)
   }
   return result
+}
+
+export const buildRoomRegistrationFrequencyMap = (stats: RoomRegistrationStatLike[]) => {
+  const result = new Map<string, number>()
+  for (const stat of stats) {
+    const roomName = (stat.roomName ?? stat.room_name ?? '').trim()
+    const key = normalizeRoomFrequencyKey(roomName)
+    if (!key) continue
+    const count = Number(stat.registrationCount ?? stat.registration_count ?? 0) || 0
+    result.set(key, (result.get(key) || 0) + count)
+  }
+  return result
+}
+
+export const sortLinkVerificationRoomOptions = (
+  roomNames: string[],
+  stats: RoomRegistrationStatLike[]
+) => {
+  const names = new Map<string, string>()
+  for (const name of [...CORE_LINK_VERIFICATION_ROOMS, ...roomNames]) {
+    const trimmed = name.trim()
+    if (!trimmed) continue
+    const key = normalizeRoomFrequencyKey(trimmed)
+    if (!names.has(key)) names.set(key, trimmed)
+  }
+
+  const frequencies = buildRoomRegistrationFrequencyMap(stats)
+  const coreKeys = new Map(CORE_LINK_VERIFICATION_ROOMS.map((name, index) => [
+    normalizeRoomFrequencyKey(name),
+    index
+  ]))
+
+  return Array.from(names.values()).sort((left, right) => {
+    const leftKey = normalizeRoomFrequencyKey(left)
+    const rightKey = normalizeRoomFrequencyKey(right)
+    const leftCoreIndex = coreKeys.get(leftKey)
+    const rightCoreIndex = coreKeys.get(rightKey)
+
+    if (leftCoreIndex !== undefined || rightCoreIndex !== undefined) {
+      if (leftCoreIndex === undefined) return 1
+      if (rightCoreIndex === undefined) return -1
+      return leftCoreIndex - rightCoreIndex
+    }
+
+    const countDiff = (frequencies.get(rightKey) || 0) - (frequencies.get(leftKey) || 0)
+    if (countDiff !== 0) return countDiff
+    return left.localeCompare(right, undefined, { sensitivity: 'base' })
+  })
 }
 
 export const composePlayerDataByRule = (
@@ -74,7 +136,7 @@ export const buildLinkVerificationTemplateValues = (values: {
   return {
     room_name: values.roomName,
     player_data: values.playerData.trim(),
-    messenger: values.messenger.trim(),
+    messenger: normalizeMessengerLabel(values.messenger),
     messenger_username: messengerUsername,
     messenger_usermane: messengerUsername,
     username,
