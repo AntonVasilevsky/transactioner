@@ -32,6 +32,45 @@ const cyrillicToLatin: Record<string, string> = {
   я: 'ya'
 }
 
+const russianKeyboardToEnglish: Record<string, string> = {
+  й: 'q',
+  ц: 'w',
+  у: 'e',
+  к: 'r',
+  е: 't',
+  н: 'y',
+  г: 'u',
+  ш: 'i',
+  щ: 'o',
+  з: 'p',
+  х: '[',
+  ъ: ']',
+  ф: 'a',
+  ы: 's',
+  в: 'd',
+  а: 'f',
+  п: 'g',
+  р: 'h',
+  о: 'j',
+  л: 'k',
+  д: 'l',
+  ж: ';',
+  э: "'",
+  я: 'z',
+  ч: 'x',
+  с: 'c',
+  м: 'v',
+  и: 'b',
+  т: 'n',
+  ь: 'm',
+  б: ',',
+  ю: '.',
+}
+
+const englishKeyboardToRussian = Object.fromEntries(
+  Object.entries(russianKeyboardToEnglish).map(([russian, english]) => [english, russian])
+) as Record<string, string>
+
 export const normalizeRoomSearchValue = (value: string) => String(value || '')
   .trim()
   .toLowerCase()
@@ -76,11 +115,26 @@ const transliterateCyrillicToLatin = (value: string) => Array.from(value)
   .map((char) => cyrillicToLatin[char] ?? char)
   .join('')
 
+const switchKeyboardLayout = (value: string, layout: Record<string, string>) => Array.from(value)
+  .map((char) => layout[char] ?? char)
+  .join('')
+
 const searchVariants = (value: string) => {
   const normalized = normalizeRoomSearchValue(value)
   if (!normalized) return []
   const transliterated = transliterateCyrillicToLatin(normalized)
-  return Array.from(new Set([normalized, transliterated].filter(Boolean)))
+  const russianKeyboardValue = normalizeRoomSearchValue(switchKeyboardLayout(normalized, russianKeyboardToEnglish))
+  const englishKeyboardValue = normalizeRoomSearchValue(switchKeyboardLayout(normalized, englishKeyboardToRussian))
+  const russianKeyboardTransliterated = transliterateCyrillicToLatin(russianKeyboardValue)
+  const englishKeyboardTransliterated = transliterateCyrillicToLatin(englishKeyboardValue)
+  return Array.from(new Set([
+    normalized,
+    transliterated,
+    russianKeyboardValue,
+    englishKeyboardValue,
+    russianKeyboardTransliterated,
+    englishKeyboardTransliterated,
+  ].filter(Boolean)))
 }
 
 const roomSearchValues = (values: string[]) => {

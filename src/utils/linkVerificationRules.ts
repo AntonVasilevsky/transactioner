@@ -176,6 +176,7 @@ for (const { aliases, deal } of dealByRoomAlias) {
 const DEFAULT_ID_ROOMS = new Set([
   'bcpoker',
   'betonline',
+  'coinpoker',
   'grompoker',
   'rptbetpoker',
   'tigergaming',

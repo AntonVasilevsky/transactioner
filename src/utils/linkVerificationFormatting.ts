@@ -22,17 +22,20 @@ export const normalizeMessengerLabel = (value: string) => {
   return value.trim() || 'Telegram'
 }
 
-export const toDirectusMessenger = (messenger: string, login: string) => {
+export const toDirectusMessenger = (messenger: string, login: string, userEmail = '') => {
   const base = messenger.trim().toLowerCase()
   const username = login.trim()
-  if (!base || !username) return ''
+  const email = userEmail.trim()
+  if (!base) return ''
+  if (base.includes('email') || base.includes('site')) {
+    return email ? `email: ${email}` : ''
+  }
+  if (!username) return ''
   const prefix = base.includes('telegram')
     ? 'telegram'
     : base === 'wa' || base.includes('whatsapp')
       ? 'whatsapp'
-      : base.includes('site')
-        ? 'site'
-        : base || 'messenger'
+      : base || 'messenger'
   return `${prefix}: ${username}`
 }
 

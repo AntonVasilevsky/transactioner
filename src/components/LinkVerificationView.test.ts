@@ -159,6 +159,7 @@ Telegram: @AlexanderChazov
     expect(fields[resolveLinkVerificationRoomRule('TON Poker').sheet2RoomUsernameField]).toBe('1483304')
     expect(fields[resolveLinkVerificationRoomRule('Guts Poker').sheet2RoomUsernameField]).toBe('1483304')
     expect(fields[resolveLinkVerificationRoomRule('BCPoker').sheet2RoomUsernameField]).toBe('1483304')
+    expect(fields[resolveLinkVerificationRoomRule('CoinPoker').sheet2RoomUsernameField]).toBe('1483304')
     expect(fields[resolveLinkVerificationRoomRule('PartyPoker').sheet2RoomUsernameField]).toBe('hero-nick')
     expect(fields[resolveLinkVerificationRoomRule('RedStar').sheet2RoomUsernameField]).toBe('hero-nick')
     expect(fields[resolveLinkVerificationRoomRule('Basepoker').sheet2RoomUsernameField]).toBe('hero-nick')
@@ -221,6 +222,11 @@ Telegram: @AlexanderChazov
       updateChat: false
     })).toBe('02.06.2026\tАнтон\t\t\tWPTG\tHero / 1483304 / hero@example.com\tCheck\t\tFALSE')
     expect(toDirectusMessenger('', '@hero')).toBe('')
+  })
+
+  it('uses player email for Directus messenger when messenger is Email or Site', () => {
+    expect(toDirectusMessenger('Email', '@hero-contact', 'hero@example.com')).toBe('email: hero@example.com')
+    expect(toDirectusMessenger('Site', 'site-contact', 'hero@example.com')).toBe('email: hero@example.com')
   })
 
   it('builds a centered Google Sheets HTML row for rich clipboard paste', () => {

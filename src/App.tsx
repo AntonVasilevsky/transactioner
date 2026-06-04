@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Info, Download, Search, UserPlus, ChevronRight, Users, X, Link2 } from 'lucide-react'
 
 // Views
@@ -24,6 +24,7 @@ function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false)
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNotesInfo | null>(null)
   const [roomInfoHomeSignal, setRoomInfoHomeSignal] = useState(0)
+  const mainRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     let active = true
@@ -62,6 +63,13 @@ function App() {
       active = false
     }
   }, [])
+
+  useEffect(() => {
+    if (currentView !== 'roomInfo') return
+    window.requestAnimationFrame(() => {
+      mainRef.current?.scrollTo({ top: 0 })
+    })
+  }, [currentView])
 
   const normalizeAccount = (account: Account): Account => ({
     ...account,
@@ -167,7 +175,7 @@ function App() {
       </nav>
 
       {/* Main Content Area */}
-      <main className="min-w-0 flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden relative">
+      <main ref={mainRef} className="min-w-0 flex-1 flex flex-col h-full overflow-y-auto overflow-x-hidden relative">
         {/* Background Decorative Gradients */}
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-blue-600/10 blur-[100px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-indigo-600/10 blur-[100px] pointer-events-none" />

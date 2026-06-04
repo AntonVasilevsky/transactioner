@@ -163,11 +163,19 @@ export default function RoomAdminView({
   const [walletForm, setWalletForm] = useState<SaveRoomWalletInput | null>(null)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const pageTopRef = useRef<HTMLDivElement | null>(null)
   const dealDraftsRef = useRef<Record<string, SaveRoomDealInput>>({})
   const initialContextRef = useRef({
     dealType: initialDealType,
     roomKey: initialRoomKey
   })
+
+  const focusPageTop = () => {
+    window.requestAnimationFrame(() => {
+      pageTopRef.current?.scrollIntoView({ block: 'start' })
+      pageTopRef.current?.focus({ preventScroll: true })
+    })
+  }
 
   const loadIndex = async (preferredRoomKey?: string) => {
     const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
@@ -343,6 +351,7 @@ export default function RoomAdminView({
     const nextDealForm = nextDeals[0] ? dealToForm(nextDeals[0]) : dealForm
     setDeals(nextDeals)
     setDealForm(nextDealForm)
+    focusPageTop()
   }
 
   const startAddRoom = () => {
@@ -416,7 +425,7 @@ export default function RoomAdminView({
   }
 
   return (
-    <div className="mx-auto max-w-6xl animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <div ref={pageTopRef} tabIndex={-1} className="mx-auto max-w-6xl animate-in fade-in slide-in-from-bottom-4 outline-none duration-500">
       <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <Settings size={28} className="text-blue-400" />

@@ -15,6 +15,12 @@ describe('room search', () => {
     expect(matchesRoomSearch(['PokerKing'], 'покер кинг')).toBe(true)
   })
 
+  it('matches rooms when English names are typed with Russian keyboard layout', () => {
+    expect(matchesRoomSearch(['Nexa'], 'тучф')).toBe(true)
+    expect(matchesRoomSearch(['RedStar'], 'кувыефк')).toBe(true)
+    expect(matchesRoomSearch(['Champion Poker'], 'срфьзшщт зщлук')).toBe(true)
+  })
+
   it('does not match unrelated rooms', () => {
     expect(matchesRoomSearch(['Nexa'], 'редстар')).toBe(false)
   })
