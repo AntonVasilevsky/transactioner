@@ -18,6 +18,7 @@ import {
   sortLinkVerificationRoomOptions,
   toDirectusMessenger
 } from '../utils/linkVerificationFormatting'
+import { matchesRoomSearch } from '../utils/roomSearch'
 
 const formatDate = (date: Date) => {
   const day = String(date.getDate()).padStart(2, '0')
@@ -29,6 +30,8 @@ const formatDate = (date: Date) => {
 const today = () => formatDate(new Date())
 const messengerOptions = ['Telegram', 'WA', 'Discord', 'Teams', 'Email', 'Site', 'Jivo']
 const statusOptions = ['Check', 'Ok', 'Denied', 'Retag']
+const linkVerificationLanguageOptions = ['RU', 'ENG', 'ES'] as const
+type LinkVerificationLanguage = typeof linkVerificationLanguageOptions[number]
 const initialRoomName = 'Nexa'
 const initialRule = resolveLinkVerificationRoomRule(initialRoomName)
 
@@ -62,7 +65,7 @@ export default function LinkVerificationView() {
   const [source, setSource] = useState('')
   const [sourceQuery, setSourceQuery] = useState('')
   const [isSourcePickerOpen, setIsSourcePickerOpen] = useState(false)
-  const [language, setLanguage] = useState<'RU' | 'ENG'>('RU')
+  const [language, setLanguage] = useState<LinkVerificationLanguage>('RU')
   const [country, setCountry] = useState('')
   const [nameNick, setNameNick] = useState('')
   const [accountOnWpd, setAccountOnWpd] = useState('')
@@ -269,7 +272,7 @@ export default function LinkVerificationView() {
       ? rawQuery.toLowerCase()
       : ''
     if (!query) return roomOptions
-    return roomOptions.filter((name) => name.toLowerCase().includes(query))
+    return roomOptions.filter((name) => matchesRoomSearch([name], query))
   }, [roomName, roomOptions, roomQuery])
 
   const selectRoom = (name: string) => {
@@ -617,9 +620,10 @@ export default function LinkVerificationView() {
               </label>
               <label className="text-sm text-slate-400">
                 Язык
-                <select value={language} onChange={(event) => setLanguage(event.target.value as 'RU' | 'ENG')} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
-                  <option value="RU">RU</option>
-                  <option value="ENG">ENG</option>
+                <select value={language} onChange={(event) => setLanguage(event.target.value as LinkVerificationLanguage)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
+                  {linkVerificationLanguageOptions.map((option) => (
+                    <option key={option} value={option}>{option}</option>
+                  ))}
                 </select>
               </label>
               <label className="text-sm text-slate-400">

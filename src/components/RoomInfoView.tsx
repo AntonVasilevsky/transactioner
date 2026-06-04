@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Check, Copy, Info, Search, Settings } from 'lucide-react'
 import RoomAdminView from './RoomAdminView'
+import { matchesRoomSearch } from '../utils/roomSearch'
 
 type RoomInfoMode = 'wallets' | 'deals'
 const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
@@ -10,6 +11,7 @@ const dealTypeLabels: Record<RoomDealType, string> = {
   Direct: 'Прямая',
   Agent: 'Агентская',
 }
+const roomLanguageOptions: RoomLanguage[] = ['RU', 'EN', 'ES']
 
 const roomName = (profiles: RoomProfileInfo[], roomKey: string) =>
   profiles.find((profile) => profile.room_key === roomKey)?.display_name || roomKey
@@ -48,7 +50,7 @@ const dealCopyText = (deal: RoomDealInfo, kind: 'short' | 'full') => {
 }
 
 export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
-  const [mode, setMode] = useState<RoomInfoMode>('wallets')
+  const [mode, setMode] = useState<RoomInfoMode>('deals')
   const [index, setIndex] = useState<RoomKnowledgeIndex | null>(null)
   const [selectedRoomKey, setSelectedRoomKey] = useState('')
   const [roomQuery, setRoomQuery] = useState('')
@@ -66,6 +68,11 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
   const [refreshToken, setRefreshToken] = useState(0)
   const hasSeenHomeSignal = useRef(false)
   const roomInputWasFocusedOnMouseDown = useRef(false)
+  const selectedRoomKeyRef = useRef('')
+
+  useEffect(() => {
+    selectedRoomKeyRef.current = selectedRoomKey
+  }, [selectedRoomKey])
 
   useEffect(() => {
     let active = true
@@ -73,10 +80,10 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
       .then((result) => {
         if (!active) return
         const sortedProfiles = sortRooms(result.profiles)
-        const firstRoom = sortedProfiles[0]
+        const selectedRoom = sortedProfiles.find((profile) => profile.room_key === selectedRoomKeyRef.current) || sortedProfiles[0]
         setIndex(result)
-        setSelectedRoomKey(firstRoom?.room_key || '')
-        setRoomQuery(firstRoom?.display_name || '')
+        setSelectedRoomKey(selectedRoom?.room_key || '')
+        setRoomQuery(selectedRoom?.display_name || '')
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -114,11 +121,9 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     const query = rawQuery && rawQuery !== selectedRoomName
       ? rawQuery.toLowerCase()
       : ''
-    const filteredProfiles = query ? profiles.filter((profile) => (
-      profile.display_name.toLowerCase().includes(query) ||
-      profile.room_key.toLowerCase().includes(query) ||
-      String(profile.network_name || '').toLowerCase().includes(query)
-    )) : profiles
+    const filteredProfiles = query
+      ? profiles.filter((profile) => matchesRoomSearch([profile.display_name, profile.room_key, profile.network_name], query))
+      : profiles
     return sortRooms(filteredProfiles)
   }, [index, roomQuery, selectedRoomKey])
 
@@ -223,7 +228,10 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
         <div className={isAdminOpen ? '' : 'hidden'}>
           <RoomAdminView
             key={adminSessionKey}
-            initialMode="deals"
+            initialMode={mode === 'deals' ? 'deals' : 'wallets'}
+            initialRoomKey={selectedRoomKey}
+            initialDealType={activeDealType}
+            initialLanguage={language}
             onClose={() => {
               setIsAdminOpen(false)
               setRefreshToken((value) => value + 1)
@@ -258,8 +266,8 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-400">Раздел</label>
           <div className="flex rounded-xl bg-slate-950 p-1">
-            <ModeButton active={mode === 'wallets'} onClick={() => setMode('wallets')}>Кошельки</ModeButton>
             <ModeButton active={mode === 'deals'} onClick={() => setMode('deals')}>Сделка</ModeButton>
+            <ModeButton active={mode === 'wallets'} onClick={() => setMode('wallets')}>Кошельки</ModeButton>
           </div>
         </div>
         <div className="relative min-w-56">
@@ -367,8 +375,9 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-400">Язык</label>
             <div className="flex rounded-xl bg-slate-950 p-1">
-              <ModeButton active={language === 'RU'} onClick={() => setLanguage('RU')}>RU</ModeButton>
-              <ModeButton active={language === 'EN'} onClick={() => setLanguage('EN')}>EN</ModeButton>
+              {roomLanguageOptions.map((option) => (
+                <ModeButton key={option} active={language === option} onClick={() => setLanguage(option)}>{option}</ModeButton>
+              ))}
             </div>
           </div>
         )}

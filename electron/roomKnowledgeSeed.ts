@@ -1,5 +1,5 @@
 export type RoomDealType = 'General' | 'Direct' | 'Agent'
-export type RoomLanguage = 'RU' | 'EN'
+export type RoomLanguage = 'RU' | 'EN' | 'ES'
 export type RoomOperationType = 'Deposit' | 'Withdrawal'
 export type RoomCountryStatus = 'Available' | 'Unavailable' | 'Check'
 

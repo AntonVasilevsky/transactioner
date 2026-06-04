@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowLeft, Eye, EyeOff, Plus, Save, Search, Settings } from 'lucide-react'
+import { matchesRoomSearch } from '../utils/roomSearch'
 
 type AdminMode = 'deals' | 'wallets'
 const allDealTypes: RoomDealType[] = ['Agent', 'Direct', 'General']
@@ -10,6 +11,7 @@ const dealTypeLabels: Record<RoomDealType, string> = {
   Direct: 'Прямая',
   Agent: 'Агентская',
 }
+const roomLanguageOptions: RoomLanguage[] = ['RU', 'EN', 'ES']
 
 const preferredDealTypeForRoom = (index: RoomKnowledgeIndex | null, roomKey: string): RoomDealType => {
   if (!index || !roomKey) return 'Agent'
@@ -129,9 +131,15 @@ const preservePageScrollAfterPaste = () => {
 
 export default function RoomAdminView({
   initialMode = 'deals',
+  initialRoomKey = '',
+  initialDealType,
+  initialLanguage = 'RU',
   onClose,
 }: {
   initialMode?: AdminMode
+  initialRoomKey?: string
+  initialDealType?: RoomDealType
+  initialLanguage?: RoomLanguage
   onClose: () => void
 }) {
   const [mode, setMode] = useState<AdminMode>(initialMode)
@@ -139,8 +147,8 @@ export default function RoomAdminView({
   const [roomKey, setRoomKey] = useState('')
   const [roomQuery, setRoomQuery] = useState('')
   const [isRoomPickerOpen, setIsRoomPickerOpen] = useState(false)
-  const [dealType, setDealType] = useState<RoomDealType>('Agent')
-  const [language, setLanguage] = useState<RoomLanguage>('RU')
+  const [dealType, setDealType] = useState<RoomDealType>(initialDealType || 'Agent')
+  const [language, setLanguage] = useState<RoomLanguage>(initialLanguage)
   const [deals, setDeals] = useState<RoomDealInfo[]>([])
   const [wallets, setWallets] = useState<RoomWalletInfo[]>([])
   const [isAddingRoom, setIsAddingRoom] = useState(false)
@@ -156,14 +164,22 @@ export default function RoomAdminView({
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const dealDraftsRef = useRef<Record<string, SaveRoomDealInput>>({})
+  const initialContextRef = useRef({
+    dealType: initialDealType,
+    roomKey: initialRoomKey
+  })
 
   const loadIndex = async (preferredRoomKey?: string) => {
     const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
     const sortedProfiles = sortRooms(nextIndex.profiles)
-    const nextRoomKey = preferredRoomKey || roomKey || sortedProfiles[0]?.room_key || ''
+    const initialContext = initialContextRef.current
+    const nextRoomKey = preferredRoomKey || roomKey || initialContext.roomKey || sortedProfiles[0]?.room_key || ''
+    const nextDealType = roomKey || preferredRoomKey || nextRoomKey !== initialContext.roomKey || !initialContext.dealType
+      ? preferredDealTypeForRoom(nextIndex, nextRoomKey)
+      : initialContext.dealType
     setIndex(nextIndex)
     setRoomKey(nextRoomKey)
-    setDealType(preferredDealTypeForRoom(nextIndex, nextRoomKey))
+    setDealType(nextDealType)
     setRoomQuery(roomName(nextIndex.profiles, nextRoomKey))
   }
 
@@ -173,11 +189,15 @@ export default function RoomAdminView({
       .then((nextIndex) => {
         if (!active) return
         const sortedProfiles = sortRooms(nextIndex.profiles)
-        const nextRoomKey = sortedProfiles[0]?.room_key || ''
+        const initialContext = initialContextRef.current
+        const nextRoomKey = initialContext.roomKey || sortedProfiles[0]?.room_key || ''
+        const nextDealType = initialContext.dealType && nextRoomKey === initialContext.roomKey
+          ? initialContext.dealType
+          : preferredDealTypeForRoom(nextIndex, nextRoomKey)
         setIndex(nextIndex)
         setRoomKey(nextRoomKey)
         setRoomQuery(roomName(nextIndex.profiles, nextRoomKey))
-        setDealType(preferredDealTypeForRoom(nextIndex, nextRoomKey))
+        setDealType(nextDealType)
       })
       .catch((err) => {
         if (active) setError(err instanceof Error ? err.message : String(err))
@@ -218,11 +238,9 @@ export default function RoomAdminView({
     const query = rawQuery && rawQuery !== selectedRoomName
       ? rawQuery.toLowerCase()
       : ''
-    const filteredProfiles = query ? profiles.filter((profile) => (
-      profile.display_name.toLowerCase().includes(query) ||
-      profile.room_key.toLowerCase().includes(query) ||
-      String(profile.network_name || '').toLowerCase().includes(query)
-    )) : profiles
+    const filteredProfiles = query
+      ? profiles.filter((profile) => matchesRoomSearch([profile.display_name, profile.room_key, profile.network_name], query))
+      : profiles
     return sortRooms(filteredProfiles)
   }, [index, roomKey, roomQuery])
 
@@ -593,8 +611,9 @@ export default function RoomAdminView({
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-400">Язык</label>
             <div className="flex rounded-xl bg-slate-950 p-1">
-              <ModeButton active={language === 'RU'} onClick={() => setLanguage('RU')}>RU</ModeButton>
-              <ModeButton active={language === 'EN'} onClick={() => setLanguage('EN')}>EN</ModeButton>
+              {roomLanguageOptions.map((option) => (
+                <ModeButton key={option} active={language === option} onClick={() => setLanguage(option)}>{option}</ModeButton>
+              ))}
             </div>
           </div>
         )}

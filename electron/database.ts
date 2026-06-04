@@ -4,7 +4,7 @@ import { roomKnowledgeSeed, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
 
 export type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
 export type RoomDealType = 'General' | 'Direct' | 'Agent'
-export type RoomLanguage = 'RU' | 'EN'
+export type RoomLanguage = 'RU' | 'EN' | 'ES'
 export type RoomCountryStatus = 'Available' | 'Unavailable' | 'Check'
 
 export interface AccountInput {

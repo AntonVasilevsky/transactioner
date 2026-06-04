@@ -563,17 +563,25 @@ describe('TransactionerDatabase', () => {
       INSERT INTO room_deals (
         room_key, deal_type, language, short_text, full_text, sort_order, is_active
       ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('test-room', 'General', 'ES', 'Corto Test', 'Plantilla completa Test', 25, 1)
+    raw.prepare(`
+      INSERT INTO room_deals (
+        room_key, deal_type, language, short_text, full_text, sort_order, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
     `).run('test-room', 'Agent', 'RU', 'Старый короткий', 'Старый полный', 30, 0)
     raw.close()
 
     db = new TransactionerDatabase(dbPath)
     const ruDeals = db.getRoomDeals('test-room', 'RU')
     const enDeals = db.getRoomDeals('test-room', 'EN', 'General')
+    const esDeals = db.getRoomDeals('test-room', 'ES', 'General')
 
     expect(ruDeals).toHaveLength(1)
     expect(ruDeals[0].short_text).toBe('Коротко Test')
     expect(enDeals).toHaveLength(1)
     expect(enDeals[0].short_text).toBe('Short Test')
+    expect(esDeals).toHaveLength(1)
+    expect(esDeals[0].short_text).toBe('Corto Test')
   })
 
   it('returns room wallets filtered by room and deal type while preserving inactive rows for warnings', () => {

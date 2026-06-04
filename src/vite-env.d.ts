@@ -2,7 +2,7 @@
 
 type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
 type RoomDealType = 'General' | 'Direct' | 'Agent'
-type RoomLanguage = 'RU' | 'EN'
+type RoomLanguage = 'RU' | 'EN' | 'ES'
 type RoomOperationType = 'Deposit' | 'Withdrawal'
 type RoomCountryStatus = 'Available' | 'Unavailable' | 'Check'
 
