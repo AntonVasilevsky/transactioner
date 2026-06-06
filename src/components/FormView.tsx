@@ -33,11 +33,6 @@ const templateHtml = (value: string) => `<pre style="font-family: ui-monospace, 
 
 const isUsdcNetwork = (value: string) => /\bUSDC\b/i.test(value)
 
-const isBitcoinDepositInput = (amountValue: string, txValue: string) => {
-  const combined = `${amountValue} ${txValue}`.toLowerCase()
-  return /\bbtc\b|\bbitcoin\b|blockstream\.info|mempool\.space|blockchain\.com\/(?:btc\/)?tx|blockchair\.com\/bitcoin/.test(combined)
-}
-
 const getInitialAmount = (targetAccount: Account | null, targetOperationType: OperationType) =>
   shouldUseAmountCurrency(targetAccount, targetOperationType) ? '$' : ''
 
@@ -315,7 +310,6 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   }
 
   const generatedText = generateTemplate()
-  const showBitcoinDepositWarning = operationType === 'Deposit' && isBitcoinDepositInput(amount, txId)
 
   const getMissingFields = () => {
     if (!account) return ['account']
@@ -563,11 +557,6 @@ export default function FormView({ player, account, onAccountSelect, operationTy
                 }`}>
                   {txResolveMessage}
                 </p>
-              )}
-              {showBitcoinDepositWarning && (
-                <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
-                  BTC-транзакция может объединять несколько платежей. Внимательно проверьте именно отправленную сумму игрока, а не общую сумму всей транзакции.
-                </div>
               )}
             </div>
           ) : (

@@ -38,10 +38,6 @@ const countryStatusLabels: Record<RoomCountryStatus, string> = {
 const walletCopyText = (wallet: RoomWalletInfo) => [
   `${wallet.currency} ${wallet.network}`.trim(),
   wallet.wallet_address,
-  wallet.memo_tag ? `Memo/Tag: ${wallet.memo_tag}` : '',
-  wallet.fee_text ? `Комиссия: ${wallet.fee_text}` : '',
-  wallet.verified_at ? `Актуально: ${wallet.verified_at}` : '',
-  wallet.note ? `Комментарий: ${wallet.note}` : '',
 ].filter(Boolean).join('\n')
 
 const dealCopyText = (deal: RoomDealInfo, kind: 'short' | 'full') => {
