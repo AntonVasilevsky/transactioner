@@ -5,7 +5,7 @@ import { fileURLToPath } from 'node:url'
 import { createDailyDatabaseBackup, createDatabaseSnapshotBackup } from './backup'
 import { convertUsdToEur, parseCurrencyAmount } from './currency'
 import { TransactionerDatabase, type RoomDealType, type RoomLanguage, type SaveRoomDealInput, type SaveRoomProfileInput, type SaveRoomWalletInput } from './database'
-import { resolveTransaction } from './transactionResolver'
+import { resolveTransaction, type KnownTransactionWallet } from './transactionResolver'
 import { checkForUpdate, isAllowedReleaseUrl } from './updates'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -62,6 +62,21 @@ const runRoomEditBackup = () => {
   } catch (err) {
     console.error('Room edit backup failed', err)
   }
+}
+
+const getActiveTransactionWallets = (): KnownTransactionWallet[] => {
+  if (!store) return []
+  const index = store.getRoomKnowledgeAdminIndex()
+  return index.profiles.flatMap((profile) => (
+    store!.getRoomWallets(profile.room_key)
+      .filter((wallet) => wallet.is_active)
+      .map((wallet) => ({
+        address: wallet.wallet_address.trim(),
+        roomKey: profile.room_key,
+        roomName: profile.display_name,
+      }))
+      .filter((wallet) => wallet.address)
+  ))
 }
 
 try {
@@ -126,7 +141,10 @@ ipcMain.handle('save-room-wallet', (_, data: SaveRoomWalletInput) => {
   return result
 })
 ipcMain.handle('check-for-updates', () => checkForUpdate(app.getVersion()))
-ipcMain.handle('resolve-transaction', (_, input) => resolveTransaction(input))
+ipcMain.handle('resolve-transaction', (_, input) => resolveTransaction({
+  ...input,
+  knownWallets: getActiveTransactionWallets(),
+}))
 ipcMain.handle('convert-usd-to-eur', async (_, amountText: string) => {
   try {
     const amount = parseCurrencyAmount(amountText)

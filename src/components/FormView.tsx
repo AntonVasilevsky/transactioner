@@ -73,7 +73,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const [amountConversionStatus, setAmountConversionStatus] = useState<'idle' | 'loading' | 'converted' | 'error'>('idle')
   const [amountConversionMessage, setAmountConversionMessage] = useState('')
   const [txId, setTxId] = useState('')
-  const [txResolveStatus, setTxResolveStatus] = useState<'idle' | 'loading' | 'resolved' | 'not_found' | 'error'>('idle')
+  const [txResolveStatus, setTxResolveStatus] = useState<'idle' | 'loading' | 'resolved' | 'warning' | 'not_found' | 'error'>('idle')
   const [txResolveMessage, setTxResolveMessage] = useState('')
   const [network, setNetwork] = useState(operationType === 'Withdrawal' ? player?.default_wallet_network || '' : '')
   const [wallet, setWallet] = useState(operationType === 'Withdrawal' ? player?.default_wallet || '' : '')
@@ -169,6 +169,16 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
         if (result.success && result.explorerUrl) {
           setTxId(current => current.trim() === rawTx ? result.explorerUrl! : current)
+          if (result.warning || result.requiresManualAmount) {
+            if (!amountEditedRef.current) {
+              setAmount(getInitialAmount(account, operationType))
+              resetAmountConversion()
+            }
+            setTxResolveStatus('warning')
+            setTxResolveMessage(result.warning || 'Проверьте сумму транзакции вручную.')
+            return
+          }
+
           const resolvedAmount = account.roomName === 'Champion Poker'
             ? result.convertedDisplayAmount || result.displayAmount
             : result.displayAmount

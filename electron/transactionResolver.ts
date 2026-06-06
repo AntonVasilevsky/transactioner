@@ -5,10 +5,17 @@ import { convertUsdToEur } from './currency'
 
 export type TransactionNetwork = 'ethereum' | 'bsc' | 'tron' | 'bitcoin'
 
+export interface KnownTransactionWallet {
+  address: string
+  roomKey?: string
+  roomName?: string
+}
+
 interface ResolveTransactionInput {
   txInput: string
   roomName?: string
   operationType?: string
+  knownWallets?: KnownTransactionWallet[]
 }
 
 interface ParsedTransactionInput {
@@ -30,6 +37,8 @@ export interface ResolveTransactionResult {
   convertedDisplayAmount?: string
   fxRate?: number
   fxDate?: string
+  warning?: string
+  requiresManualAmount?: boolean
   error?: string
 }
 
@@ -43,6 +52,10 @@ interface TronTransfer {
   amount?: string | number
   decimals?: string | number
   symbol?: string
+  to_address?: string
+  toAddress?: string
+  transferToAddress?: string
+  to?: string
 }
 
 interface TronTransactionResponse {
@@ -55,6 +68,8 @@ interface TronTransactionResponse {
 interface BinplorerOperation {
   type?: string
   value?: string
+  to?: string
+  toAddress?: string
   tokenInfo?: {
     decimals?: string | number
     symbol?: string
@@ -82,10 +97,15 @@ interface EthereumReceipt {
 
 interface EthereumTransaction {
   value?: string
+  to?: string
 }
 
 interface BitcoinTransactionResponse {
   txid?: string
+  vout?: Array<{
+    scriptpubkey_address?: string
+    value?: number
+  }>
 }
 
 const cache = new Map<string, { expiresAt: number, result: ResolveTransactionResult }>()
@@ -93,6 +113,7 @@ const cacheTtlMs = 10 * 60 * 1000
 const evmHashPattern = /^0x[a-fA-F0-9]{64}$/
 const tronHashPattern = /^[a-fA-F0-9]{64}$/
 const transferTopic = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef'
+const btcSatsPerBitcoin = 100000000
 
 const explorers: Record<TransactionNetwork, (hash: string) => string> = {
   ethereum: hash => `https://etherscan.io/tx/${hash}`,
@@ -176,6 +197,111 @@ const displayCryptoAmount = (amount: string, currency?: string) => {
   return normalizedCurrency ? `${amount} ${normalizedCurrency}` : amount
 }
 
+const normalizeRoomLookupKey = (value: string) => String(value || '')
+  .trim()
+  .toLowerCase()
+  .replace(/[^a-z0-9]+/g, '')
+
+const normalizeWalletAddress = (value: string) => String(value || '').trim().toLowerCase()
+
+const topicToEvmAddress = (topic: string | undefined) => {
+  const value = String(topic || '').trim().toLowerCase()
+  if (!/^0x[a-f0-9]{64}$/.test(value)) return ''
+  return `0x${value.slice(-40)}`
+}
+
+const walletBelongsToRoom = (wallet: KnownTransactionWallet, roomName?: string) => {
+  const roomKey = normalizeRoomLookupKey(roomName || '')
+  if (!roomKey) return false
+  return normalizeRoomLookupKey(wallet.roomName || '') === roomKey ||
+    normalizeRoomLookupKey(wallet.roomKey || '') === roomKey
+}
+
+const findKnownWallet = (address: string, knownWallets?: KnownTransactionWallet[]) => {
+  const normalizedAddress = normalizeWalletAddress(address)
+  if (!normalizedAddress) return undefined
+  return knownWallets?.find((wallet) => normalizeWalletAddress(wallet.address) === normalizedAddress)
+}
+
+const formatWalletRoom = (wallet: KnownTransactionWallet) => wallet.roomName || wallet.roomKey || 'другого рума'
+
+const manualAmountResult = (
+  network: TransactionNetwork,
+  hash: string,
+  warning: string
+): ResolveTransactionResult => ({
+  success: true,
+  status: 'resolved',
+  txHash: hash,
+  network,
+  explorerUrl: explorers[network](hash),
+  warning,
+  requiresManualAmount: true,
+})
+
+const resolveMatchedTransfer = <T>(
+  matches: Array<{ value: T, wallet: KnownTransactionWallet }>,
+  roomName: string | undefined,
+  network: TransactionNetwork,
+  hash: string
+): { value?: T, manualResult?: ResolveTransactionResult } => {
+  const currentRoomMatches = matches.filter((match) => walletBelongsToRoom(match.wallet, roomName))
+
+  if (currentRoomMatches.length === 1) {
+    return { value: currentRoomMatches[0].value }
+  }
+
+  if (currentRoomMatches.length > 1) {
+    return {
+      manualResult: manualAmountResult(
+        network,
+        hash,
+        'В этой транзакции несколько переводов на сохраненные кошельки выбранного рума. Обработайте сумму вручную.'
+      )
+    }
+  }
+
+  if (matches.length > 0) {
+    const roomNames = Array.from(new Set(matches.map((match) => formatWalletRoom(match.wallet))))
+    return {
+      manualResult: manualAmountResult(
+        network,
+        hash,
+        `Транзакция найдена, но перевод идет на кошелек ${roomNames.join(', ')}, а не выбранного рума. Сумма не заполнена.`
+      )
+    }
+  }
+
+  return {
+    manualResult: manualAmountResult(
+      network,
+      hash,
+      'Транзакция найдена, но среди получателей нет сохраненного кошелька выбранного рума. Сумма не заполнена.'
+    )
+  }
+}
+
+const selectEthereumTransferLog = (
+  logs: EthereumLog[] | undefined,
+  input: ResolveTransactionInput,
+  hash: string
+) => {
+  const transferLogs = Array.isArray(logs)
+    ? logs.filter(log => String(log.topics?.[0]).toLowerCase() === transferTopic && log.data)
+    : []
+  if (!transferLogs.length) return null
+
+  if (input.knownWallets) {
+    const matches = transferLogs
+      .map((log) => ({ log, wallet: findKnownWallet(topicToEvmAddress(log.topics?.[2]), input.knownWallets) }))
+      .filter((match): match is { log: EthereumLog, wallet: KnownTransactionWallet } => Boolean(match.wallet))
+      .map((match) => ({ value: match.log, wallet: match.wallet }))
+    return resolveMatchedTransfer(matches, input.roomName, 'ethereum', hash)
+  }
+
+  return { value: transferLogs[0] }
+}
+
 const loadApiKeys = (): ApiKeys => {
   const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
   const envPaths = [
@@ -237,7 +363,15 @@ const withEuroConversion = async (
   }
 }
 
-const resolveTronTransaction = async (hash: string, keys: ApiKeys): Promise<ResolveTransactionResult | null> => {
+const tronTransferRecipient = (transfer: TronTransfer | undefined) => (
+  transfer?.to_address || transfer?.toAddress || transfer?.transferToAddress || transfer?.to || ''
+)
+
+const resolveTronTransaction = async (
+  hash: string,
+  keys: ApiKeys,
+  input: ResolveTransactionInput
+): Promise<ResolveTransactionResult | null> => {
   const url = `https://apilist.tronscanapi.com/api/transaction-info?hash=${hash}`
   const data = await fetchJson<TronTransactionResponse>(url, {
     headers: keys.TRONSCAN_API_KEY ? { 'TRON-PRO-API-KEY': keys.TRONSCAN_API_KEY } : undefined,
@@ -245,7 +379,30 @@ const resolveTronTransaction = async (hash: string, keys: ApiKeys): Promise<Reso
 
   if (!data.hash) return null
 
-  const transfer = data.tokenTransferInfo || data.trc20TransferInfo?.[0] || data.transfersAllList?.[0]
+  const transfers = [
+    data.tokenTransferInfo,
+    ...(data.trc20TransferInfo || []),
+    ...(data.transfersAllList || []),
+  ].filter(Boolean) as TronTransfer[]
+  let transfer = transfers[0]
+
+  if (input.knownWallets && transfers.length > 0) {
+    const matches = transfers
+      .map((item) => ({ transfer: item, wallet: findKnownWallet(tronTransferRecipient(item), input.knownWallets) }))
+      .filter((match): match is { transfer: TronTransfer, wallet: KnownTransactionWallet } => Boolean(match.wallet))
+      .map((match) => ({ value: match.transfer, wallet: match.wallet }))
+    const matched = resolveMatchedTransfer(matches, input.roomName, 'tron', hash)
+    if (matched.manualResult) return matched.manualResult
+    transfer = matched.value
+  }
+  if (input.knownWallets && !transfer) {
+    return manualAmountResult(
+      'tron',
+      hash,
+      'Транзакция найдена, но среди получателей нет сохраненного кошелька выбранного рума. Сумма не заполнена.'
+    )
+  }
+
   const rawAmount = transfer?.amount_str || transfer?.amount
   const decimals = transfer?.decimals
   const currency = transfer?.symbol
@@ -263,12 +420,38 @@ const resolveTronTransaction = async (hash: string, keys: ApiKeys): Promise<Reso
   }
 }
 
-const resolveBscTransaction = async (hash: string): Promise<ResolveTransactionResult | null> => {
+const bscOperationRecipient = (operation: BinplorerOperation | undefined) => (
+  operation?.to || operation?.toAddress || ''
+)
+
+const resolveBscTransaction = async (
+  hash: string,
+  input: ResolveTransactionInput
+): Promise<ResolveTransactionResult | null> => {
   const url = `https://api.binplorer.com/getTxInfo/${hash}?apiKey=freekey`
   const data = await fetchJson<BinplorerTransactionResponse>(url)
   if (!data.hash) return null
 
-  const operation = Array.isArray(data.operations) ? data.operations.find(item => item.type === 'transfer') || data.operations[0] : null
+  const operations = Array.isArray(data.operations) ? data.operations.filter(item => item.type === 'transfer') : []
+  let operation = operations[0] || (Array.isArray(data.operations) ? data.operations[0] : null)
+
+  if (input.knownWallets && operation) {
+    const matches = (operations.length ? operations : [operation])
+      .map((item) => ({ operation: item, wallet: findKnownWallet(bscOperationRecipient(item), input.knownWallets) }))
+      .filter((match): match is { operation: BinplorerOperation, wallet: KnownTransactionWallet } => Boolean(match.wallet))
+      .map((match) => ({ value: match.operation, wallet: match.wallet }))
+    const matched = resolveMatchedTransfer(matches, input.roomName, 'bsc', hash)
+    if (matched.manualResult) return matched.manualResult
+    operation = matched.value
+  }
+  if (input.knownWallets && !operation) {
+    return manualAmountResult(
+      'bsc',
+      hash,
+      'Транзакция найдена, но среди получателей нет сохраненного кошелька выбранного рума. Сумма не заполнена.'
+    )
+  }
+
   const amount = operation?.value ? formatTokenAmount(operation.value, operation.tokenInfo?.decimals) : undefined
   const currency = operation?.tokenInfo?.symbol
 
@@ -284,9 +467,35 @@ const resolveBscTransaction = async (hash: string): Promise<ResolveTransactionRe
   }
 }
 
-const resolveBitcoinTransaction = async (hash: string): Promise<ResolveTransactionResult | null> => {
+const formatBitcoinAmount = (sats: number) => {
+  const whole = Math.trunc(sats / btcSatsPerBitcoin)
+  const fraction = String(Math.abs(sats % btcSatsPerBitcoin)).padStart(8, '0').replace(/0+$/, '')
+  return fraction ? `${whole}.${fraction}` : String(whole)
+}
+
+const resolveBitcoinTransaction = async (
+  hash: string,
+  input: ResolveTransactionInput
+): Promise<ResolveTransactionResult | null> => {
   const data = await fetchJson<BitcoinTransactionResponse>(`https://blockstream.info/api/tx/${hash}`)
   if (data.txid !== hash) return null
+
+  const outputs = data.vout || []
+  let matchedOutput: BitcoinTransactionResponse['vout'][number] | undefined
+  if (input.knownWallets) {
+    const matches = outputs
+      .map((output) => ({
+        output,
+        wallet: findKnownWallet(output.scriptpubkey_address || '', input.knownWallets)
+      }))
+      .filter((match): match is { output: BitcoinTransactionResponse['vout'][number], wallet: KnownTransactionWallet } => Boolean(match.wallet))
+      .map((match) => ({ value: match.output, wallet: match.wallet }))
+    const matched = resolveMatchedTransfer(matches, input.roomName, 'bitcoin', hash)
+    if (matched.manualResult) return matched.manualResult
+    matchedOutput = matched.value
+  }
+
+  const amount = matchedOutput?.value ? formatBitcoinAmount(matchedOutput.value) : undefined
 
   return {
     success: true,
@@ -294,6 +503,9 @@ const resolveBitcoinTransaction = async (hash: string): Promise<ResolveTransacti
     txHash: hash,
     network: 'bitcoin',
     explorerUrl: explorers.bitcoin(hash),
+    amount,
+    currency: amount ? 'BTC' : undefined,
+    displayAmount: amount ? displayCryptoAmount(amount, 'BTC') : undefined,
   }
 }
 
@@ -307,7 +519,11 @@ const fetchEtherscanProxy = async (params: Record<string, string>, apiKey: strin
   return fetchJson<EtherscanProxyResponse>(`https://api.etherscan.io/v2/api?${search.toString()}`)
 }
 
-const resolveEthereumTransaction = async (hash: string, keys: ApiKeys): Promise<ResolveTransactionResult | null> => {
+const resolveEthereumTransaction = async (
+  hash: string,
+  keys: ApiKeys,
+  input: ResolveTransactionInput
+): Promise<ResolveTransactionResult | null> => {
   if (!keys.ETHERSCAN_API_KEY) return null
 
   const receiptData = await fetchEtherscanProxy({
@@ -326,9 +542,9 @@ const resolveEthereumTransaction = async (hash: string, keys: ApiKeys): Promise<
     ? transactionData.result as EthereumTransaction
     : null
 
-  const transferLog = Array.isArray(typedReceipt.logs)
-    ? typedReceipt.logs.find(log => String(log.topics?.[0]).toLowerCase() === transferTopic && log.data)
-    : null
+  const selectedTransferLog = selectEthereumTransferLog(typedReceipt.logs, input, hash)
+  if (selectedTransferLog?.manualResult) return selectedTransferLog.manualResult
+  const transferLog = selectedTransferLog?.value
 
   let amount: string | undefined
   let currency: string | undefined
@@ -357,8 +573,26 @@ const resolveEthereumTransaction = async (hash: string, keys: ApiKeys): Promise<
       currency = decodeStringCallResult(symbolData.result) || undefined
     }
   } else if (transaction?.value && transaction.value !== '0x0') {
+    if (input.knownWallets) {
+      const wallet = findKnownWallet((transaction as EthereumTransaction & { to?: string }).to || '', input.knownWallets)
+      const matched = resolveMatchedTransfer(
+        wallet ? [{ value: transaction, wallet }] : [],
+        input.roomName,
+        'ethereum',
+        hash
+      )
+      if (matched.manualResult) return matched.manualResult
+    }
     amount = formatTokenAmount(BigInt(transaction.value).toString(), 18)
     currency = 'ETH'
+  }
+
+  if (input.knownWallets && !amount) {
+    return manualAmountResult(
+      'ethereum',
+      hash,
+      'Транзакция найдена, но среди получателей нет сохраненного кошелька выбранного рума. Сумма не заполнена.'
+    )
   }
 
   return {
@@ -393,7 +627,12 @@ export const resolveTransaction = async (input: ResolveTransactionInput): Promis
     return { success: false, status: 'invalid', error: 'Не похоже на hash или ссылку транзакции' }
   }
 
-  const cacheKey = `${parsed.hash}:${input.roomName || ''}:${input.operationType || ''}`
+  const walletKey = (input.knownWallets || [])
+    .map((wallet) => `${normalizeRoomLookupKey(wallet.roomKey || wallet.roomName || '')}:${normalizeWalletAddress(wallet.address)}`)
+    .filter((value) => !value.endsWith(':'))
+    .sort()
+    .join(',')
+  const cacheKey = `${parsed.hash}:${input.roomName || ''}:${input.operationType || ''}:${walletKey}`
   const cached = cache.get(cacheKey)
   if (cached && cached.expiresAt > Date.now()) return cached.result
 
@@ -410,12 +649,12 @@ export const resolveTransaction = async (input: ResolveTransactionInput): Promis
       try {
         result =
           network === 'tron'
-            ? await resolveTronTransaction(parsed.hash, keys)
+            ? await resolveTronTransaction(parsed.hash, keys, input)
             : network === 'bsc'
-              ? await resolveBscTransaction(parsed.hash)
+              ? await resolveBscTransaction(parsed.hash, input)
               : network === 'bitcoin'
-                ? await resolveBitcoinTransaction(parsed.hash)
-                : await resolveEthereumTransaction(parsed.hash, keys)
+                ? await resolveBitcoinTransaction(parsed.hash, input)
+                : await resolveEthereumTransaction(parsed.hash, keys, input)
       } catch (err) {
         if (isLookupMissError(err)) {
           continue

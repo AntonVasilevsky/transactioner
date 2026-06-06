@@ -225,6 +225,8 @@ interface ResolveTransactionResult {
   convertedDisplayAmount?: string
   fxRate?: number
   fxDate?: string
+  warning?: string
+  requiresManualAmount?: boolean
   error?: string
 }
 
