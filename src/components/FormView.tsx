@@ -276,7 +276,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     
     if (roomName === 'RedStar') {
       if (isDeposit) {
-        return `RedStar  ${roomUsername}\nОтправил тебе ${amount} для депозита.\ntx id:\n${txId}`
+        return `RedStar  ${roomUsername}\nОтправил тебе ${amount} для депозита.\n${txId}`
       } else {
         return `RedStar  ${roomUsername}\nОтправил тебе ${amount} для вывода, кошелёк:\n${network}\n${wallet}`
       }
