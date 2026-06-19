@@ -52,6 +52,11 @@ interface TronTransfer {
   amount?: string | number
   decimals?: string | number
   symbol?: string
+  contract_address?: string
+  from_address?: string
+  fromAddress?: string
+  transferFromAddress?: string
+  from?: string
   to_address?: string
   toAddress?: string
   transferToAddress?: string
@@ -367,6 +372,29 @@ const tronTransferRecipient = (transfer: TronTransfer | undefined) => (
   transfer?.to_address || transfer?.toAddress || transfer?.transferToAddress || transfer?.to || ''
 )
 
+const tronTransferSender = (transfer: TronTransfer | undefined) => (
+  transfer?.from_address || transfer?.fromAddress || transfer?.transferFromAddress || transfer?.from || ''
+)
+
+const tronTransferDedupKey = (transfer: TronTransfer) => [
+  normalizeWalletAddress(transfer.contract_address || ''),
+  normalizeWalletAddress(tronTransferSender(transfer)),
+  normalizeWalletAddress(tronTransferRecipient(transfer)),
+  String(transfer.amount_str || transfer.amount || ''),
+  String(transfer.decimals || ''),
+  String(transfer.symbol || '').trim().toLowerCase(),
+].join('|')
+
+const uniqueTronTransfers = (transfers: TronTransfer[]) => {
+  const seen = new Set<string>()
+  return transfers.filter((transfer) => {
+    const key = tronTransferDedupKey(transfer)
+    if (seen.has(key)) return false
+    seen.add(key)
+    return true
+  })
+}
+
 const resolveTronTransaction = async (
   hash: string,
   keys: ApiKeys,
@@ -384,10 +412,11 @@ const resolveTronTransaction = async (
     ...(data.trc20TransferInfo || []),
     ...(data.transfersAllList || []),
   ].filter(Boolean) as TronTransfer[]
-  let transfer = transfers[0]
+  const uniqueTransfers = uniqueTronTransfers(transfers)
+  let transfer = uniqueTransfers[0]
 
-  if (input.knownWallets && transfers.length > 0) {
-    const matches = transfers
+  if (input.knownWallets && uniqueTransfers.length > 0) {
+    const matches = uniqueTransfers
       .map((item) => ({ transfer: item, wallet: findKnownWallet(tronTransferRecipient(item), input.knownWallets) }))
       .filter((match): match is { transfer: TronTransfer, wallet: KnownTransactionWallet } => Boolean(match.wallet))
       .map((match) => ({ value: match.transfer, wallet: match.wallet }))

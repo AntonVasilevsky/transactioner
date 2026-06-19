@@ -221,6 +221,93 @@ describe('transaction resolver helpers', () => {
     }
   })
 
+  it('deduplicates the same Tron transfer returned in multiple Tronscan fields', async () => {
+    const txHash = 'c40dde4e02e2f57fb2ed8c0edca7580c662f3e8dc1066b0b2ca79002bbd396fc'
+    const championWallet = 'TRdiZ5JepwWCvM4iEo4xtkh58WyjJja3mn'
+    const transfer = {
+      amount_str: '4600000000',
+      decimals: 6,
+      symbol: 'USDT',
+      to_address: championWallet,
+      from_address: 'T9yS5MLdoJ2YfJQuV2Dcvb3YNV7sY7DfBi',
+    }
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).includes('tronscanapi.com')) {
+        return jsonResponse({
+          hash: txHash,
+          tokenTransferInfo: transfer,
+          trc20TransferInfo: [transfer],
+          transfersAllList: [transfer],
+        })
+      }
+
+      return new Response('not found', { status: 404 })
+    })
+
+    const result = await resolveTransaction({
+      txInput: `https://tronscan.org/#/transaction/${txHash}`,
+      roomName: 'Champion Poker',
+      operationType: 'Deposit',
+      knownWallets: [
+        { address: championWallet, roomName: 'Champion Poker', roomKey: 'champion-poker' },
+      ],
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.requiresManualAmount).toBeUndefined()
+    expect(result.warning).toBeUndefined()
+    expect(result.currency).toBe('USDT')
+    expect(result.displayAmount).toBe('$4600')
+  })
+
+  it('still requires manual handling for distinct Tron transfers to selected room wallets', async () => {
+    const txHash = `a${'e'.repeat(63)}`
+    const firstWallet = 'TRdiZ5JepwWCvM4iEo4xtkh58WyjJja3mn'
+    const secondWallet = 'TEqdtBmCko3tVjhhjyravYFFf9RZX5tM1d'
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      if (String(input).includes('tronscanapi.com')) {
+        return jsonResponse({
+          hash: txHash,
+          trc20TransferInfo: [
+            {
+              amount_str: '4600000000',
+              decimals: 6,
+              symbol: 'USDT',
+              contract_address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+              to_address: firstWallet,
+              from_address: 'Tsender',
+            },
+            {
+              amount_str: '100000000',
+              decimals: 6,
+              symbol: 'USDT',
+              contract_address: 'TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t',
+              to_address: secondWallet,
+              from_address: 'Tsender',
+            },
+          ],
+        })
+      }
+
+      return new Response('not found', { status: 404 })
+    })
+
+    const result = await resolveTransaction({
+      txInput: txHash,
+      roomName: 'Champion Poker',
+      operationType: 'Deposit',
+      knownWallets: [
+        { address: firstWallet, roomName: 'Champion Poker', roomKey: 'champion-poker' },
+        { address: secondWallet, roomName: 'Champion Poker', roomKey: 'champion-poker' },
+      ],
+    })
+
+    expect(result.success).toBe(true)
+    expect(result.requiresManualAmount).toBe(true)
+    expect(result.displayAmount).toBeUndefined()
+    expect(result.warning).toContain('несколько переводов')
+  })
+
   it('treats a lookup 404 as not found instead of a resolver error', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('not found', { status: 404 }))
 
