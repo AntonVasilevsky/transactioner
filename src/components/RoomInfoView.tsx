@@ -40,6 +40,12 @@ const walletCopyText = (wallet: RoomWalletInfo) => [
   wallet.wallet_address,
 ].filter(Boolean).join('\n')
 
+const walletListTitle = (roomTitle: string, language: RoomLanguage) => {
+  if (language === 'EN') return `${roomTitle} - deposit wallets`
+  if (language === 'ES') return `${roomTitle} - billeteras de depósito`
+  return `${roomTitle} — депозитные кошельки`
+}
+
 const dealCopyText = (deal: RoomDealInfo, kind: 'short' | 'full') => {
   if (kind === 'short') return deal.short_text
   return [deal.short_text, deal.full_text].filter(Boolean).join('\n\n')
@@ -367,22 +373,21 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
             </select>
           </div>
         )}
-        {mode === 'deals' && (
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-400">Язык</label>
-            <div className="flex rounded-xl bg-slate-950 p-1">
-              {roomLanguageOptions.map((option) => (
-                <ModeButton key={option} active={language === option} onClick={() => setLanguage(option)}>{option}</ModeButton>
-              ))}
-            </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium text-slate-400">Язык</label>
+          <div className="flex rounded-xl bg-slate-950 p-1">
+            {roomLanguageOptions.map((option) => (
+              <ModeButton key={option} active={language === option} onClick={() => setLanguage(option)}>{option}</ModeButton>
+            ))}
           </div>
-        )}
+        </div>
       </div>
 
       {mode === 'wallets' ? (
         <WalletsPanel
           roomTitle={roomName(index?.profiles || [], selectedRoomKey)}
           wallets={wallets}
+          language={language}
           copied={copied}
           onCopy={copyText}
         />
@@ -435,17 +440,19 @@ function GhostIconCopyButton({ copied, onClick, label }: { copied: boolean, onCl
 function WalletsPanel({
   roomTitle,
   wallets,
+  language,
   copied,
   onCopy,
 }: {
   roomTitle: string
   wallets: RoomWalletInfo[]
+  language: RoomLanguage
   copied: string
   onCopy: (key: string, text: string) => void
 }) {
   const walletListText = wallets.length
     ? [
-        `${roomTitle} — депозитные кошельки`,
+        walletListTitle(roomTitle, language),
         ...wallets.map((wallet) => `${wallet.currency} ${wallet.network}: ${wallet.wallet_address}`.trim()),
       ].join('\n')
     : ''

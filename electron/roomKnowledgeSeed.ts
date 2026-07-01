@@ -394,6 +394,66 @@ export const roomKnowledgeSeed: RoomKnowledgeSeed = {
     {
       roomKey: 'champion-poker',
       dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'USDT TRC20',
+      currency: 'USDT',
+      network: 'TRC20',
+      feeText: 'без комиссии',
+      sortOrder: 11
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'USDT ERC20',
+      currency: 'USDT',
+      network: 'ERC20',
+      feeText: 'без комиссии',
+      sortOrder: 12
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'USDC ERC20',
+      currency: 'USDC',
+      network: 'ERC20',
+      feeText: 'без комиссии',
+      sortOrder: 13
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'BTC',
+      currency: 'BTC',
+      network: 'BTC',
+      feeText: 'без комиссии',
+      sortOrder: 14
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'ETH',
+      currency: 'ETH',
+      network: 'Ethereum',
+      feeText: 'без комиссии',
+      sortOrder: 15
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'Skrill EUR',
+      currency: 'Skrill',
+      network: 'EUR',
+      feeText: 'без комиссии',
+      sortOrder: 16
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
       operationType: 'Withdrawal',
       methodName: 'BTC / TRC20 / ERC20',
       feeText: 'без комиссии',
@@ -403,7 +463,65 @@ export const roomKnowledgeSeed: RoomKnowledgeSeed = {
       roomKey: 'champion-poker',
       dealType: 'Agent',
       operationType: 'Withdrawal',
-      methodName: 'Skrill',
+      methodName: 'USDC ERC20',
+      currency: 'USDC',
+      network: 'ERC20',
+      limitsText: '10 EUR',
+      feeText: 'без комиссии',
+      sortOrder: 21
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Withdrawal',
+      methodName: 'USDT ERC20',
+      currency: 'USDT',
+      network: 'ERC20',
+      limitsText: '10 EUR',
+      feeText: 'без комиссии',
+      sortOrder: 22
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Withdrawal',
+      methodName: 'USDT TRC20',
+      currency: 'USDT',
+      network: 'TRC20',
+      limitsText: '200 EUR',
+      feeText: 'без комиссии',
+      sortOrder: 23
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Withdrawal',
+      methodName: 'BTC',
+      currency: 'BTC',
+      network: 'BTC',
+      limitsText: '500 EUR',
+      feeText: 'без комиссии',
+      sortOrder: 24
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Withdrawal',
+      methodName: 'ETH',
+      currency: 'ETH',
+      network: 'Ethereum',
+      limitsText: '500 EUR',
+      feeText: 'без комиссии',
+      sortOrder: 25
+    },
+    {
+      roomKey: 'champion-poker',
+      dealType: 'Agent',
+      operationType: 'Withdrawal',
+      methodName: 'Skrill EUR',
+      currency: 'Skrill',
+      network: 'EUR',
+      limitsText: '10 EUR',
       feeText: '1% комиссия',
       sortOrder: 30
     },

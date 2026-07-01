@@ -1,4 +1,4 @@
-import type { LinkVerificationFieldKey } from './linkVerificationRules'
+import type { LinkVerificationFieldKey, LinkVerificationRoomRule } from './linkVerificationRules'
 
 export interface RoomRegistrationStatLike {
   roomName?: string | null
@@ -123,6 +123,38 @@ export const buildLinkVerificationFieldValues = (values: {
     messengerUsername: username
   }
 }
+
+export const preserveIdentityFieldsForRoomRule = (
+  values: { username: string; roomId: string; email: string },
+  rule: Pick<LinkVerificationRoomRule, 'requiredFields' | 'sheet2RoomUsernameField'>
+) => {
+  const nextValues = {
+    username: values.username,
+    roomId: values.roomId,
+    email: values.email,
+  }
+  const username = values.username.trim()
+  const roomId = values.roomId.trim()
+  const needsUsername = rule.requiredFields.some((field) => (
+    field === 'username' || field === 'nick' || field === 'userId'
+  )) || rule.sheet2RoomUsernameField === 'username' || rule.sheet2RoomUsernameField === 'nick' || rule.sheet2RoomUsernameField === 'userId'
+  const needsRoomId = rule.requiredFields.includes('roomId') || rule.sheet2RoomUsernameField === 'roomId'
+
+  if (needsUsername && !username && roomId) nextValues.username = roomId
+  if (needsRoomId && !roomId && username) nextValues.roomId = username
+
+  return nextValues
+}
+
+export const resolveIdentityFieldsForRoomChange = (
+  values: { username: string; roomId: string; email: string },
+  rule: Pick<LinkVerificationRoomRule, 'requiredFields' | 'sheet2RoomUsernameField'>,
+  preserveData: boolean
+) => (
+  preserveData
+    ? preserveIdentityFieldsForRoomRule(values, rule)
+    : { username: '', roomId: '', email: '' }
+)
 
 export const buildLinkVerificationTemplateValues = (values: {
   roomName: string

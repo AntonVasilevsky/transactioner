@@ -419,7 +419,29 @@ describe('TransactionerDatabase', () => {
       'nexa',
       'redstar'
     ])
-    expect(firstIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')).toHaveLength(3)
+    const championMethods = firstIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')
+    expect(championMethods).toHaveLength(14)
+    expect(championMethods).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        operation_type: 'Withdrawal',
+        method_name: 'USDT TRC20',
+        currency: 'USDT',
+        network: 'TRC20',
+        limits_text: '200 EUR',
+      }),
+      expect.objectContaining({
+        operation_type: 'Withdrawal',
+        method_name: 'BTC',
+        currency: 'BTC',
+        limits_text: '500 EUR',
+      }),
+      expect.objectContaining({
+        operation_type: 'Deposit',
+        method_name: 'USDC ERC20',
+        currency: 'USDC',
+        network: 'ERC20',
+      }),
+    ]))
     expect(firstIndex.dealOptions.filter((deal) => deal.room_key === 'nexa')).toEqual([
       { room_key: 'nexa', deal_type: 'Agent', language: 'RU' },
       { room_key: 'nexa', deal_type: 'Agent', language: 'EN' },
@@ -435,7 +457,7 @@ describe('TransactionerDatabase', () => {
     const secondIndex = db.getRoomKnowledgeIndex()
 
     expect(secondIndex.profiles.filter((profile) => profile.room_key === 'champion-poker')).toHaveLength(1)
-    expect(secondIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')).toHaveLength(3)
+    expect(secondIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')).toHaveLength(14)
   })
 
   it('keeps admin-edited room deals after reinitializing seed data', () => {
@@ -544,6 +566,47 @@ describe('TransactionerDatabase', () => {
 
     expect(created.success).toBe(true)
     expect(db.getRoomWallets('redstar', 'General').some((row) => row.wallet_address === '0xnew-usdc')).toBe(true)
+  })
+
+  it('saves editable room payment method limits and keeps inactive methods visible in admin', () => {
+    const created = db.saveRoomPaymentMethod({
+      room_key: 'redstar',
+      deal_type: 'General',
+      operation_type: 'Deposit',
+      method_name: 'USDT TRC20',
+      currency: 'USDT',
+      network: 'TRC20',
+      limits_text: 'min 200 USDT',
+      is_active: 0,
+      sort_order: 777,
+    })
+
+    expect(created.success).toBe(true)
+    expect(db.getRoomKnowledgeIndex().paymentMethods.some((row) => row.id === created.id)).toBe(false)
+
+    const adminMethod = db.getRoomKnowledgeAdminIndex().paymentMethods.find((row) => row.id === created.id)
+    expect(adminMethod?.limits_text).toBe('min 200 USDT')
+    expect(adminMethod?.is_active).toBe(0)
+
+    const edited = db.saveRoomPaymentMethod({
+      id: created.id,
+      room_key: 'redstar',
+      deal_type: 'General',
+      operation_type: 'Deposit',
+      method_name: 'USDT TRC20',
+      currency: 'USDT',
+      network: 'TRC20',
+      limits_text: 'min 100 USDT',
+      is_active: 1,
+      sort_order: 777,
+    })
+
+    expect(edited.success).toBe(true)
+    expect(db.getRoomKnowledgeIndex().paymentMethods.find((row) => row.id === created.id)?.limits_text).toBe('min 100 USDT')
+
+    const deleted = db.deleteRoomPaymentMethod(Number(created.id))
+    expect(deleted.success).toBe(true)
+    expect(db.getRoomKnowledgeAdminIndex().paymentMethods.some((row) => row.id === created.id)).toBe(false)
   })
 
   it('returns active room deals filtered by room, language, and deal type', () => {

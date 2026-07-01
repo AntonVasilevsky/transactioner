@@ -29,6 +29,7 @@ export interface ResolveTransactionResult {
   txHash?: string
   network?: TransactionNetwork
   explorerUrl?: string
+  transactionTimestamp?: string
   amount?: string
   currency?: string
   displayAmount?: string
@@ -65,6 +66,9 @@ interface TronTransfer {
 
 interface TronTransactionResponse {
   hash?: string
+  block_timestamp?: string | number
+  blockTimestamp?: string | number
+  timestamp?: string | number
   tokenTransferInfo?: TronTransfer
   trc20TransferInfo?: TronTransfer[]
   transfersAllList?: TronTransfer[]
@@ -83,6 +87,9 @@ interface BinplorerOperation {
 
 interface BinplorerTransactionResponse {
   hash?: string
+  timestamp?: string | number
+  time?: string | number
+  blockTime?: string | number
   operations?: BinplorerOperation[]
 }
 
@@ -103,10 +110,18 @@ interface EthereumReceipt {
 interface EthereumTransaction {
   value?: string
   to?: string
+  blockNumber?: string
+}
+
+interface EthereumBlock {
+  timestamp?: string
 }
 
 interface BitcoinTransactionResponse {
   txid?: string
+  status?: {
+    block_time?: number
+  }
   vout?: Array<{
     scriptpubkey_address?: string
     value?: number
@@ -135,6 +150,17 @@ const knownTokenSymbols: Partial<Record<TransactionNetwork, Record<string, strin
   bsc: {
     '0x55d398326f99059ff775485246999027b3197955': 'USDT',
     '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': 'USDC',
+  },
+}
+
+const knownTokenDecimals: Partial<Record<TransactionNetwork, Record<string, number>>> = {
+  ethereum: {
+    '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': 6,
+    '0xdac17f958d2ee523a2206206994597c13d831ec7': 6,
+  },
+  bsc: {
+    '0x55d398326f99059ff775485246999027b3197955': 18,
+    '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': 18,
   },
 }
 
@@ -201,6 +227,30 @@ const displayCryptoAmount = (amount: string, currency?: string) => {
   }
   return normalizedCurrency ? `${amount} ${normalizedCurrency}` : amount
 }
+
+const parseTransactionTimestamp = (value: unknown) => {
+  if (value === undefined || value === null || value === '') return undefined
+  let timestamp = typeof value === 'number' ? value : Number.NaN
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    timestamp = trimmed.startsWith('0x')
+      ? Number.parseInt(trimmed, 16)
+      : Number(trimmed)
+  }
+
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return undefined
+  const millis = timestamp < 1_000_000_000_000 ? timestamp * 1000 : timestamp
+  const date = new Date(millis)
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+}
+
+const withTransactionTimestamp = (
+  result: ResolveTransactionResult,
+  transactionTimestamp?: string
+): ResolveTransactionResult => (
+  transactionTimestamp ? { ...result, transactionTimestamp } : result
+)
 
 const normalizeRoomLookupKey = (value: string) => String(value || '')
   .trim()
@@ -406,6 +456,7 @@ const resolveTronTransaction = async (
   })
 
   if (!data.hash) return null
+  const transactionTimestamp = parseTransactionTimestamp(data.block_timestamp || data.blockTimestamp || data.timestamp)
 
   const transfers = [
     data.tokenTransferInfo,
@@ -421,15 +472,15 @@ const resolveTronTransaction = async (
       .filter((match): match is { transfer: TronTransfer, wallet: KnownTransactionWallet } => Boolean(match.wallet))
       .map((match) => ({ value: match.transfer, wallet: match.wallet }))
     const matched = resolveMatchedTransfer(matches, input.roomName, 'tron', hash)
-    if (matched.manualResult) return matched.manualResult
+    if (matched.manualResult) return withTransactionTimestamp(matched.manualResult, transactionTimestamp)
     transfer = matched.value
   }
   if (input.knownWallets && !transfer) {
-    return manualAmountResult(
+    return withTransactionTimestamp(manualAmountResult(
       'tron',
       hash,
       'Транзакция найдена, но среди получателей нет сохраненного кошелька выбранного рума. Сумма не заполнена.'
-    )
+    ), transactionTimestamp)
   }
 
   const rawAmount = transfer?.amount_str || transfer?.amount
@@ -443,6 +494,7 @@ const resolveTronTransaction = async (
     txHash: hash,
     network: 'tron',
     explorerUrl: explorers.tron(hash),
+    transactionTimestamp,
     amount,
     currency,
     displayAmount: amount ? displayCryptoAmount(amount, currency) : undefined,
@@ -460,6 +512,7 @@ const resolveBscTransaction = async (
   const url = `https://api.binplorer.com/getTxInfo/${hash}?apiKey=freekey`
   const data = await fetchJson<BinplorerTransactionResponse>(url)
   if (!data.hash) return null
+  const transactionTimestamp = parseTransactionTimestamp(data.timestamp || data.time || data.blockTime)
 
   const operations = Array.isArray(data.operations) ? data.operations.filter(item => item.type === 'transfer') : []
   let operation = operations[0] || (Array.isArray(data.operations) ? data.operations[0] : null)
@@ -470,15 +523,15 @@ const resolveBscTransaction = async (
       .filter((match): match is { operation: BinplorerOperation, wallet: KnownTransactionWallet } => Boolean(match.wallet))
       .map((match) => ({ value: match.operation, wallet: match.wallet }))
     const matched = resolveMatchedTransfer(matches, input.roomName, 'bsc', hash)
-    if (matched.manualResult) return matched.manualResult
+    if (matched.manualResult) return withTransactionTimestamp(matched.manualResult, transactionTimestamp)
     operation = matched.value
   }
   if (input.knownWallets && !operation) {
-    return manualAmountResult(
+    return withTransactionTimestamp(manualAmountResult(
       'bsc',
       hash,
       'Транзакция найдена, но среди получателей нет сохраненного кошелька выбранного рума. Сумма не заполнена.'
-    )
+    ), transactionTimestamp)
   }
 
   const amount = operation?.value ? formatTokenAmount(operation.value, operation.tokenInfo?.decimals) : undefined
@@ -490,6 +543,7 @@ const resolveBscTransaction = async (
     txHash: hash,
     network: 'bsc',
     explorerUrl: explorers.bsc(hash),
+    transactionTimestamp,
     amount,
     currency,
     displayAmount: amount ? displayCryptoAmount(amount, currency) : undefined,
@@ -508,6 +562,7 @@ const resolveBitcoinTransaction = async (
 ): Promise<ResolveTransactionResult | null> => {
   const data = await fetchJson<BitcoinTransactionResponse>(`https://blockstream.info/api/tx/${hash}`)
   if (data.txid !== hash) return null
+  const transactionTimestamp = parseTransactionTimestamp(data.status?.block_time)
 
   const outputs = data.vout || []
   let matchedOutput: BitcoinTransactionResponse['vout'][number] | undefined
@@ -520,7 +575,7 @@ const resolveBitcoinTransaction = async (
       .filter((match): match is { output: BitcoinTransactionResponse['vout'][number], wallet: KnownTransactionWallet } => Boolean(match.wallet))
       .map((match) => ({ value: match.output, wallet: match.wallet }))
     const matched = resolveMatchedTransfer(matches, input.roomName, 'bitcoin', hash)
-    if (matched.manualResult) return matched.manualResult
+    if (matched.manualResult) return withTransactionTimestamp(matched.manualResult, transactionTimestamp)
     matchedOutput = matched.value
   }
 
@@ -532,6 +587,7 @@ const resolveBitcoinTransaction = async (
     txHash: hash,
     network: 'bitcoin',
     explorerUrl: explorers.bitcoin(hash),
+    transactionTimestamp,
     amount,
     currency: amount ? 'BTC' : undefined,
     displayAmount: amount ? displayCryptoAmount(amount, 'BTC') : undefined,
@@ -546,6 +602,23 @@ const fetchEtherscanProxy = async (params: Record<string, string>, apiKey: strin
     apikey: apiKey,
   })
   return fetchJson<EtherscanProxyResponse>(`https://api.etherscan.io/v2/api?${search.toString()}`)
+}
+
+const fetchEthereumTransactionTimestamp = async (blockNumber: string | undefined, apiKey: string) => {
+  if (!blockNumber) return undefined
+  try {
+    const blockData = await fetchEtherscanProxy({
+      action: 'eth_getBlockByNumber',
+      tag: blockNumber,
+      boolean: 'false',
+    }, apiKey)
+    const block = blockData.result && typeof blockData.result === 'object'
+      ? blockData.result as EthereumBlock
+      : null
+    return parseTransactionTimestamp(block?.timestamp)
+  } catch {
+    return undefined
+  }
 }
 
 const resolveEthereumTransaction = async (
@@ -570,9 +643,10 @@ const resolveEthereumTransaction = async (
   const transaction = transactionData.result && typeof transactionData.result === 'object'
     ? transactionData.result as EthereumTransaction
     : null
+  const transactionTimestamp = await fetchEthereumTransactionTimestamp(transaction?.blockNumber, keys.ETHERSCAN_API_KEY)
 
   const selectedTransferLog = selectEthereumTransferLog(typedReceipt.logs, input, hash)
-  if (selectedTransferLog?.manualResult) return selectedTransferLog.manualResult
+  if (selectedTransferLog?.manualResult) return withTransactionTimestamp(selectedTransferLog.manualResult, transactionTimestamp)
   const transferLog = selectedTransferLog?.value
 
   let amount: string | undefined
@@ -586,7 +660,9 @@ const resolveEthereumTransaction = async (
       data: '0x313ce567',
       tag: 'latest',
     }, keys.ETHERSCAN_API_KEY)
-    const decimals = Number.parseInt(String(decimalsData.result || '0x0'), 16)
+    const knownDecimals = knownTokenDecimals.ethereum?.[contract]
+    const fetchedDecimals = Number.parseInt(String(decimalsData.result || '0x0'), 16)
+    const decimals = fetchedDecimals > 0 ? fetchedDecimals : knownDecimals
     amount = formatTokenAmount(rawAmount, decimals)
 
     const knownCurrency = knownTokenSymbols.ethereum?.[contract]
@@ -610,18 +686,18 @@ const resolveEthereumTransaction = async (
         'ethereum',
         hash
       )
-      if (matched.manualResult) return matched.manualResult
+      if (matched.manualResult) return withTransactionTimestamp(matched.manualResult, transactionTimestamp)
     }
     amount = formatTokenAmount(BigInt(transaction.value).toString(), 18)
     currency = 'ETH'
   }
 
   if (input.knownWallets && !amount) {
-    return manualAmountResult(
+    return withTransactionTimestamp(manualAmountResult(
       'ethereum',
       hash,
       'Транзакция найдена, но среди получателей нет сохраненного кошелька выбранного рума. Сумма не заполнена.'
-    )
+    ), transactionTimestamp)
   }
 
   return {
@@ -630,6 +706,7 @@ const resolveEthereumTransaction = async (
     txHash: hash,
     network: 'ethereum',
     explorerUrl: explorers.ethereum(hash),
+    transactionTimestamp,
     amount,
     currency,
     displayAmount: amount ? displayCryptoAmount(amount, currency) : undefined,

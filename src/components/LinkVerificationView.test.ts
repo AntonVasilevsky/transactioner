@@ -8,6 +8,7 @@ import {
   composePlayerDataByRule,
   getLinkVerificationUsernameFieldLabel,
   normalizeMessengerLabel,
+  resolveIdentityFieldsForRoomChange,
   sortLinkVerificationRoomOptions,
   toDirectusMessenger
 } from '../utils/linkVerificationFormatting'
@@ -96,11 +97,11 @@ describe('LinkVerificationView helpers', () => {
     expect(text).toBe('login=hero-login; nick=hero-login; user=hero-login; id=1483304; mail=hero@example.com; data=hero-login / 1483304 / hero@example.com')
   })
 
-  it('uses contact field for messenger placeholders in request templates', () => {
+  it('uses the selected messenger name and contact field in room-specific request templates', () => {
     const values = buildLinkVerificationTemplateValues({
       roomName: 'Nexa',
       playerData: 'hero-nick / 1483304 / hero@example.com',
-      messenger: 'Telegram',
+      messenger: 'Discord',
       messengerUsername: '@hero-contact',
       username: 'hero-nick',
       roomId: '1483304',
@@ -113,7 +114,8 @@ describe('LinkVerificationView helpers', () => {
     )
 
     expect(text).toContain('hero-nick / 1483304 / hero@example.com')
-    expect(text).toContain('messenger: @hero-contact')
+    expect(text).toContain('Discord: @hero-contact')
+    expect(text).not.toContain('messenger: @hero-contact')
     expect(text).not.toContain('messenger: hero-nick')
   })
 
@@ -163,6 +165,48 @@ Telegram: @AlexanderChazov
     expect(fields[resolveLinkVerificationRoomRule('PartyPoker').sheet2RoomUsernameField]).toBe('hero-nick')
     expect(fields[resolveLinkVerificationRoomRule('RedStar').sheet2RoomUsernameField]).toBe('hero-nick')
     expect(fields[resolveLinkVerificationRoomRule('Basepoker').sheet2RoomUsernameField]).toBe('hero-nick')
+  })
+
+  it('clears identity fields when switching rooms without preserve mode', () => {
+    const result = resolveIdentityFieldsForRoomChange(
+      { username: 'hero-login', roomId: '1483304', email: 'hero@example.com' },
+      resolveLinkVerificationRoomRule('Champion Poker'),
+      false
+    )
+
+    expect(result).toEqual({
+      username: '',
+      roomId: '',
+      email: ''
+    })
+  })
+
+  it('carries a typed Room ID into username when switching with preserve mode', () => {
+    const result = resolveIdentityFieldsForRoomChange(
+      { username: '', roomId: '1483304', email: 'hero@example.com' },
+      resolveLinkVerificationRoomRule('Champion Poker'),
+      true
+    )
+
+    expect(result).toEqual({
+      username: '1483304',
+      roomId: '1483304',
+      email: 'hero@example.com'
+    })
+  })
+
+  it('carries a typed username into Room ID when switching with preserve mode', () => {
+    const result = resolveIdentityFieldsForRoomChange(
+      { username: 'hero-login', roomId: '', email: 'hero@example.com' },
+      resolveLinkVerificationRoomRule('Nexa'),
+      true
+    )
+
+    expect(result).toEqual({
+      username: 'hero-login',
+      roomId: 'hero-login',
+      email: 'hero@example.com'
+    })
   })
 
   it('uses Standard as the default RedStar sheet2 deal', () => {

@@ -106,6 +106,21 @@ interface SaveRoomWalletInput {
   is_active?: number | boolean
 }
 
+interface SaveRoomPaymentMethodInput {
+  id?: number
+  room_key: string
+  deal_type: RoomDealType
+  operation_type: RoomOperationType
+  method_name: string
+  currency?: string | null
+  network?: string | null
+  fee_text?: string | null
+  limits_text?: string | null
+  note?: string | null
+  sort_order?: number
+  is_active?: number | boolean
+}
+
 interface UpdateCheckResult {
   available: boolean
   currentVersion: string
@@ -217,6 +232,7 @@ interface ResolveTransactionResult {
   txHash?: string
   network?: 'ethereum' | 'bsc' | 'tron' | 'bitcoin'
   explorerUrl?: string
+  transactionTimestamp?: string
   amount?: string
   currency?: string
   displayAmount?: string
@@ -264,6 +280,8 @@ interface Window {
     saveRoomProfile: (data: SaveRoomProfileInput) => Promise<SavePlayerResult>;
     saveRoomDeal: (data: SaveRoomDealInput) => Promise<SavePlayerResult>;
     saveRoomWallet: (data: SaveRoomWalletInput) => Promise<SavePlayerResult>;
+    saveRoomPaymentMethod: (data: SaveRoomPaymentMethodInput) => Promise<SavePlayerResult>;
+    deleteRoomPaymentMethod: (id: number) => Promise<MutationResult>;
     checkForUpdates: () => Promise<UpdateCheckResult>;
     resolveTransaction: (input: ResolveTransactionInput) => Promise<ResolveTransactionResult>;
     convertUsdToEur: (amount: string) => Promise<CurrencyConversionResult>;

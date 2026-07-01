@@ -70,7 +70,7 @@ Mail: <email>
     channel: 'messenger',
     body: `Проверка привязки Nexa
 <nick> / <id> / <email>
-messenger: <messenger_username>
+<messenger>: <messenger_username>
 @kapitonoff`
   },
   redstar: {

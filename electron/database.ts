@@ -87,6 +87,21 @@ export interface SaveRoomWalletInput {
   is_active?: number | boolean
 }
 
+export interface SaveRoomPaymentMethodInput {
+  id?: number
+  room_key: string
+  deal_type: RoomDealType
+  operation_type: 'Deposit' | 'Withdrawal'
+  method_name: string
+  currency?: string | null
+  network?: string | null
+  fee_text?: string | null
+  limits_text?: string | null
+  note?: string | null
+  sort_order?: number
+  is_active?: number | boolean
+}
+
 export interface RoomProfileInfo {
   id: number
   room_key: string
@@ -291,7 +306,7 @@ export class TransactionerDatabase {
     `).all() as RoomKnowledgeIndex['dealOptions']
     const paymentMethods = this.db.prepare(`
       SELECT * FROM room_payment_methods
-      WHERE is_active = 1
+      ${includeInactiveProfiles ? '' : 'WHERE is_active = 1'}
       ORDER BY room_key COLLATE NOCASE, sort_order, operation_type, method_name COLLATE NOCASE
     `).all() as RoomPaymentMethodInfo[]
     const walletOptions = this.db.prepare(`
@@ -571,6 +586,100 @@ export class TransactionerDatabase {
         `).get(roomKey, dealType, currency, network, walletAddress) as { id: number } | undefined
       )?.id)
       return { success: true, id }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  saveRoomPaymentMethod(data: SaveRoomPaymentMethodInput): SavePlayerResult {
+    try {
+      const roomKey = String(data.room_key || '').trim()
+      const dealType = data.deal_type || 'General'
+      const operationType = data.operation_type || 'Deposit'
+      const methodName = String(data.method_name || '').trim()
+      const currency = data.currency ? String(data.currency).trim().toUpperCase() : ''
+      const network = data.network ? String(data.network).trim().toUpperCase() : ''
+
+      if (!roomKey) return { success: false, error: 'Выберите рум' }
+      if (operationType !== 'Deposit' && operationType !== 'Withdrawal') return { success: false, error: 'Выберите операцию' }
+      if (!methodName && !currency && !network) return { success: false, error: 'Заполните метод, монету или сеть' }
+
+      const payload = {
+        roomKey,
+        dealType,
+        operationType,
+        methodName: methodName || `${currency} ${network}`.trim(),
+        currency,
+        network,
+        feeText: data.fee_text ? String(data.fee_text).trim() : null,
+        limitsText: data.limits_text ? String(data.limits_text).trim() : null,
+        note: data.note ? String(data.note).trim() : null,
+        sortOrder: Number(data.sort_order || 0),
+        isActive: data.is_active === false || data.is_active === 0 ? 0 : 1,
+      }
+
+      if (data.id) {
+        const result = this.db.prepare(`
+          UPDATE room_payment_methods
+          SET room_key = @roomKey,
+              deal_type = @dealType,
+              operation_type = @operationType,
+              method_name = @methodName,
+              currency = @currency,
+              network = @network,
+              fee_text = @feeText,
+              limits_text = @limitsText,
+              note = @note,
+              sort_order = @sortOrder,
+              is_active = @isActive
+          WHERE id = @id
+        `).run({ ...payload, id: Number(data.id) })
+        if (result.changes === 0) return { success: false, error: 'Метод не найден' }
+        return { success: true, id: Number(data.id) }
+      }
+
+      const result = this.db.prepare(`
+        INSERT INTO room_payment_methods (
+          room_key, deal_type, operation_type, method_name, currency, network,
+          fee_text, limits_text, note, sort_order, is_active
+        )
+        VALUES (
+          @roomKey, @dealType, @operationType, @methodName, @currency, @network,
+          @feeText, @limitsText, @note, @sortOrder, @isActive
+        )
+        ON CONFLICT(room_key, deal_type, operation_type, method_name, currency, network) DO UPDATE SET
+          fee_text = excluded.fee_text,
+          limits_text = excluded.limits_text,
+          note = excluded.note,
+          sort_order = excluded.sort_order,
+          is_active = excluded.is_active
+      `).run(payload)
+      const id = Number(result.lastInsertRowid || (
+        this.db.prepare(`
+          SELECT id FROM room_payment_methods
+          WHERE room_key = ? COLLATE NOCASE
+            AND deal_type = ? COLLATE NOCASE
+            AND operation_type = ? COLLATE NOCASE
+            AND method_name = ? COLLATE NOCASE
+            AND currency = ? COLLATE NOCASE
+            AND network = ? COLLATE NOCASE
+        `).get(roomKey, dealType, operationType, payload.methodName, currency, network) as { id: number } | undefined
+      )?.id)
+      return { success: true, id }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  deleteRoomPaymentMethod(id: number): MutationResult {
+    try {
+      const methodId = Number(id)
+      if (!Number.isFinite(methodId) || methodId <= 0) return { success: false, error: 'Метод не найден' }
+      const result = this.db.prepare('DELETE FROM room_payment_methods WHERE id = ?').run(methodId)
+      if (result.changes === 0) return { success: false, error: 'Метод не найден' }
+      return { success: true }
     } catch (err: unknown) {
       console.error(err)
       return { success: false, error: err instanceof Error ? err.message : String(err) }

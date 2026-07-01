@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDailyDatabaseBackup, createDatabaseSnapshotBackup } from './backup'
 import { convertUsdToEur, parseCurrencyAmount } from './currency'
-import { TransactionerDatabase, type RoomDealType, type RoomLanguage, type SaveRoomDealInput, type SaveRoomProfileInput, type SaveRoomWalletInput } from './database'
+import { TransactionerDatabase, type RoomDealType, type RoomLanguage, type SaveRoomDealInput, type SaveRoomPaymentMethodInput, type SaveRoomProfileInput, type SaveRoomWalletInput } from './database'
 import { resolveTransaction, type KnownTransactionWallet } from './transactionResolver'
 import { checkForUpdate, isAllowedReleaseUrl } from './updates'
 
@@ -137,6 +137,18 @@ ipcMain.handle('save-room-deal', (_, data: SaveRoomDealInput) => {
 ipcMain.handle('save-room-wallet', (_, data: SaveRoomWalletInput) => {
   runRoomEditBackup()
   const result = store?.saveRoomWallet(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('save-room-payment-method', (_, data: SaveRoomPaymentMethodInput) => {
+  runRoomEditBackup()
+  const result = store?.saveRoomPaymentMethod(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('delete-room-payment-method', (_, id: number) => {
+  runRoomEditBackup()
+  const result = store?.deleteRoomPaymentMethod(id) ?? { success: false, error: 'База данных недоступна' }
   if (result.success) runDailyBackup()
   return result
 })

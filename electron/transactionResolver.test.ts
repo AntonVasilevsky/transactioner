@@ -53,6 +53,7 @@ describe('transaction resolver helpers', () => {
 
     const txHash = `0x${'a'.repeat(64)}`
     const rawUsdcAmount = '12a05f200'.padStart(64, '0')
+    const blockTimestamp = Math.floor(Date.UTC(2026, 5, 20, 12, 0, 0) / 1000)
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
       const url = String(input)
       if (url.includes('frankfurter.dev')) {
@@ -75,7 +76,10 @@ describe('transaction resolver helpers', () => {
         })
       }
       if (action === 'eth_getTransactionByHash') {
-        return jsonResponse({ result: { value: '0x0' } })
+        return jsonResponse({ result: { value: '0x0', blockNumber: '0x10' } })
+      }
+      if (action === 'eth_getBlockByNumber') {
+        return jsonResponse({ result: { timestamp: `0x${blockTimestamp.toString(16)}` } })
       }
       if (action === 'eth_call' && requestUrl.searchParams.get('data') === '0x313ce567') {
         return jsonResponse({ result: '0x6' })
@@ -98,6 +102,7 @@ describe('transaction resolver helpers', () => {
       expect(result.currency).toBe('USDC')
       expect(result.displayAmount).toBe('$5000')
       expect(result.convertedDisplayAmount).toBe('€4600.00')
+      expect(result.transactionTimestamp).toBe(new Date(blockTimestamp * 1000).toISOString())
       expect(fetchMock).toHaveBeenCalled()
     } finally {
       rmSync(tempDir, { recursive: true, force: true })
@@ -162,6 +167,60 @@ describe('transaction resolver helpers', () => {
       expect(result.currency).toBe('USDC')
       expect(result.displayAmount).toBe('$59')
       expect(fetchMock).toHaveBeenCalled()
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('falls back to known Ethereum stablecoin decimals when decimals call is empty', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'transactioner-api-keys-'))
+    const apiKeysPath = path.join(tempDir, 'api-keys.env')
+    writeFileSync(apiKeysPath, 'ETHERSCAN_API_KEY=test-key\n')
+    process.env.TRANSACTIONER_API_KEYS_PATH = apiKeysPath
+
+    const txHash = `0x${'9'.repeat(64)}`
+    const nexaWallet = '0x3ca9feab5bc29852f16b3a30ca4deb5117979fb7'
+    const rawAmount = BigInt(220400000).toString(16).padStart(64, '0')
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const requestUrl = new URL(String(input))
+      const action = requestUrl.searchParams.get('action')
+      if (action === 'eth_getTransactionReceipt') {
+        return jsonResponse({
+          result: {
+            logs: [
+              {
+                address: '0xdAC17F958D2ee523a2206206994597C13D831ec7',
+                data: `0x${rawAmount}`,
+                topics: [transferTopic, addressTopic('0xee7ae85f2fe2239e27d9c1e23fffe168d63b4055'), addressTopic(nexaWallet)],
+              },
+            ],
+          },
+        })
+      }
+      if (action === 'eth_getTransactionByHash') {
+        return jsonResponse({ result: { value: '0x0' } })
+      }
+      if (action === 'eth_call' && requestUrl.searchParams.get('data') === '0x313ce567') {
+        return jsonResponse({ result: '0x0' })
+      }
+
+      return jsonResponse({ result: null })
+    })
+
+    try {
+      const result = await resolveTransaction({
+        txInput: `https://etherscan.io/tx/${txHash}`,
+        roomName: 'Nexa',
+        operationType: 'Deposit',
+        knownWallets: [
+          { address: nexaWallet, roomName: 'Nexa', roomKey: 'nexa' },
+        ],
+      })
+
+      expect(result.success).toBe(true)
+      expect(result.currency).toBe('USDT')
+      expect(result.amount).toBe('220.4')
+      expect(result.displayAmount).toBe('$220.4')
     } finally {
       rmSync(tempDir, { recursive: true, force: true })
     }
@@ -235,6 +294,7 @@ describe('transaction resolver helpers', () => {
       if (String(input).includes('tronscanapi.com')) {
         return jsonResponse({
           hash: txHash,
+          block_timestamp: 1781876916000,
           tokenTransferInfo: transfer,
           trc20TransferInfo: [transfer],
           transfersAllList: [transfer],
@@ -258,6 +318,7 @@ describe('transaction resolver helpers', () => {
     expect(result.warning).toBeUndefined()
     expect(result.currency).toBe('USDT')
     expect(result.displayAmount).toBe('$4600')
+    expect(result.transactionTimestamp).toBe('2026-06-19T13:48:36.000Z')
   })
 
   it('still requires manual handling for distinct Tron transfers to selected room wallets', async () => {
@@ -358,6 +419,7 @@ describe('transaction resolver helpers', () => {
       if (url === `https://blockstream.info/api/tx/${txHash}`) {
         return jsonResponse({
           txid: txHash,
+          status: { block_time: 1781876916 },
           vout: [
             { scriptpubkey_address: 'bc1qwsv0zew92jkaxetvn2tvp5jrz3pyl5u2phx57t', value: 2169403 },
             { scriptpubkey_address: 'bc1qrt637h6zvq5pulyycn8lrutm8s0k05x5px7csz', value: 15671398 },
@@ -379,6 +441,7 @@ describe('transaction resolver helpers', () => {
     expect(result.success).toBe(true)
     expect(result.network).toBe('bitcoin')
     expect(result.displayAmount).toBe('0.02169403 BTC')
+    expect(result.transactionTimestamp).toBe('2026-06-19T13:48:36.000Z')
   })
 
   it('does not fill a Bitcoin amount when the output matches another room wallet', async () => {

@@ -15,6 +15,7 @@ import {
   composePlayerDataByRule,
   getLinkVerificationUsernameFieldLabel,
   normalizeMessengerLabel,
+  resolveIdentityFieldsForRoomChange,
   sortLinkVerificationRoomOptions,
   toDirectusMessenger
 } from '../utils/linkVerificationFormatting'
@@ -276,10 +277,27 @@ export default function LinkVerificationView() {
     return roomOptions.filter((name) => matchesRoomSearch([name], query))
   }, [roomName, roomOptions, roomQuery])
 
-  const selectRoom = (name: string) => {
+  const selectRoom = (name: string, preserveData = false) => {
     const nextRule = resolveLinkVerificationRoomRule(name)
+    const nextIdentity = resolveIdentityFieldsForRoomChange({ username, roomId, email }, nextRule, preserveData)
     setRoomName(name)
     setRoomQuery(name)
+    setUsername(nextIdentity.username)
+    setRoomId(nextIdentity.roomId)
+    setEmail(nextIdentity.email)
+    if (!preserveData) {
+      setSelectedMessenger('')
+      setMessengerQuery('')
+      setMessengerUsername('')
+      if (!sourceWasSelectedManually.current) {
+        setSource('')
+        setSourceQuery('')
+      }
+      setIsSheet2NickManual(false)
+      setSheet2NickManual('')
+      setIsSheet2RoomUsernameManual(false)
+      setSheet2RoomUsernameManual('')
+    }
     setTemplateKey(nextRule.defaultTemplateKey)
     setDealText(nextRule.deal.dealText || '')
     setDealSchema(nextRule.deal.directusDealSchema || '')
@@ -344,7 +362,7 @@ export default function LinkVerificationView() {
                   onKeyDown={(event) => {
                     if (event.key === 'Enter' && filteredRoomOptions[0]) {
                       event.preventDefault()
-                      selectRoom(filteredRoomOptions[0])
+                      selectRoom(filteredRoomOptions[0], event.shiftKey)
                     }
                     if (event.key === 'Escape') {
                       setIsRoomPickerOpen(false)
@@ -363,7 +381,7 @@ export default function LinkVerificationView() {
                         key={name}
                         type="button"
                         onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => selectRoom(name)}
+                        onClick={(event) => selectRoom(name, event.shiftKey)}
                         className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
                           name === roomName
                             ? 'bg-blue-600/20 text-blue-200'
