@@ -592,6 +592,19 @@ export class TransactionerDatabase {
     }
   }
 
+  deleteRoomWallet(id: number): MutationResult {
+    try {
+      const walletId = Number(id)
+      if (!Number.isFinite(walletId) || walletId <= 0) return { success: false, error: 'Кошелек не найден' }
+      const result = this.db.prepare('DELETE FROM room_wallets WHERE id = ?').run(walletId)
+      if (result.changes === 0) return { success: false, error: 'Кошелек не найден' }
+      return { success: true }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
   saveRoomPaymentMethod(data: SaveRoomPaymentMethodInput): SavePlayerResult {
     try {
       const roomKey = String(data.room_key || '').trim()
@@ -960,6 +973,86 @@ export class TransactionerDatabase {
       ON player_contacts(contact_value COLLATE NOCASE);
     `)
     this.seedRoomKnowledge(roomKnowledgeSeed)
+    this.migrateWalletsToPaymentMethods()
+    this.cleanupCombinedDepositMethodsBackedByWallets()
+  }
+
+  private migrateWalletsToPaymentMethods() {
+    this.db.prepare(`
+      INSERT INTO room_payment_methods (
+        room_key, deal_type, operation_type, method_name, currency, network,
+        fee_text, limits_text, note, sort_order, is_active
+      )
+      SELECT
+        grouped.room_key,
+        grouped.deal_type,
+        'Deposit',
+        CASE
+          WHEN UPPER(TRIM(grouped.currency)) = UPPER(TRIM(grouped.network)) THEN TRIM(grouped.currency)
+          ELSE TRIM(grouped.currency || ' ' || grouped.network)
+        END,
+        grouped.currency,
+        grouped.network,
+        grouped.fee_text,
+        NULL,
+        grouped.note,
+        grouped.sort_order,
+        grouped.is_active
+      FROM (
+        SELECT
+          room_key,
+          deal_type,
+          currency,
+          network,
+          MAX(fee_text) AS fee_text,
+          MAX(note) AS note,
+          MIN(sort_order) AS sort_order,
+          MAX(is_active) AS is_active
+        FROM room_wallets
+        WHERE TRIM(currency) != ''
+          AND TRIM(network) != ''
+        GROUP BY
+          room_key,
+          deal_type,
+          UPPER(TRIM(currency)),
+          UPPER(TRIM(network))
+      ) grouped
+      WHERE NOT EXISTS (
+          SELECT 1
+          FROM room_payment_methods method
+          WHERE method.room_key = grouped.room_key
+            AND method.deal_type = grouped.deal_type
+            AND method.operation_type = 'Deposit'
+            AND UPPER(TRIM(method.currency)) = UPPER(TRIM(grouped.currency))
+            AND UPPER(TRIM(method.network)) = UPPER(TRIM(grouped.network))
+        )
+    `).run()
+  }
+
+  private cleanupCombinedDepositMethodsBackedByWallets() {
+    this.db.prepare(`
+      DELETE FROM room_payment_methods
+      WHERE operation_type = 'Deposit'
+        AND (
+          method_name LIKE '%/%'
+          OR currency LIKE '%/%'
+          OR network LIKE '%/%'
+        )
+        AND EXISTS (
+          SELECT 1
+          FROM room_wallets wallet
+          WHERE wallet.room_key = room_payment_methods.room_key
+            AND wallet.deal_type = room_payment_methods.deal_type
+        )
+        AND NOT EXISTS (
+          SELECT 1
+          FROM room_wallets wallet
+          WHERE wallet.room_key = room_payment_methods.room_key
+            AND wallet.deal_type = room_payment_methods.deal_type
+            AND UPPER(TRIM(wallet.currency)) = UPPER(TRIM(room_payment_methods.currency))
+            AND UPPER(TRIM(wallet.network)) = UPPER(TRIM(room_payment_methods.network))
+        )
+    `).run()
   }
 
   private seedRoomKnowledge(seed: RoomKnowledgeSeed) {

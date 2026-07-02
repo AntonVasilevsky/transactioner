@@ -280,6 +280,7 @@ interface Window {
     saveRoomProfile: (data: SaveRoomProfileInput) => Promise<SavePlayerResult>;
     saveRoomDeal: (data: SaveRoomDealInput) => Promise<SavePlayerResult>;
     saveRoomWallet: (data: SaveRoomWalletInput) => Promise<SavePlayerResult>;
+    deleteRoomWallet: (id: number) => Promise<MutationResult>;
     saveRoomPaymentMethod: (data: SaveRoomPaymentMethodInput) => Promise<SavePlayerResult>;
     deleteRoomPaymentMethod: (id: number) => Promise<MutationResult>;
     checkForUpdates: () => Promise<UpdateCheckResult>;

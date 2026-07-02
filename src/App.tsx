@@ -64,12 +64,16 @@ function App() {
     }
   }, [])
 
-  useEffect(() => {
-    if (currentView !== 'roomInfo') return
+  const scrollMainToTop = () => {
     window.requestAnimationFrame(() => {
       mainRef.current?.scrollTo({ top: 0 })
     })
-  }, [currentView])
+  }
+
+  const navigateTo = (view: ViewState) => {
+    setCurrentView(view)
+    scrollMainToTop()
+  }
 
   const normalizeAccount = (account: Account): Account => ({
     ...account,
@@ -113,7 +117,7 @@ function App() {
         <div className="p-4 lg:p-6 mb-8 flex items-center justify-center lg:justify-start gap-3">
           <button
             type="button"
-            onClick={() => setCurrentView('search')}
+            onClick={() => navigateTo('search')}
             className="rounded-xl transition-transform hover:scale-105 focus:outline-none focus:ring-2 focus:ring-blue-500/60"
             title="На главный экран"
           >
@@ -133,26 +137,26 @@ function App() {
             icon={<Search size={20} />} 
             label="Поиск игрока" 
             active={currentView === 'search' || currentView === 'form'} 
-            onClick={() => setCurrentView('search')} 
+            onClick={() => navigateTo('search')}
           />
           <NavItem 
             icon={<Users size={20} />} 
             label="Все игроки" 
             active={currentView === 'list'} 
-            onClick={() => setCurrentView('list')} 
+            onClick={() => navigateTo('list')}
           />
           <NavItem 
             icon={<UserPlus size={20} />} 
             label="Добавить игрока" 
             active={currentView === 'add'} 
-            onClick={() => setCurrentView('add')} 
+            onClick={() => navigateTo('add')}
           />
           <NavItem
             icon={<Info size={20} />}
             label="Инфо по румам"
             active={currentView === 'roomInfo'}
             onClick={() => {
-              setCurrentView('roomInfo')
+              navigateTo('roomInfo')
               setRoomInfoHomeSignal((value) => value + 1)
             }}
           />
@@ -160,7 +164,7 @@ function App() {
             icon={<Link2 size={20} />}
             label="Проверка привязки"
             active={currentView === 'linkVerification'}
-            onClick={() => setCurrentView('linkVerification')}
+            onClick={() => navigateTo('linkVerification')}
           />
         </div>
 

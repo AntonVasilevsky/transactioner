@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { ArrowLeft, Eye, EyeOff, Pencil, Plus, Save, Search, Settings, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
+import { ArrowLeft, Eye, EyeOff, GripVertical, Pencil, Plus, Save, Search, Settings, Trash2 } from 'lucide-react'
 import { matchesRoomSearch } from '../utils/roomSearch'
 
-type AdminMode = 'deals' | 'wallets' | 'methods'
+type AdminMode = 'deals' | 'methods'
 const allDealTypes: RoomDealType[] = ['Agent', 'Direct', 'General']
 const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
 
@@ -62,6 +62,37 @@ const emptyPaymentMethod = (roomKey: string, dealType: RoomDealType): SaveRoomPa
   sort_order: 0,
   is_active: 1,
 })
+
+const walletFromMethod = (
+  method: Pick<SaveRoomPaymentMethodInput, 'room_key' | 'deal_type' | 'currency' | 'network' | 'sort_order' | 'is_active'>
+): SaveRoomWalletInput => ({
+  room_key: method.room_key,
+  deal_type: method.deal_type,
+  currency: method.currency || '',
+  network: method.network || '',
+  wallet_address: '',
+  memo_tag: '',
+  fee_text: '',
+  note: '',
+  verified_at: '',
+  sort_order: method.sort_order || 0,
+  is_active: method.is_active ?? 1,
+})
+
+const normalizeAdminToken = (value?: string | null) => String(value || '').trim().toUpperCase()
+
+const findWalletForMethod = (
+  wallets: RoomWalletInfo[],
+  method: Pick<SaveRoomPaymentMethodInput, 'currency' | 'network'>
+) => {
+  const currency = normalizeAdminToken(method.currency)
+  const network = normalizeAdminToken(method.network)
+  if (!currency || !network) return undefined
+  return wallets.find((wallet) => (
+    normalizeAdminToken(wallet.currency) === currency &&
+    normalizeAdminToken(wallet.network) === network
+  ))
+}
 
 const slugifyRoomKey = (value: string) => value
   .trim()
@@ -130,16 +161,6 @@ const paymentMethodToForm = (method: RoomPaymentMethodInfo): SaveRoomPaymentMeth
   is_active: method.is_active,
 })
 
-const hasWalletDraftContent = (wallet: SaveRoomWalletInput) => [
-  wallet.currency,
-  wallet.network,
-  wallet.wallet_address,
-  wallet.memo_tag,
-  wallet.fee_text,
-  wallet.note,
-  wallet.verified_at,
-].some((value) => String(value || '').trim())
-
 const hasPaymentMethodDraftContent = (method: SaveRoomPaymentMethodInput) => [
   method.method_name,
   method.currency,
@@ -178,7 +199,7 @@ export default function RoomAdminView({
   initialRoomKey?: string
   initialDealType?: RoomDealType
   initialLanguage?: RoomLanguage
-  onClose: () => void
+  onClose: (context?: { roomKey: string, dealType: RoomDealType, language: RoomLanguage }) => void
 }) {
   const [mode, setMode] = useState<AdminMode>(initialMode)
   const [index, setIndex] = useState<RoomKnowledgeIndex | null>(null)
@@ -214,6 +235,10 @@ export default function RoomAdminView({
       pageTopRef.current?.scrollIntoView({ block: 'start' })
       pageTopRef.current?.focus({ preventScroll: true })
     })
+  }
+
+  const closeWithCurrentContext = () => {
+    onClose({ roomKey, dealType, language })
   }
 
   const loadIndex = async (preferredRoomKey?: string) => {
@@ -336,6 +361,32 @@ export default function RoomAdminView({
         left.method_name.localeCompare(right.method_name, undefined, { sensitivity: 'base' })
       ))
   }, [index, roomKey, activeMethodDealType])
+
+  useEffect(() => {
+    if (mode !== 'methods' || !roomKey) return
+    const frame = window.requestAnimationFrame(() => {
+      const formMatchesRoom = paymentMethodForm &&
+        paymentMethodForm.room_key === roomKey &&
+        paymentMethodForm.deal_type === activeMethodDealType
+      const nextForm = formMatchesRoom
+        ? paymentMethodForm
+        : paymentMethods[0]
+          ? paymentMethodToForm(paymentMethods[0])
+          : emptyPaymentMethod(roomKey, activeMethodDealType)
+      if (!formMatchesRoom) setPaymentMethodForm(nextForm)
+
+      const matchedWallet = findWalletForMethod(wallets, nextForm)
+      const walletMatchesMethod = walletForm &&
+        walletForm.room_key === nextForm.room_key &&
+        walletForm.deal_type === nextForm.deal_type &&
+        normalizeAdminToken(walletForm.currency) === normalizeAdminToken(nextForm.currency) &&
+        normalizeAdminToken(walletForm.network) === normalizeAdminToken(nextForm.network)
+      if (!walletMatchesMethod) {
+        setWalletForm(matchedWallet ? walletToForm(matchedWallet) : walletFromMethod(nextForm))
+      }
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [mode, roomKey, activeMethodDealType, paymentMethods, wallets, paymentMethodForm, walletForm])
 
   const selectedRoomName = roomName(index?.profiles || [], roomKey)
   const selectedRoomProfile = index?.profiles.find((profile) => profile.room_key === roomKey)
@@ -462,53 +513,122 @@ export default function RoomAdminView({
     await loadIndex(selectedRoomProfile.room_key)
   }
 
-  const saveWallet = async () => {
-    if (!walletForm) return
-    const result = await window.electronAPI.saveRoomWallet(walletForm)
+  const deleteWallet = async (walletId = walletForm?.id) => {
+    if (!walletId) return
+    const targetRoomKey = walletForm?.room_key || roomKey
+    const targetDealType = walletForm?.deal_type || activeMethodDealType
+    const confirmed = window.confirm('Удалить этот кошелек? Это действие нельзя отменить.')
+    if (!confirmed) return
+    const result = await window.electronAPI.deleteRoomWallet(walletId)
     if (!result.success) {
       setMessage('')
-      setError(result.error || 'Не удалось сохранить кошелек')
+      setError(result.error || 'Не удалось удалить кошелек')
       return
     }
-    showMessage('Кошелек сохранен')
+    showMessage('Кошелек удален')
     await loadIndex()
-    const nextWallets = await window.electronAPI.getRoomWallets(walletForm.room_key, walletForm.deal_type)
+    const nextWallets = await window.electronAPI.getRoomWallets(targetRoomKey, targetDealType)
     setWallets(nextWallets)
-    const saved = result.id ? nextWallets.find((wallet) => wallet.id === result.id) : nextWallets[0]
-    setWalletForm(saved ? walletToForm(saved) : walletForm)
+    const preservedCurrent = walletForm?.id && walletForm.id !== walletId
+      ? nextWallets.find((wallet) => wallet.id === walletForm.id)
+      : null
+    setWalletForm(preservedCurrent
+      ? walletToForm(preservedCurrent)
+      : nextWallets[0]
+        ? walletToForm(nextWallets[0])
+        : emptyWallet(targetRoomKey, targetDealType)
+    )
   }
 
   const savePaymentMethod = async () => {
     if (!paymentMethodForm) return
+    const previousMethod = paymentMethodForm.id
+      ? index?.paymentMethods.find((method) => method.id === paymentMethodForm.id)
+      : undefined
+    const previousWallet = previousMethod?.operation_type === 'Deposit'
+      ? findWalletForMethod(wallets, previousMethod)
+      : undefined
     const methodLabel = [paymentMethodForm.currency, paymentMethodForm.network]
       .map((value) => String(value || '').trim())
       .filter(Boolean)
       .join(' ')
-    const result = await window.electronAPI.saveRoomPaymentMethod({
+    const methodPayload = {
       ...paymentMethodForm,
       method_name: methodLabel || paymentMethodForm.method_name,
-    })
+    }
+    const result = await window.electronAPI.saveRoomPaymentMethod(methodPayload)
     if (!result.success) {
       setMessage('')
       setError(result.error || 'Не удалось сохранить метод')
       return
     }
-    showMessage('Метод сохранен')
+
+    if (methodPayload.operation_type === 'Deposit') {
+      const walletMatchesMethod = walletForm &&
+        walletForm.room_key === methodPayload.room_key &&
+        walletForm.deal_type === methodPayload.deal_type &&
+        normalizeAdminToken(walletForm.currency) === normalizeAdminToken(methodPayload.currency) &&
+        normalizeAdminToken(walletForm.network) === normalizeAdminToken(methodPayload.network)
+      const walletPayload = walletMatchesMethod ? walletForm : walletFromMethod(methodPayload)
+      const walletAddress = String(walletPayload.wallet_address || '').trim()
+      if (walletAddress) {
+        const walletResult = await window.electronAPI.saveRoomWallet({
+          ...walletPayload,
+          room_key: methodPayload.room_key,
+          deal_type: methodPayload.deal_type,
+          currency: methodPayload.currency || '',
+          network: methodPayload.network || '',
+          wallet_address: walletAddress,
+          is_active: methodPayload.is_active,
+          sort_order: methodPayload.sort_order,
+        })
+        if (!walletResult.success) {
+          setMessage('')
+          setError(walletResult.error || 'Метод сохранен, но кошелек сохранить не удалось')
+          return
+        }
+      } else if (walletPayload.id) {
+        const deleteResult = await window.electronAPI.deleteRoomWallet(walletPayload.id)
+        if (!deleteResult.success) {
+          setMessage('')
+          setError(deleteResult.error || 'Метод сохранен, но пустой кошелек удалить не удалось')
+          return
+        }
+      }
+    } else if (previousWallet?.id) {
+      const deleteResult = await window.electronAPI.deleteRoomWallet(previousWallet.id)
+      if (!deleteResult.success) {
+        setMessage('')
+        setError(deleteResult.error || 'Метод сохранен, но связанный кошелек удалить не удалось')
+        return
+      }
+    }
+
+    showMessage(methodPayload.operation_type === 'Deposit' ? 'Метод и кошелек сохранены' : 'Метод сохранен')
     const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
+    const nextWallets = await window.electronAPI.getRoomWallets(methodPayload.room_key, methodPayload.deal_type)
     const nextMethods = nextIndex.paymentMethods
-      .filter((method) => method.room_key === paymentMethodForm.room_key && method.deal_type === paymentMethodForm.deal_type)
+      .filter((method) => method.room_key === methodPayload.room_key && method.deal_type === methodPayload.deal_type)
       .sort((left, right) => (
         (left.sort_order || 0) - (right.sort_order || 0) ||
         left.operation_type.localeCompare(right.operation_type) ||
         left.method_name.localeCompare(right.method_name, undefined, { sensitivity: 'base' })
       ))
     setIndex(nextIndex)
+    setWallets(nextWallets)
     const saved = result.id ? nextMethods.find((method) => method.id === result.id) : nextMethods[0]
-    setPaymentMethodForm(saved ? paymentMethodToForm(saved) : paymentMethodForm)
+    const savedForm = saved ? paymentMethodToForm(saved) : methodPayload
+    setPaymentMethodForm(savedForm)
+    const savedWallet = findWalletForMethod(nextWallets, savedForm)
+    setWalletForm(savedWallet ? walletToForm(savedWallet) : walletFromMethod(savedForm))
   }
 
   const deletePaymentMethod = async (methodId = paymentMethodForm?.id) => {
     if (!methodId) return
+    const methodToDelete = index?.paymentMethods.find((method) => method.id === methodId)
+    const linkedWallet = methodToDelete?.operation_type === 'Deposit'
+      ? findWalletForMethod(wallets, methodToDelete)
+      : undefined
     const targetRoomKey = paymentMethodForm?.room_key || roomKey
     const targetDealType = paymentMethodForm?.deal_type || activeMethodDealType
     const confirmed = window.confirm('Удалить этот метод? Это действие нельзя отменить.')
@@ -519,8 +639,17 @@ export default function RoomAdminView({
       setError(result.error || 'Не удалось удалить метод')
       return
     }
+    if (linkedWallet?.id) {
+      const deleteWalletResult = await window.electronAPI.deleteRoomWallet(linkedWallet.id)
+      if (!deleteWalletResult.success) {
+        setMessage('')
+        setError(deleteWalletResult.error || 'Метод удален, но связанный кошелек удалить не удалось')
+        return
+      }
+    }
     showMessage('Метод удален')
     const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
+    const nextWallets = await window.electronAPI.getRoomWallets(targetRoomKey, targetDealType)
     const nextMethods = nextIndex.paymentMethods
       .filter((method) => method.room_key === targetRoomKey && method.deal_type === targetDealType)
       .sort((left, right) => (
@@ -529,15 +658,68 @@ export default function RoomAdminView({
         left.method_name.localeCompare(right.method_name, undefined, { sensitivity: 'base' })
     ))
     setIndex(nextIndex)
+    setWallets(nextWallets)
     const preservedCurrent = paymentMethodForm?.id && paymentMethodForm.id !== methodId
       ? nextMethods.find((method) => method.id === paymentMethodForm.id)
       : null
-    setPaymentMethodForm(preservedCurrent
+    const nextForm = preservedCurrent
       ? paymentMethodToForm(preservedCurrent)
       : nextMethods[0]
-      ? paymentMethodToForm(nextMethods[0])
+        ? paymentMethodToForm(nextMethods[0])
         : emptyPaymentMethod(targetRoomKey, targetDealType)
-    )
+    setPaymentMethodForm(nextForm)
+    const nextWallet = findWalletForMethod(nextWallets, nextForm)
+    setWalletForm(nextWallet ? walletToForm(nextWallet) : walletFromMethod(nextForm))
+  }
+
+  const reorderPaymentMethods = async (orderedMethods: RoomPaymentMethodInfo[]) => {
+    if (!orderedMethods.length || !index) return
+    const reorderedMethods = orderedMethods.map((method, index) => ({
+      ...method,
+      sort_order: (index + 1) * 10,
+    }))
+    setIndex({
+      ...index,
+      paymentMethods: index.paymentMethods.map((method) => (
+        method.room_key === roomKey && method.deal_type === activeMethodDealType
+          ? reorderedMethods.find((ordered) => ordered.id === method.id) || method
+          : method
+      )),
+    })
+
+    for (const method of reorderedMethods) {
+      const methodResult = await window.electronAPI.saveRoomPaymentMethod(paymentMethodToForm(method))
+      if (!methodResult.success) {
+        setMessage('')
+        setError(methodResult.error || 'Не удалось сохранить порядок методов')
+        return
+      }
+
+      if (method.operation_type === 'Deposit') {
+        const linkedWallet = findWalletForMethod(wallets, method)
+        if (linkedWallet) {
+          const walletResult = await window.electronAPI.saveRoomWallet({
+            ...walletToForm(linkedWallet),
+            sort_order: method.sort_order,
+          })
+          if (!walletResult.success) {
+            setMessage('')
+            setError(walletResult.error || 'Порядок методов сохранен, но порядок кошелька обновить не удалось')
+            return
+          }
+        }
+      }
+    }
+
+    const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
+    const nextWallets = await window.electronAPI.getRoomWallets(roomKey, activeMethodDealType)
+    setIndex(nextIndex)
+    setWallets(nextWallets)
+    if (paymentMethodForm?.id) {
+      const currentMethod = nextIndex.paymentMethods.find((method) => method.id === paymentMethodForm.id)
+      if (currentMethod) setPaymentMethodForm(paymentMethodToForm(currentMethod))
+    }
+    showMessage('Порядок сохранен')
   }
 
   return (
@@ -552,7 +734,7 @@ export default function RoomAdminView({
         </div>
         <button
           type="button"
-          onClick={onClose}
+          onClick={closeWithCurrentContext}
           className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-blue-500 hover:text-slate-100"
         >
           <ArrowLeft size={15} />
@@ -635,7 +817,6 @@ export default function RoomAdminView({
         <div>
           <label className="mb-1 block text-sm font-medium text-slate-400">Раздел</label>
           <div className="flex rounded-xl bg-slate-950 p-1">
-            <ModeButton active={mode === 'wallets'} onClick={() => setMode('wallets')}>Кошельки</ModeButton>
             <ModeButton active={mode === 'deals'} onClick={() => setMode('deals')}>Сделки</ModeButton>
             <ModeButton active={mode === 'methods'} onClick={() => setMode('methods')}>Методы</ModeButton>
           </div>
@@ -757,21 +938,19 @@ export default function RoomAdminView({
         <PaymentMethodEditor
           methodForm={paymentMethodForm}
           methods={paymentMethods}
+          wallets={wallets}
+          walletForm={walletForm}
           roomKey={roomKey}
           dealType={activeMethodDealType}
           onChange={setPaymentMethodForm}
+          onWalletChange={setWalletForm}
           onSave={savePaymentMethod}
           onDelete={deletePaymentMethod}
+          onDeleteWallet={deleteWallet}
+          onReorder={reorderPaymentMethods}
         />
       ) : (
-        <WalletEditor
-          walletForm={walletForm}
-          wallets={wallets}
-          roomKey={roomKey}
-          dealType={activeMethodDealType}
-          onChange={setWalletForm}
-          onSave={saveWallet}
-        />
+        null
       )}
         </>
       )}
@@ -845,140 +1024,35 @@ function DealEditor({
   )
 }
 
-function WalletEditor({
-  walletForm,
-  wallets,
-  roomKey,
-  dealType,
-  onChange,
-  onSave,
-}: {
-  walletForm: SaveRoomWalletInput | null
-  wallets: RoomWalletInfo[]
-  roomKey: string
-  dealType: RoomDealType
-  onChange: (value: SaveRoomWalletInput) => void
-  onSave: () => void
-}) {
-  const currentForm = walletForm || emptyWallet(roomKey, dealType)
-  const isNewWallet = !currentForm.id
-  const showNewButton = !isNewWallet || hasWalletDraftContent(currentForm)
-
-  return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
-      <section className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h3 className="text-lg font-bold text-slate-100">Кошельки</h3>
-          {showNewButton && (
-            <button
-              type="button"
-              onClick={() => onChange(emptyWallet(roomKey, dealType))}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-blue-500 hover:text-slate-100"
-            >
-              <Plus size={15} />
-              {isNewWallet ? 'Очистить' : 'Новый'}
-            </button>
-          )}
-        </div>
-        {wallets.length ? (
-          <div className="space-y-2">
-            {wallets.map((wallet) => (
-              <button
-                key={wallet.id}
-                type="button"
-                onClick={() => onChange(walletToForm(wallet))}
-                className={`w-full rounded-lg border px-4 py-3 text-left transition-colors ${
-                  wallet.id === currentForm.id
-                    ? 'border-blue-500/60 bg-blue-500/10'
-                    : 'border-slate-700/60 bg-slate-900/60 hover:border-slate-600'
-                }`}
-              >
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-semibold text-slate-100">{wallet.currency} {wallet.network}</div>
-                  {!wallet.is_active && <span className="text-xs text-slate-500">неактивен</span>}
-                </div>
-                <div className="mt-1 break-all font-mono text-xs text-slate-400">{wallet.wallet_address}</div>
-              </button>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">
-            Кошельки пока не заполнены.
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h3 className="text-lg font-bold text-slate-100">{currentForm.id ? 'Редактировать' : 'Новый кошелек'}</h3>
-          <SaveButton onClick={onSave} />
-        </div>
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Монета">
-              <input
-                value={currentForm.currency}
-                onChange={(event) => onChange({ ...currentForm, currency: event.target.value })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-              />
-            </Field>
-            <Field label="Сеть">
-              <input
-                value={currentForm.network}
-                onChange={(event) => onChange({ ...currentForm, network: event.target.value })}
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-              />
-            </Field>
-          </div>
-          <Field label="Адрес">
-            <textarea
-              value={currentForm.wallet_address}
-              onChange={(event) => onChange({ ...currentForm, wallet_address: event.target.value })}
-              rows={4}
-              className="min-h-28 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 font-mono text-sm text-slate-100 outline-none focus:border-blue-500"
-            />
-          </Field>
-          <Field label="Комментарий">
-            <textarea
-              value={currentForm.note || ''}
-              onChange={(event) => onChange({ ...currentForm, note: event.target.value })}
-              rows={3}
-              className="min-h-24 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-slate-100 outline-none focus:border-blue-500"
-            />
-          </Field>
-          <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-300">
-            <input
-              type="checkbox"
-              checked={Boolean(currentForm.is_active)}
-              onChange={(event) => onChange({ ...currentForm, is_active: event.target.checked ? 1 : 0 })}
-              className="h-4 w-4"
-            />
-            Активен
-          </label>
-        </div>
-      </section>
-    </div>
-  )
-}
-
 function PaymentMethodEditor({
   methodForm,
   methods,
+  wallets,
+  walletForm,
   roomKey,
   dealType,
   onChange,
+  onWalletChange,
   onSave,
   onDelete,
+  onDeleteWallet,
+  onReorder,
 }: {
   methodForm: SaveRoomPaymentMethodInput | null
   methods: RoomPaymentMethodInfo[]
+  wallets: RoomWalletInfo[]
+  walletForm: SaveRoomWalletInput | null
   roomKey: string
   dealType: RoomDealType
   onChange: (value: SaveRoomPaymentMethodInput) => void
+  onWalletChange: (value: SaveRoomWalletInput) => void
   onSave: () => void
   onDelete: (methodId?: number) => void
+  onDeleteWallet: (walletId?: number) => void
+  onReorder: (orderedMethods: RoomPaymentMethodInfo[]) => void
 }) {
   const formSectionRef = useRef<HTMLElement | null>(null)
+  const [draggingMethodId, setDraggingMethodId] = useState<number | null>(null)
   const currentForm = methodForm && methodForm.room_key === roomKey && methodForm.deal_type === dealType
     ? methodForm
     : methods[0]
@@ -986,18 +1060,82 @@ function PaymentMethodEditor({
       : emptyPaymentMethod(roomKey, dealType)
   const isNewMethod = !currentForm.id
   const showNewButton = !isNewMethod || hasPaymentMethodDraftContent(currentForm)
+  const linkedWallet = findWalletForMethod(wallets, currentForm)
+  const walletFormMatchesMethod = walletForm &&
+    walletForm.room_key === roomKey &&
+    walletForm.deal_type === dealType &&
+    normalizeAdminToken(walletForm.currency) === normalizeAdminToken(currentForm.currency) &&
+    normalizeAdminToken(walletForm.network) === normalizeAdminToken(currentForm.network)
+  const currentWalletForm = walletFormMatchesMethod
+    ? walletForm
+    : linkedWallet
+      ? walletToForm(linkedWallet)
+      : walletFromMethod(currentForm)
   const scrollToForm = () => {
     window.requestAnimationFrame(() => {
       formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }
   const createMethod = () => {
-    onChange(emptyPaymentMethod(roomKey, dealType))
+    const nextMethod = emptyPaymentMethod(roomKey, dealType)
+    onChange(nextMethod)
+    onWalletChange(walletFromMethod(nextMethod))
     scrollToForm()
   }
   const editMethod = (method: RoomPaymentMethodInfo) => {
-    onChange(paymentMethodToForm(method))
+    const nextMethod = paymentMethodToForm(method)
+    const nextWallet = findWalletForMethod(wallets, nextMethod)
+    onChange(nextMethod)
+    onWalletChange(nextWallet ? walletToForm(nextWallet) : walletFromMethod(nextMethod))
     scrollToForm()
+  }
+  const updateMethodIdentity = (updates: Partial<SaveRoomPaymentMethodInput>) => {
+    const nextMethod = { ...currentForm, ...updates }
+    onChange(nextMethod)
+    if (nextMethod.operation_type === 'Deposit') {
+      onWalletChange({
+        ...currentWalletForm,
+        room_key: nextMethod.room_key,
+        deal_type: nextMethod.deal_type,
+        currency: nextMethod.currency || '',
+        network: nextMethod.network || '',
+        sort_order: nextMethod.sort_order,
+        is_active: nextMethod.is_active,
+      })
+    }
+  }
+  const updateWallet = (updates: Partial<SaveRoomWalletInput>) => {
+    onWalletChange({
+      ...currentWalletForm,
+      room_key: currentForm.room_key,
+      deal_type: currentForm.deal_type,
+      currency: currentForm.currency || '',
+      network: currentForm.network || '',
+      is_active: currentForm.is_active,
+      sort_order: currentForm.sort_order,
+      ...updates,
+    })
+  }
+  const dropMethodOn = (targetMethod: RoomPaymentMethodInfo) => {
+    if (!draggingMethodId || draggingMethodId === targetMethod.id) return
+    const draggedMethod = methods.find((method) => method.id === draggingMethodId)
+    if (!draggedMethod) return
+    const draggedIndex = methods.findIndex((method) => method.id === draggingMethodId)
+    const targetIndexInFullList = methods.findIndex((method) => method.id === targetMethod.id)
+    const withoutDragged = methods.filter((method) => method.id !== draggingMethodId)
+    const targetIndex = withoutDragged.findIndex((method) => method.id === targetMethod.id)
+    if (targetIndex === -1) return
+    const insertIndex = draggedIndex < targetIndexInFullList ? targetIndex + 1 : targetIndex
+    const reordered = [
+      ...withoutDragged.slice(0, insertIndex),
+      draggedMethod,
+      ...withoutDragged.slice(insertIndex),
+    ]
+    onReorder(reordered)
+  }
+  const allowDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
   }
 
   return (
@@ -1021,12 +1159,35 @@ function PaymentMethodEditor({
             {methods.map((method) => (
               <div
                 key={method.id}
-                className={`group relative rounded-lg border pr-24 transition-colors ${
+                onDragOver={allowDrop}
+                onDrop={(event) => {
+                  event.preventDefault()
+                  dropMethodOn(method)
+                  setDraggingMethodId(null)
+                }}
+                onDragEnd={() => setDraggingMethodId(null)}
+                className={`group relative rounded-lg border pl-11 pr-24 transition-colors ${
+                  draggingMethodId === method.id
+                    ? 'border-blue-400/70 bg-blue-500/20 opacity-80'
+                    :
                   method.id === currentForm.id
                     ? 'border-blue-500/60 bg-blue-500/10'
                     : 'border-slate-700/60 bg-slate-900/60 hover:border-slate-600'
                 }`}
               >
+                <div
+                  draggable
+                  onDragStart={(event) => {
+                    setDraggingMethodId(method.id)
+                    event.dataTransfer.effectAllowed = 'move'
+                    event.dataTransfer.setData('text/plain', String(method.id))
+                  }}
+                  title="Перетащить"
+                  aria-label="Перетащить метод"
+                  className="absolute left-3 top-1/2 flex h-9 w-7 -translate-y-1/2 cursor-grab items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200 active:cursor-grabbing"
+                >
+                  <GripVertical size={17} />
+                </div>
                 <button
                   type="button"
                   onClick={() => onChange(paymentMethodToForm(method))}
@@ -1093,7 +1254,7 @@ function PaymentMethodEditor({
           <Field label="Операция">
             <select
               value={currentForm.operation_type}
-              onChange={(event) => onChange({ ...currentForm, operation_type: event.target.value as RoomOperationType })}
+              onChange={(event) => updateMethodIdentity({ operation_type: event.target.value as RoomOperationType })}
               className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
             >
               <option value="Deposit">Депозит</option>
@@ -1104,7 +1265,7 @@ function PaymentMethodEditor({
             <Field label="Монета">
               <input
                 value={currentForm.currency || ''}
-                onChange={(event) => onChange({ ...currentForm, currency: event.target.value })}
+                onChange={(event) => updateMethodIdentity({ currency: event.target.value })}
                 placeholder="USDT"
                 className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
               />
@@ -1112,12 +1273,47 @@ function PaymentMethodEditor({
             <Field label="Сеть">
               <input
                 value={currentForm.network || ''}
-                onChange={(event) => onChange({ ...currentForm, network: event.target.value })}
+                onChange={(event) => updateMethodIdentity({ network: event.target.value })}
                 placeholder="TRC20"
                 className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
               />
             </Field>
           </div>
+          {currentForm.operation_type === 'Deposit' && (
+            <div className="rounded-xl border border-slate-700/70 bg-slate-900/45 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h4 className="text-sm font-bold text-slate-200">Кошелек для депозита</h4>
+                {currentWalletForm.id && (
+                  <button
+                    type="button"
+                    onClick={() => onDeleteWallet(currentWalletForm.id)}
+                    className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 px-3 py-2 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/10"
+                  >
+                    <Trash2 size={14} />
+                    Удалить кошелек
+                  </button>
+                )}
+              </div>
+              <div className="space-y-4">
+                <Field label="Адрес / почта / аккаунт">
+                  <textarea
+                    value={currentWalletForm.wallet_address}
+                    onChange={(event) => updateWallet({ wallet_address: event.target.value })}
+                    rows={4}
+                    className="min-h-28 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 font-mono text-sm text-slate-100 outline-none focus:border-blue-500"
+                  />
+                </Field>
+                <Field label="Комментарий к кошельку">
+                  <textarea
+                    value={currentWalletForm.note || ''}
+                    onChange={(event) => updateWallet({ note: event.target.value })}
+                    rows={3}
+                    className="min-h-20 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-blue-500"
+                  />
+                </Field>
+              </div>
+            </div>
+          )}
           <Field label="Лимиты">
             <input
               value={currentForm.limits_text || ''}

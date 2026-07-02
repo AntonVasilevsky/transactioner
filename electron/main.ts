@@ -140,6 +140,12 @@ ipcMain.handle('save-room-wallet', (_, data: SaveRoomWalletInput) => {
   if (result.success) runDailyBackup()
   return result
 })
+ipcMain.handle('delete-room-wallet', (_, id: number) => {
+  runRoomEditBackup()
+  const result = store?.deleteRoomWallet(id) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
 ipcMain.handle('save-room-payment-method', (_, data: SaveRoomPaymentMethodInput) => {
   runRoomEditBackup()
   const result = store?.saveRoomPaymentMethod(data) ?? { success: false, error: 'База данных недоступна' }

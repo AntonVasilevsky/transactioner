@@ -420,7 +420,11 @@ describe('TransactionerDatabase', () => {
       'redstar'
     ])
     const championMethods = firstIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')
-    expect(championMethods).toHaveLength(14)
+    expect(championMethods).toHaveLength(13)
+    expect(championMethods.some((method) => (
+      method.operation_type === 'Deposit' &&
+      method.method_name === 'BTC / TRC20 / ERC20 / Skrill'
+    ))).toBe(false)
     expect(championMethods).toEqual(expect.arrayContaining([
       expect.objectContaining({
         operation_type: 'Withdrawal',
@@ -447,6 +451,18 @@ describe('TransactionerDatabase', () => {
       { room_key: 'nexa', deal_type: 'Agent', language: 'EN' },
     ])
     expect(firstIndex.walletOptions.filter((wallet) => wallet.room_key === 'nexa')).toHaveLength(5)
+    const nexaDepositMethods = firstIndex.paymentMethods.filter((method) => (
+      method.room_key === 'nexa' &&
+      method.deal_type === 'Agent' &&
+      method.operation_type === 'Deposit'
+    ))
+    expect(nexaDepositMethods).toEqual(expect.arrayContaining([
+      expect.objectContaining({ method_name: 'USDT TRC20', currency: 'USDT', network: 'TRC20' }),
+      expect.objectContaining({ method_name: 'USDT BEP20', currency: 'USDT', network: 'BEP20' }),
+      expect.objectContaining({ method_name: 'USDC ERC20', currency: 'USDC', network: 'ERC20' }),
+      expect.objectContaining({ method_name: 'BTC', currency: 'BTC', network: 'BTC' }),
+    ]))
+    expect(nexaDepositMethods.some((method) => method.method_name === 'USDT / USDC / BTC')).toBe(false)
     expect(db.getRoomDeals('champion-poker', 'RU', 'Agent')[0].full_text).toContain('https://online.championpoker.com/promoRedirect')
     expect(db.getRoomDeals('champion-poker', 'EN', 'Direct')[0].full_text).toContain('https://online.championpoker.com/promoRedirect')
     expect(db.getRoomDeals('redstar', 'RU', 'General')[0].full_text).toContain('WPDEALS')
@@ -457,7 +473,7 @@ describe('TransactionerDatabase', () => {
     const secondIndex = db.getRoomKnowledgeIndex()
 
     expect(secondIndex.profiles.filter((profile) => profile.room_key === 'champion-poker')).toHaveLength(1)
-    expect(secondIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')).toHaveLength(14)
+    expect(secondIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')).toHaveLength(13)
   })
 
   it('keeps admin-edited room deals after reinitializing seed data', () => {
@@ -566,6 +582,10 @@ describe('TransactionerDatabase', () => {
 
     expect(created.success).toBe(true)
     expect(db.getRoomWallets('redstar', 'General').some((row) => row.wallet_address === '0xnew-usdc')).toBe(true)
+
+    const deleted = db.deleteRoomWallet(Number(created.id))
+    expect(deleted.success).toBe(true)
+    expect(db.getRoomWallets('redstar', 'General').some((row) => row.wallet_address === '0xnew-usdc')).toBe(false)
   })
 
   it('saves editable room payment method limits and keeps inactive methods visible in admin', () => {
@@ -573,10 +593,10 @@ describe('TransactionerDatabase', () => {
       room_key: 'redstar',
       deal_type: 'General',
       operation_type: 'Deposit',
-      method_name: 'USDT TRC20',
-      currency: 'USDT',
-      network: 'TRC20',
-      limits_text: 'min 200 USDT',
+      method_name: 'TEST RAIL',
+      currency: 'TEST',
+      network: 'RAIL',
+      limits_text: 'min 200 TEST',
       is_active: 0,
       sort_order: 777,
     })
@@ -585,7 +605,7 @@ describe('TransactionerDatabase', () => {
     expect(db.getRoomKnowledgeIndex().paymentMethods.some((row) => row.id === created.id)).toBe(false)
 
     const adminMethod = db.getRoomKnowledgeAdminIndex().paymentMethods.find((row) => row.id === created.id)
-    expect(adminMethod?.limits_text).toBe('min 200 USDT')
+    expect(adminMethod?.limits_text).toBe('min 200 TEST')
     expect(adminMethod?.is_active).toBe(0)
 
     const edited = db.saveRoomPaymentMethod({
@@ -593,16 +613,16 @@ describe('TransactionerDatabase', () => {
       room_key: 'redstar',
       deal_type: 'General',
       operation_type: 'Deposit',
-      method_name: 'USDT TRC20',
-      currency: 'USDT',
-      network: 'TRC20',
-      limits_text: 'min 100 USDT',
+      method_name: 'TEST RAIL',
+      currency: 'TEST',
+      network: 'RAIL',
+      limits_text: 'min 100 TEST',
       is_active: 1,
       sort_order: 777,
     })
 
     expect(edited.success).toBe(true)
-    expect(db.getRoomKnowledgeIndex().paymentMethods.find((row) => row.id === created.id)?.limits_text).toBe('min 100 USDT')
+    expect(db.getRoomKnowledgeIndex().paymentMethods.find((row) => row.id === created.id)?.limits_text).toBe('min 100 TEST')
 
     const deleted = db.deleteRoomPaymentMethod(Number(created.id))
     expect(deleted.success).toBe(true)
@@ -659,6 +679,11 @@ describe('TransactionerDatabase', () => {
       INSERT INTO room_wallets (
         room_key, deal_type, currency, network, wallet_address, fee_text, verified_at, is_active, sort_order
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('test-room', 'General', 'USDT', 'ERC20', '0xactive-second', 'без комиссии', '2026-02-16', 1, 25)
+    raw.prepare(`
+      INSERT INTO room_wallets (
+        room_key, deal_type, currency, network, wallet_address, fee_text, verified_at, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run('test-room', 'General', 'USDT', 'TRC20', 'Tinactive', 'не актуально', '2025-05-25', 0, 10)
     raw.prepare(`
       INSERT INTO room_wallets (
@@ -671,11 +696,35 @@ describe('TransactionerDatabase', () => {
     const generalWallets = db.getRoomWallets('test-room', 'General')
     const agentWallets = db.getRoomWallets('test-room', 'Agent')
 
-    expect(generalWallets).toHaveLength(2)
-    expect(generalWallets.map((wallet) => wallet.wallet_address)).toEqual(['0xactive', 'Tinactive'])
-    expect(generalWallets[1].is_active).toBe(0)
+    expect(generalWallets).toHaveLength(3)
+    expect(generalWallets.map((wallet) => wallet.wallet_address)).toEqual(['0xactive', '0xactive-second', 'Tinactive'])
+    expect(generalWallets[2].is_active).toBe(0)
     expect(agentWallets).toHaveLength(1)
     expect(agentWallets[0].wallet_address).toBe('bc1agent')
+
+    const migratedMethods = db.getRoomKnowledgeAdminIndex().paymentMethods.filter((method) => method.room_key === 'test-room')
+    expect(migratedMethods).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        deal_type: 'General',
+        operation_type: 'Deposit',
+        method_name: 'USDT ERC20',
+        currency: 'USDT',
+        network: 'ERC20',
+      }),
+      expect.objectContaining({
+        deal_type: 'Agent',
+        operation_type: 'Deposit',
+        method_name: 'BTC',
+        currency: 'BTC',
+        network: 'BTC',
+      }),
+    ]))
+    expect(migratedMethods.filter((method) => (
+      method.deal_type === 'General' &&
+      method.operation_type === 'Deposit' &&
+      method.currency === 'USDT' &&
+      method.network === 'ERC20'
+    ))).toHaveLength(1)
   })
 
   it('returns country availability rows for room deal filtering', () => {

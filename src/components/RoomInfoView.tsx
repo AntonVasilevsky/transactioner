@@ -5,6 +5,7 @@ import { matchesRoomSearch } from '../utils/roomSearch'
 
 type RoomInfoMode = 'wallets' | 'deals'
 const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
+const roomInfoSearchFrequencyKey = 'transactioner.roomInfo.roomSearchFrequency'
 
 const dealTypeLabels: Record<RoomDealType, string> = {
   General: 'Общая',
@@ -19,15 +20,46 @@ const roomName = (profiles: RoomProfileInfo[], roomKey: string) =>
 const uniqueDealTypes = (items: Array<{ deal_type: RoomDealType }>) =>
   Array.from(new Set(items.map((item) => item.deal_type))).sort()
 
-const sortRooms = (profiles: RoomProfileInfo[]) => [...profiles].sort((left, right) => {
+const sortRooms = (
+  profiles: RoomProfileInfo[],
+  searchFrequencies: Record<string, number> = {}
+) => {
+  return [...profiles].sort((left, right) => {
   const leftPinned = pinnedRoomOrder.indexOf(left.room_key)
   const rightPinned = pinnedRoomOrder.indexOf(right.room_key)
   const leftRank = leftPinned === -1 ? Number.POSITIVE_INFINITY : leftPinned
   const rightRank = rightPinned === -1 ? Number.POSITIVE_INFINITY : rightPinned
 
   if (leftRank !== rightRank) return leftRank - rightRank
+
+  if (leftPinned === -1 && rightPinned === -1) {
+    const countDiff = (searchFrequencies[right.room_key] || 0) - (searchFrequencies[left.room_key] || 0)
+    if (countDiff !== 0) return countDiff
+  }
+
   return left.display_name.localeCompare(right.display_name, undefined, { sensitivity: 'base' })
-})
+  })
+}
+
+const readRoomInfoSearchFrequencies = () => {
+  if (typeof window === 'undefined') return {} as Record<string, number>
+  try {
+    const parsed = JSON.parse(localStorage.getItem(roomInfoSearchFrequencyKey) || '{}') as Record<string, unknown>
+    const result: Record<string, number> = {}
+    for (const [key, value] of Object.entries(parsed)) {
+      const count = Number(value) || 0
+      if (count > 0) result[key] = count
+    }
+    return result
+  } catch {
+    return {}
+  }
+}
+
+const saveRoomInfoSearchFrequencies = (frequencies: Record<string, number>) => {
+  if (typeof window === 'undefined') return
+  localStorage.setItem(roomInfoSearchFrequencyKey, JSON.stringify(frequencies))
+}
 
 const countryStatusLabels: Record<RoomCountryStatus, string> = {
   Available: 'доступен',
@@ -35,8 +67,32 @@ const countryStatusLabels: Record<RoomCountryStatus, string> = {
   Check: 'нужно уточнить',
 }
 
-const walletCopyText = (wallet: RoomWalletInfo) => [
-  `${wallet.currency} ${wallet.network}`.trim(),
+const normalizePaymentToken = (value?: string | null) => String(value || '').trim().toUpperCase()
+
+const findWalletDepositMethod = (
+  wallet: RoomWalletInfo,
+  paymentMethods: RoomPaymentMethodInfo[]
+) => {
+  const currency = normalizePaymentToken(wallet.currency)
+  const network = normalizePaymentToken(wallet.network)
+  const depositMethods = paymentMethods.filter((method) => method.operation_type === 'Deposit' && method.is_active)
+  return depositMethods.find((method) => (
+    normalizePaymentToken(method.currency) === currency &&
+    normalizePaymentToken(method.network) === network
+  )) || depositMethods.find((method) => {
+    const methodText = normalizePaymentToken([method.method_name, method.currency, method.network].filter(Boolean).join(' '))
+    return Boolean(currency && network && methodText.includes(currency) && methodText.includes(network))
+  })
+}
+
+const walletDisplayTitle = (wallet: RoomWalletInfo, method?: RoomPaymentMethodInfo) => {
+  const base = `${wallet.currency} ${wallet.network}`.trim()
+  const fee = method?.fee_text || wallet.fee_text
+  return fee ? `${base} (${fee})` : base
+}
+
+const walletCopyTextWithMethod = (wallet: RoomWalletInfo, method?: RoomPaymentMethodInfo) => [
+  walletDisplayTitle(wallet, method),
   wallet.wallet_address,
 ].filter(Boolean).join('\n')
 
@@ -62,6 +118,7 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
   const [language, setLanguage] = useState<RoomLanguage>('RU')
   const [wallets, setWallets] = useState<RoomWalletInfo[]>([])
   const [deals, setDeals] = useState<RoomDealInfo[]>([])
+  const [roomSearchFrequencies, setRoomSearchFrequencies] = useState<Record<string, number>>(() => readRoomInfoSearchFrequencies())
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState('')
   const [isAdminOpen, setIsAdminOpen] = useState(false)
@@ -81,7 +138,7 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     window.electronAPI.getRoomKnowledgeIndex()
       .then((result) => {
         if (!active) return
-        const sortedProfiles = sortRooms(result.profiles)
+        const sortedProfiles = sortRooms(result.profiles, roomSearchFrequencies)
         const selectedRoom = sortedProfiles.find((profile) => profile.room_key === selectedRoomKeyRef.current) || sortedProfiles[0]
         setIndex(result)
         setSelectedRoomKey(selectedRoom?.room_key || '')
@@ -94,7 +151,7 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     return () => {
       active = false
     }
-  }, [refreshToken])
+  }, [refreshToken, roomSearchFrequencies])
 
   useEffect(() => {
     if (!hasSeenHomeSignal.current) {
@@ -126,8 +183,8 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     const filteredProfiles = query
       ? profiles.filter((profile) => matchesRoomSearch([profile.display_name, profile.room_key, profile.network_name], query))
       : profiles
-    return sortRooms(filteredProfiles)
-  }, [index, roomQuery, selectedRoomKey])
+    return sortRooms(filteredProfiles, roomSearchFrequencies)
+  }, [index, roomQuery, selectedRoomKey, roomSearchFrequencies])
 
   const roomCountryRows = useMemo(() => (
     (index?.countryOptions || [])
@@ -179,6 +236,18 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
       ? activeDealType
       : availableDealTypes[0]
 
+  const walletRoomPaymentMethods = useMemo(() => (
+    (index?.paymentMethods || []).filter((method) => (
+      method.room_key === selectedRoomKey &&
+      method.deal_type === activeWalletDealType &&
+      method.is_active
+    ))
+  ), [index, selectedRoomKey, activeWalletDealType])
+
+  const walletPaymentMethods = useMemo(() => (
+    walletRoomPaymentMethods.filter((method) => method.operation_type === 'Deposit')
+  ), [walletRoomPaymentMethods])
+
   useEffect(() => {
     if (!selectedRoomKey) return
     let active = true
@@ -218,6 +287,11 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     setSelectedCountryCode('')
     setRoomQuery(profile.display_name)
     setIsRoomPickerOpen(false)
+    setRoomSearchFrequencies((current) => {
+      const next = { ...current, [profile.room_key]: (current[profile.room_key] || 0) + 1 }
+      saveRoomInfoSearchFrequencies(next)
+      return next
+    })
   }
 
   if (loading) {
@@ -230,12 +304,19 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
         <div className={isAdminOpen ? '' : 'hidden'}>
           <RoomAdminView
             key={adminSessionKey}
-            initialMode={mode === 'deals' ? 'deals' : 'wallets'}
+            initialMode={mode === 'deals' ? 'deals' : 'methods'}
             initialRoomKey={selectedRoomKey}
             initialDealType={activeDealType}
             initialLanguage={language}
-            onClose={() => {
+            onClose={(adminContext) => {
               setIsAdminOpen(false)
+              if (adminContext?.roomKey) {
+                setSelectedRoomKey(adminContext.roomKey)
+                setRoomQuery(roomName(index?.profiles || [], adminContext.roomKey))
+                setSelectedCountryCode('')
+                setSelectedDealType(adminContext.dealType)
+                setLanguage(adminContext.language)
+              }
               setRefreshToken((value) => value + 1)
             }}
           />
@@ -387,6 +468,8 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
         <WalletsPanel
           roomTitle={roomName(index?.profiles || [], selectedRoomKey)}
           wallets={wallets}
+          paymentMethods={walletPaymentMethods}
+          hasConfiguredMethods={walletRoomPaymentMethods.length > 0}
           language={language}
           copied={copied}
           onCopy={copyText}
@@ -440,21 +523,35 @@ function GhostIconCopyButton({ copied, onClick, label }: { copied: boolean, onCl
 function WalletsPanel({
   roomTitle,
   wallets,
+  paymentMethods,
+  hasConfiguredMethods,
   language,
   copied,
   onCopy,
 }: {
   roomTitle: string
   wallets: RoomWalletInfo[]
+  paymentMethods: RoomPaymentMethodInfo[]
+  hasConfiguredMethods: boolean
   language: RoomLanguage
   copied: string
   onCopy: (key: string, text: string) => void
 }) {
-  const walletListText = wallets.length
+  const walletRows = wallets
+    .map((wallet) => ({
+      wallet,
+      method: findWalletDepositMethod(wallet, paymentMethods),
+    }))
+    .filter(({ method }) => !hasConfiguredMethods || method)
+    .sort((left, right) => (
+      ((left.method?.sort_order ?? left.wallet.sort_order) || 0) - ((right.method?.sort_order ?? right.wallet.sort_order) || 0) ||
+      walletDisplayTitle(left.wallet, left.method).localeCompare(walletDisplayTitle(right.wallet, right.method), undefined, { sensitivity: 'base' })
+    ))
+  const walletListText = walletRows.length
     ? [
         walletListTitle(roomTitle, language),
-        ...wallets.map((wallet) => `${wallet.currency} ${wallet.network}: ${wallet.wallet_address}`.trim()),
-      ].join('\n')
+        ...walletRows.map(({ wallet, method }) => walletCopyTextWithMethod(wallet, method)),
+      ].join('\n\n')
     : ''
 
   return (
@@ -462,7 +559,7 @@ function WalletsPanel({
       <section className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-lg font-bold text-slate-100">Кошельки</h3>
-          {wallets.length > 0 && (
+          {walletRows.length > 0 && (
             <GhostIconCopyButton
               copied={copied === 'wallets-all'}
               label="Скопировать все кошельки"
@@ -470,37 +567,25 @@ function WalletsPanel({
             />
           )}
         </div>
-        {wallets.length ? (
-          <div className="overflow-hidden rounded-lg border border-slate-700/60">
-            <table className="w-full table-fixed text-left text-sm">
-              <thead className="bg-slate-950/70 text-xs uppercase text-slate-500">
-                <tr>
-                  <th className="w-24 px-3 py-2">Монета</th>
-                  <th className="w-24 px-3 py-2">Сеть</th>
-                  <th className="px-3 py-2">Адрес</th>
-                  <th className="w-14 px-2 py-2 text-right" aria-label="Копирование" />
-                </tr>
-              </thead>
-              <tbody>
-                {wallets.map((wallet) => (
-                  <tr
-                    key={wallet.id}
-                    className="border-t border-slate-700/60 bg-slate-900/50 hover:bg-slate-900"
-                  >
-                    <td className="px-3 py-3 font-semibold text-slate-100">{wallet.currency}</td>
-                    <td className="px-3 py-3 text-slate-300">{wallet.network}</td>
-                    <td className="min-w-0 break-all px-3 py-3 font-mono text-xs text-slate-300">{wallet.wallet_address}</td>
-                    <td className="px-2 py-3 text-right">
-                      <GhostIconCopyButton
-                        copied={copied === `wallet-${wallet.id}`}
-                        label={`Скопировать ${wallet.currency} ${wallet.network}`}
-                        onClick={() => onCopy(`wallet-${wallet.id}`, walletCopyText(wallet))}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {walletRows.length ? (
+          <div className="space-y-2">
+            {walletRows.map(({ wallet, method }) => (
+              <div
+                key={wallet.id}
+                className="flex items-start justify-between gap-3 rounded-lg border border-slate-700/60 bg-slate-900/50 px-4 py-3"
+              >
+                <div className="min-w-0">
+                  <div className="font-semibold text-slate-100">{walletDisplayTitle(wallet, method)}</div>
+                  {method?.limits_text && <div className="mt-1 text-xs text-amber-200">{method.limits_text}</div>}
+                  <div className="mt-2 break-all font-mono text-xs text-slate-300">{wallet.wallet_address}</div>
+                </div>
+                <GhostIconCopyButton
+                  copied={copied === `wallet-${wallet.id}`}
+                  label={`Скопировать ${wallet.currency} ${wallet.network}`}
+                  onClick={() => onCopy(`wallet-${wallet.id}`, walletCopyTextWithMethod(wallet, method))}
+                />
+              </div>
+            ))}
           </div>
         ) : (
           <EmptyState text="Кошельки для этого рума пока не заполнены." />

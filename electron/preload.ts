@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   saveRoomProfile: (data: SaveRoomProfileInput) => ipcRenderer.invoke('save-room-profile', data),
   saveRoomDeal: (data: SaveRoomDealInput) => ipcRenderer.invoke('save-room-deal', data),
   saveRoomWallet: (data: SaveRoomWalletInput) => ipcRenderer.invoke('save-room-wallet', data),
+  deleteRoomWallet: (id: number) => ipcRenderer.invoke('delete-room-wallet', id),
   saveRoomPaymentMethod: (data: SaveRoomPaymentMethodInput) => ipcRenderer.invoke('save-room-payment-method', data),
   deleteRoomPaymentMethod: (id: number) => ipcRenderer.invoke('delete-room-payment-method', id),
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
