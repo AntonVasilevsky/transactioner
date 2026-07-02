@@ -387,14 +387,6 @@ export const roomKnowledgeSeed: RoomKnowledgeSeed = {
       roomKey: 'champion-poker',
       dealType: 'Agent',
       operationType: 'Deposit',
-      methodName: 'BTC / TRC20 / ERC20 / Skrill',
-      feeText: 'без комиссии',
-      sortOrder: 10
-    },
-    {
-      roomKey: 'champion-poker',
-      dealType: 'Agent',
-      operationType: 'Deposit',
       methodName: 'USDT TRC20',
       currency: 'USDT',
       network: 'TRC20',
@@ -450,14 +442,6 @@ export const roomKnowledgeSeed: RoomKnowledgeSeed = {
       network: 'EUR',
       feeText: 'без комиссии',
       sortOrder: 16
-    },
-    {
-      roomKey: 'champion-poker',
-      dealType: 'Agent',
-      operationType: 'Withdrawal',
-      methodName: 'BTC / TRC20 / ERC20',
-      feeText: 'без комиссии',
-      sortOrder: 20
     },
     {
       roomKey: 'champion-poker',
@@ -529,156 +513,131 @@ export const roomKnowledgeSeed: RoomKnowledgeSeed = {
       roomKey: 'redstar',
       dealType: 'General',
       operationType: 'Deposit',
-      methodName: 'USDT',
+      methodName: 'USDT TRC20',
       currency: 'USDT',
-      network: 'ERC20 / TRC20 / BEP20',
+      network: 'TRC20',
       feeText: 'уточнить перед переводом',
-      note: 'Кошельки обновились 05/04/2026.',
       sortOrder: 40
+    },
+    {
+      roomKey: 'redstar',
+      dealType: 'General',
+      operationType: 'Deposit',
+      methodName: 'USDT ERC20',
+      currency: 'USDT',
+      network: 'ERC20',
+      feeText: 'уточнить перед переводом',
+      sortOrder: 41
+    },
+    {
+      roomKey: 'redstar',
+      dealType: 'General',
+      operationType: 'Deposit',
+      methodName: 'USDT BEP20',
+      currency: 'USDT',
+      network: 'BEP20',
+      feeText: 'уточнить перед переводом',
+      sortOrder: 42
     },
     {
       roomKey: 'nexa',
       dealType: 'Agent',
       operationType: 'Deposit',
-      methodName: 'USDT / USDC / BTC',
-      currency: 'USDT / USDC / BTC',
-      network: 'TRC20 / ERC20 / BEP20 / BTC',
+      methodName: 'USDT TRC20',
+      currency: 'USDT',
+      network: 'TRC20',
       feeText: 'через нас, p2p',
       note: 'Все транзакции в руме только через нас.',
-      sortOrder: 50
+      sortOrder: 60
+    },
+    {
+      roomKey: 'nexa',
+      dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'USDT ERC20',
+      currency: 'USDT',
+      network: 'ERC20',
+      feeText: 'через нас, p2p',
+      note: 'Все транзакции в руме только через нас.',
+      sortOrder: 61
+    },
+    {
+      roomKey: 'nexa',
+      dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'USDT BEP20',
+      currency: 'USDT',
+      network: 'BEP20',
+      feeText: 'через нас, p2p',
+      note: 'Все транзакции в руме только через нас.',
+      sortOrder: 62
+    },
+    {
+      roomKey: 'nexa',
+      dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'USDC ERC20',
+      currency: 'USDC',
+      network: 'ERC20',
+      feeText: 'через нас, p2p',
+      note: 'Все транзакции в руме только через нас.',
+      sortOrder: 63
+    },
+    {
+      roomKey: 'nexa',
+      dealType: 'Agent',
+      operationType: 'Deposit',
+      methodName: 'BTC',
+      currency: 'BTC',
+      network: 'BTC',
+      feeText: 'через нас, p2p',
+      note: 'Все транзакции в руме только через нас.',
+      sortOrder: 64
     },
     {
       roomKey: 'nexa',
       dealType: 'Agent',
       operationType: 'Withdrawal',
-      methodName: 'USDT / USDC',
-      currency: 'USDT / USDC',
-      network: 'TRC20 / ERC20 / BEP20',
+      methodName: 'USDT TRC20',
+      currency: 'USDT',
+      network: 'TRC20',
       feeText: 'через нас, p2p',
       note: 'Все транзакции в руме только через нас.',
-      sortOrder: 60
-    }
-  ],
-  wallets: [
-    {
-      roomKey: 'champion-poker',
-      dealType: 'Agent',
-      currency: 'Skrill',
-      network: 'EUR',
-      walletAddress: 'pokerdeals.sofia@gmail.com',
-      note: 'Для депозита на Skrill рума, транзакции до 3k за одну транзакцию.',
-      sortOrder: 10
-    },
-    {
-      roomKey: 'champion-poker',
-      dealType: 'Agent',
-      currency: 'USDT',
-      network: 'TRC20',
-      walletAddress: 'TRdiZ5JepwWCvM4iEo4xtkh58WyjJja3mn',
-      note: 'Для депозита на крипто кошельки рума.',
-      sortOrder: 20
-    },
-    {
-      roomKey: 'champion-poker',
-      dealType: 'Agent',
-      currency: 'USDT',
-      network: 'ERC20',
-      walletAddress: '0x563715a0773d8Bc54F0014D19BfB586f353a80f6',
-      note: 'Для депозита на крипто кошельки рума.',
-      sortOrder: 30
-    },
-    {
-      roomKey: 'champion-poker',
-      dealType: 'Agent',
-      currency: 'USDC',
-      network: 'ERC20',
-      walletAddress: '0x563715a0773d8Bc54F0014D19BfB586f353a80f6',
-      note: 'Для депозита на крипто кошельки рума.',
-      sortOrder: 40
-    },
-    {
-      roomKey: 'champion-poker',
-      dealType: 'Agent',
-      currency: 'ETH',
-      network: 'Ethereum',
-      walletAddress: '0x563715a0773d8Bc54F0014D19BfB586f353a80f6',
-      note: 'BTC и Neteller нужно постоянно спрашивать, поскольку адреса могут меняться.',
-      sortOrder: 50
-    },
-    {
-      roomKey: 'redstar',
-      dealType: 'General',
-      currency: 'USDT',
-      network: 'ERC20',
-      walletAddress: '0xb9dea314d4d7670c983a81810046cd84642e4ab1',
-      note: 'Кошельки для депозита через нас.',
-      verifiedAt: '2026-04-05',
-      sortOrder: 60
-    },
-    {
-      roomKey: 'redstar',
-      dealType: 'General',
-      currency: 'USDT',
-      network: 'TRC20',
-      walletAddress: 'TEqdtBmCko3tVjhhjyravYFFf9RZX5tM1d',
-      note: 'Кошельки для депозита через нас.',
-      verifiedAt: '2026-04-05',
       sortOrder: 70
     },
     {
-      roomKey: 'redstar',
-      dealType: 'General',
-      currency: 'USDT',
-      network: 'BEP20',
-      walletAddress: '0x25b26e51caba38a7f658a029206a76c9a2642f86',
-      note: 'Кошельки для депозита через нас.',
-      verifiedAt: '2026-04-05',
-      sortOrder: 80
-    },
-    {
       roomKey: 'nexa',
       dealType: 'Agent',
-      currency: 'USDT',
-      network: 'TRC20',
-      walletAddress: 'TTyKPaFXB3XkkoaGJiksNbh7xE2JbbiBnf',
-      note: 'Актуальный кошелек для депозита в рум.',
-      sortOrder: 90
-    },
-    {
-      roomKey: 'nexa',
-      dealType: 'Agent',
-      currency: 'USDT',
-      network: 'BEP20',
-      walletAddress: '0x7fa4e95b52813d5eefd860d22bf8f19467bc9adc',
-      note: 'Актуальный кошелек для депозита в рум.',
-      sortOrder: 100
-    },
-    {
-      roomKey: 'nexa',
-      dealType: 'Agent',
+      operationType: 'Withdrawal',
+      methodName: 'USDT ERC20',
       currency: 'USDT',
       network: 'ERC20',
-      walletAddress: '0x3ca9feab5bc29852f16b3a30ca4deb5117979fb7',
-      note: 'Актуальный кошелек для депозита в рум.',
-      sortOrder: 110
+      feeText: 'через нас, p2p',
+      note: 'Все транзакции в руме только через нас.',
+      sortOrder: 71
     },
     {
       roomKey: 'nexa',
       dealType: 'Agent',
+      operationType: 'Withdrawal',
+      methodName: 'USDT BEP20',
+      currency: 'USDT',
+      network: 'BEP20',
+      feeText: 'через нас, p2p',
+      note: 'Все транзакции в руме только через нас.',
+      sortOrder: 72
+    },
+    {
+      roomKey: 'nexa',
+      dealType: 'Agent',
+      operationType: 'Withdrawal',
+      methodName: 'USDC ERC20',
       currency: 'USDC',
       network: 'ERC20',
-      walletAddress: '0x3ca9feab5bc29852f16b3a30ca4deb5117979fb7',
-      note: 'Актуальный кошелек для депозита в рум.',
-      sortOrder: 120
-    },
-    {
-      roomKey: 'nexa',
-      dealType: 'Agent',
-      currency: 'BTC',
-      network: 'BTC',
-      walletAddress: '3Dkoukico8xKJ45goYquzDhHpRjPdsjGRn',
-      note: 'Актуальный кошелек для депозита в рум.',
-      sortOrder: 130
+      feeText: 'через нас, p2p',
+      note: 'Все транзакции в руме только через нас.',
+      sortOrder: 73
     }
-  ]
+  ],
+  wallets: []
 }

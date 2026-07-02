@@ -542,6 +542,7 @@ function WalletsPanel({
   onCopy: (key: string, text: string) => void
 }) {
   const walletRows = wallets
+    .filter((wallet) => wallet.is_active)
     .map((wallet) => ({
       wallet,
       method: findWalletDepositMethod(wallet, paymentMethods),

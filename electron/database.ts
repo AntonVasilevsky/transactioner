@@ -178,6 +178,65 @@ export interface RoomKnowledgeIndex {
   countryOptions: RoomCountryAvailabilityInfo[]
 }
 
+const legacySeedWallets = [
+  ['champion-poker', 'Agent', 'Skrill', 'EUR', 'pokerdeals.sofia@gmail.com'],
+  ['champion-poker', 'Agent', 'USDT', 'TRC20', 'TRdiZ5JepwWCvM4iEo4xtkh58WyjJja3mn'],
+  ['champion-poker', 'Agent', 'USDT', 'ERC20', '0x563715a0773d8Bc54F0014D19BfB586f353a80f6'],
+  ['champion-poker', 'Agent', 'USDC', 'ERC20', '0x563715a0773d8Bc54F0014D19BfB586f353a80f6'],
+  ['champion-poker', 'Agent', 'ETH', 'Ethereum', '0x563715a0773d8Bc54F0014D19BfB586f353a80f6'],
+  ['redstar', 'General', 'USDT', 'ERC20', '0xb9dea314d4d7670c983a81810046cd84642e4ab1'],
+  ['redstar', 'General', 'USDT', 'TRC20', 'TEqdtBmCko3tVjhhjyravYFFf9RZX5tM1d'],
+  ['redstar', 'General', 'USDT', 'BEP20', '0x25b26e51caba38a7f658a029206a76c9a2642f86'],
+  ['nexa', 'Agent', 'USDT', 'TRC20', 'TTyKPaFXB3XkkoaGJiksNbh7xE2JbbiBnf'],
+  ['nexa', 'Agent', 'USDT', 'BEP20', '0x7fa4e95b52813d5eefd860d22bf8f19467bc9adc'],
+  ['nexa', 'Agent', 'USDT', 'ERC20', '0x3ca9feab5bc29852f16b3a30ca4deb5117979fb7'],
+  ['nexa', 'Agent', 'USDC', 'ERC20', '0x3ca9feab5bc29852f16b3a30ca4deb5117979fb7'],
+  ['nexa', 'Agent', 'BTC', 'BTC', '3Dkoukico8xKJ45goYquzDhHpRjPdsjGRn'],
+] as const
+
+const legacyCombinedPaymentMethods = [
+  {
+    roomKey: 'champion-poker',
+    dealType: 'Agent',
+    operationType: 'Deposit',
+    methodName: 'BTC / TRC20 / ERC20 / Skrill',
+    currency: '',
+    network: '',
+  },
+  {
+    roomKey: 'champion-poker',
+    dealType: 'Agent',
+    operationType: 'Withdrawal',
+    methodName: 'BTC / TRC20 / ERC20',
+    currency: '',
+    network: '',
+  },
+  {
+    roomKey: 'redstar',
+    dealType: 'General',
+    operationType: 'Deposit',
+    methodName: 'USDT',
+    currency: 'USDT',
+    network: 'ERC20 / TRC20 / BEP20',
+  },
+  {
+    roomKey: 'nexa',
+    dealType: 'Agent',
+    operationType: 'Deposit',
+    methodName: 'USDT / USDC / BTC',
+    currency: 'USDT / USDC / BTC',
+    network: 'TRC20 / ERC20 / BEP20 / BTC',
+  },
+  {
+    roomKey: 'nexa',
+    dealType: 'Agent',
+    operationType: 'Withdrawal',
+    methodName: 'USDT / USDC',
+    currency: 'USDT / USDC',
+    network: 'TRC20 / ERC20 / BEP20',
+  },
+]
+
 interface DbPlayer {
   id: number
   messenger_username: string
@@ -973,8 +1032,57 @@ export class TransactionerDatabase {
       ON player_contacts(contact_value COLLATE NOCASE);
     `)
     this.seedRoomKnowledge(roomKnowledgeSeed)
+    this.deactivateLegacySeedWallets()
+    this.cleanupLegacyCombinedPaymentMethods()
     this.migrateWalletsToPaymentMethods()
     this.cleanupCombinedDepositMethodsBackedByWallets()
+  }
+
+  private deactivateLegacySeedWallets() {
+    const deactivateLegacySeedWallet = this.db.prepare(`
+      UPDATE room_wallets
+      SET is_active = 0
+      WHERE room_key = ? COLLATE NOCASE
+        AND deal_type = ? COLLATE NOCASE
+        AND UPPER(TRIM(currency)) = UPPER(TRIM(?))
+        AND UPPER(TRIM(network)) = UPPER(TRIM(?))
+        AND wallet_address = ? COLLATE NOCASE
+    `)
+
+    const deactivate = this.db.transaction(() => {
+      for (const wallet of legacySeedWallets) {
+        deactivateLegacySeedWallet.run(...wallet)
+      }
+    })
+
+    deactivate()
+  }
+
+  private cleanupLegacyCombinedPaymentMethods() {
+    const deleteLegacyMethod = this.db.prepare(`
+      DELETE FROM room_payment_methods
+      WHERE room_key = ? COLLATE NOCASE
+        AND deal_type = ? COLLATE NOCASE
+        AND operation_type = ? COLLATE NOCASE
+        AND method_name = ? COLLATE NOCASE
+        AND UPPER(TRIM(currency)) = UPPER(TRIM(?))
+        AND UPPER(TRIM(network)) = UPPER(TRIM(?))
+    `)
+
+    const cleanup = this.db.transaction(() => {
+      for (const method of legacyCombinedPaymentMethods) {
+        deleteLegacyMethod.run(
+          method.roomKey,
+          method.dealType,
+          method.operationType,
+          method.methodName,
+          method.currency,
+          method.network
+        )
+      }
+    })
+
+    cleanup()
   }
 
   private migrateWalletsToPaymentMethods() {
@@ -1084,17 +1192,6 @@ export class TransactionerDatabase {
         )
         ON CONFLICT(room_key, deal_type, operation_type, method_name, currency, network) DO NOTHING
       `)
-      const insertWallet = this.db.prepare(`
-        INSERT INTO room_wallets (
-          room_key, deal_type, currency, network, wallet_address, memo_tag,
-          fee_text, note, verified_at, is_active, sort_order
-        )
-        VALUES (
-          @roomKey, @dealType, @currency, @network, @walletAddress, @memoTag,
-          @feeText, @note, @verifiedAt, @isActive, @sortOrder
-        )
-        ON CONFLICT(room_key, deal_type, currency, network, wallet_address) DO NOTHING
-      `)
       const insertCountry = this.db.prepare(`
         INSERT INTO room_country_availability (
           room_key, country_code, country_name, status, deal_type, language,
@@ -1146,22 +1243,6 @@ export class TransactionerDatabase {
           note: method.note || null,
           sortOrder: method.sortOrder || 0,
           isActive: method.isActive === false ? 0 : 1
-        })
-      }
-
-      for (const wallet of seed.wallets) {
-        insertWallet.run({
-          roomKey: wallet.roomKey,
-          dealType: wallet.dealType || 'General',
-          currency: wallet.currency,
-          network: wallet.network,
-          walletAddress: wallet.walletAddress,
-          memoTag: wallet.memoTag || null,
-          feeText: wallet.feeText || null,
-          note: wallet.note || null,
-          verifiedAt: wallet.verifiedAt || null,
-          isActive: wallet.isActive === false ? 0 : 1,
-          sortOrder: wallet.sortOrder || 0
         })
       }
 
