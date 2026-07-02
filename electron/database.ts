@@ -178,21 +178,7 @@ export interface RoomKnowledgeIndex {
   countryOptions: RoomCountryAvailabilityInfo[]
 }
 
-const legacySeedWallets = [
-  ['champion-poker', 'Agent', 'Skrill', 'EUR', 'pokerdeals.sofia@gmail.com'],
-  ['champion-poker', 'Agent', 'USDT', 'TRC20', 'TRdiZ5JepwWCvM4iEo4xtkh58WyjJja3mn'],
-  ['champion-poker', 'Agent', 'USDT', 'ERC20', '0x563715a0773d8Bc54F0014D19BfB586f353a80f6'],
-  ['champion-poker', 'Agent', 'USDC', 'ERC20', '0x563715a0773d8Bc54F0014D19BfB586f353a80f6'],
-  ['champion-poker', 'Agent', 'ETH', 'Ethereum', '0x563715a0773d8Bc54F0014D19BfB586f353a80f6'],
-  ['redstar', 'General', 'USDT', 'ERC20', '0xb9dea314d4d7670c983a81810046cd84642e4ab1'],
-  ['redstar', 'General', 'USDT', 'TRC20', 'TEqdtBmCko3tVjhhjyravYFFf9RZX5tM1d'],
-  ['redstar', 'General', 'USDT', 'BEP20', '0x25b26e51caba38a7f658a029206a76c9a2642f86'],
-  ['nexa', 'Agent', 'USDT', 'TRC20', 'TTyKPaFXB3XkkoaGJiksNbh7xE2JbbiBnf'],
-  ['nexa', 'Agent', 'USDT', 'BEP20', '0x7fa4e95b52813d5eefd860d22bf8f19467bc9adc'],
-  ['nexa', 'Agent', 'USDT', 'ERC20', '0x3ca9feab5bc29852f16b3a30ca4deb5117979fb7'],
-  ['nexa', 'Agent', 'USDC', 'ERC20', '0x3ca9feab5bc29852f16b3a30ca4deb5117979fb7'],
-  ['nexa', 'Agent', 'BTC', 'BTC', '3Dkoukico8xKJ45goYquzDhHpRjPdsjGRn'],
-] as const
+const roomWalletManualResetMigrationKey = 'room_wallets_manual_reset_2026_07_02'
 
 const legacyCombinedPaymentMethods = [
   {
@@ -1003,6 +989,10 @@ export class TransactionerDatabase {
         is_active INTEGER NOT NULL DEFAULT 1,
         UNIQUE(room_key, country_code, status, deal_type, language)
       );
+      CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
     `)
 
     this.migrate()
@@ -1032,30 +1022,27 @@ export class TransactionerDatabase {
       ON player_contacts(contact_value COLLATE NOCASE);
     `)
     this.seedRoomKnowledge(roomKnowledgeSeed)
-    this.deactivateLegacySeedWallets()
     this.cleanupLegacyCombinedPaymentMethods()
+    this.resetRoomWalletsForManualConfiguration()
     this.migrateWalletsToPaymentMethods()
     this.cleanupCombinedDepositMethodsBackedByWallets()
   }
 
-  private deactivateLegacySeedWallets() {
-    const deactivateLegacySeedWallet = this.db.prepare(`
-      UPDATE room_wallets
-      SET is_active = 0
-      WHERE room_key = ? COLLATE NOCASE
-        AND deal_type = ? COLLATE NOCASE
-        AND UPPER(TRIM(currency)) = UPPER(TRIM(?))
-        AND UPPER(TRIM(network)) = UPPER(TRIM(?))
-        AND wallet_address = ? COLLATE NOCASE
-    `)
+  private resetRoomWalletsForManualConfiguration() {
+    const completed = this.db.prepare('SELECT value FROM app_settings WHERE key = ?')
+      .get(roomWalletManualResetMigrationKey) as { value: string } | undefined
+    if (completed?.value === 'done') return
 
-    const deactivate = this.db.transaction(() => {
-      for (const wallet of legacySeedWallets) {
-        deactivateLegacySeedWallet.run(...wallet)
-      }
+    const reset = this.db.transaction(() => {
+      this.db.prepare('DELETE FROM room_wallets').run()
+      this.db.prepare(`
+        INSERT INTO app_settings (key, value)
+        VALUES (?, 'done')
+        ON CONFLICT(key) DO UPDATE SET value = excluded.value
+      `).run(roomWalletManualResetMigrationKey)
     })
 
-    deactivate()
+    reset()
   }
 
   private cleanupLegacyCombinedPaymentMethods() {

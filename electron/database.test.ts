@@ -630,32 +630,45 @@ describe('TransactionerDatabase', () => {
     expect(trc20Wallets[0].note).toBe('Manual operator wallet')
   })
 
-  it('deactivates old default wallets during migrations while preserving wallet rows', () => {
+  it('clears existing wallets once for manual wallet reconfiguration', () => {
     db.close()
     const raw = new Database(dbPath)
+    raw.prepare('DELETE FROM app_settings WHERE key = ?').run('room_wallets_manual_reset_2026_07_02')
     raw.prepare(`
       INSERT INTO room_wallets (
         room_key, deal_type, currency, network, wallet_address, note, is_active, sort_order
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run('redstar', 'General', 'USDT', 'ERC20', '0xb9dea314d4d7670c983a81810046cd84642e4ab1', 'Legacy seed wallet', 1, 60)
+    `).run('redstar', 'General', 'USDT', 'ERC20', '0xlegacy-redstar-erc20', 'Legacy wallet', 1, 60)
     raw.prepare(`
       INSERT INTO room_wallets (
         room_key, deal_type, currency, network, wallet_address, note, is_active, sort_order
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run('redstar', 'General', 'USDT', 'ERC20', '0xreplacement-redstar-erc20', 'Manual replacement wallet', 1, 5)
+    `).run('champion-poker', 'Agent', 'USDT', 'TRC20', 'TlegacyChampionTrc20', 'Legacy wallet', 1, 10)
     raw.close()
 
     db = new TransactionerDatabase(dbPath)
 
-    const erc20Wallets = db.getRoomWallets('redstar', 'General').filter((row) => (
-      row.currency === 'USDT' && row.network === 'ERC20'
-    ))
-    expect(erc20Wallets.map((row) => row.wallet_address)).toEqual([
-      '0xreplacement-redstar-erc20',
-      '0xb9dea314d4d7670c983a81810046cd84642e4ab1',
+    expect(db.getRoomWallets('redstar', 'General')).toHaveLength(0)
+    expect(db.getRoomWallets('champion-poker', 'Agent')).toHaveLength(0)
+
+    const created = db.saveRoomWallet({
+      room_key: 'redstar',
+      deal_type: 'General',
+      currency: 'USDT',
+      network: 'ERC20',
+      wallet_address: '0xnew-manual-redstar-erc20',
+      note: 'Manual wallet after reset',
+      is_active: 1,
+      sort_order: 10,
+    })
+    expect(created.success).toBe(true)
+
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+
+    expect(db.getRoomWallets('redstar', 'General').map((row) => row.wallet_address)).toEqual([
+      '0xnew-manual-redstar-erc20',
     ])
-    expect(erc20Wallets.map((row) => row.is_active)).toEqual([1, 0])
-    expect(erc20Wallets.map((row) => row.note)).toEqual(['Manual replacement wallet', 'Legacy seed wallet'])
   })
 
   it('saves editable room payment method limits and keeps inactive methods visible in admin', () => {

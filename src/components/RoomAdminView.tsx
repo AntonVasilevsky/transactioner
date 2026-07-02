@@ -76,7 +76,7 @@ const walletFromMethod = (
   note: '',
   verified_at: '',
   sort_order: method.sort_order || 0,
-  is_active: method.is_active ?? 1,
+  is_active: 1,
 })
 
 const normalizeAdminToken = (value?: string | null) => String(value || '').trim().toUpperCase()
@@ -88,10 +88,12 @@ const findWalletForMethod = (
   const currency = normalizeAdminToken(method.currency)
   const network = normalizeAdminToken(method.network)
   if (!currency || !network) return undefined
-  return wallets.find((wallet) => (
+  const matchesMethod = (wallet: RoomWalletInfo) => (
     normalizeAdminToken(wallet.currency) === currency &&
     normalizeAdminToken(wallet.network) === network
-  ))
+  )
+  return wallets.find((wallet) => wallet.is_active && matchesMethod(wallet)) ||
+    wallets.find(matchesMethod)
 }
 
 const slugifyRoomKey = (value: string) => value
@@ -579,7 +581,7 @@ export default function RoomAdminView({
           currency: methodPayload.currency || '',
           network: methodPayload.network || '',
           wallet_address: walletAddress,
-          is_active: methodPayload.is_active,
+          is_active: walletPayload.is_active ?? 1,
           sort_order: methodPayload.sort_order,
         })
         if (!walletResult.success) {
@@ -1100,7 +1102,6 @@ function PaymentMethodEditor({
         currency: nextMethod.currency || '',
         network: nextMethod.network || '',
         sort_order: nextMethod.sort_order,
-        is_active: nextMethod.is_active,
       })
     }
   }
@@ -1111,7 +1112,7 @@ function PaymentMethodEditor({
       deal_type: currentForm.deal_type,
       currency: currentForm.currency || '',
       network: currentForm.network || '',
-      is_active: currentForm.is_active,
+      is_active: currentWalletForm.is_active ?? 1,
       sort_order: currentForm.sort_order,
       ...updates,
     })
@@ -1311,6 +1312,15 @@ function PaymentMethodEditor({
                     className="min-h-20 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-blue-500"
                   />
                 </Field>
+                <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-300">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(currentWalletForm.is_active)}
+                    onChange={(event) => updateWallet({ is_active: event.target.checked ? 1 : 0 })}
+                    className="h-4 w-4"
+                  />
+                  Кошелек активен
+                </label>
               </div>
             </div>
           )}
@@ -1345,7 +1355,7 @@ function PaymentMethodEditor({
               onChange={(event) => onChange({ ...currentForm, is_active: event.target.checked ? 1 : 0 })}
               className="h-4 w-4"
             />
-            Активен
+            Метод активен
           </label>
         </div>
       </section>
