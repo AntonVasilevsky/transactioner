@@ -606,6 +606,36 @@ describe('TransactionerDatabase', () => {
     expect(db.getRoomWallets('redstar', 'General').some((row) => row.wallet_address === '0xnew-usdc')).toBe(false)
   })
 
+  it('allows the same wallet address to be configured separately for different rooms', () => {
+    const sharedAddress = 'TSharedOperationalWallet'
+    const nexa = db.saveRoomWallet({
+      room_key: 'nexa',
+      deal_type: 'Agent',
+      currency: 'USDT',
+      network: 'TRC20',
+      wallet_address: sharedAddress,
+      note: 'Nexa shared wallet config',
+      is_active: 1,
+      sort_order: 10,
+    })
+    const champion = db.saveRoomWallet({
+      room_key: 'champion-poker',
+      deal_type: 'Agent',
+      currency: 'USDT',
+      network: 'TRC20',
+      wallet_address: sharedAddress,
+      note: 'Champion shared wallet config',
+      is_active: 1,
+      sort_order: 20,
+    })
+
+    expect(nexa.success).toBe(true)
+    expect(champion.success).toBe(true)
+    expect(nexa.id).not.toBe(champion.id)
+    expect(db.getRoomWallets('nexa', 'Agent').map((row) => row.note)).toEqual(['Nexa shared wallet config'])
+    expect(db.getRoomWallets('champion-poker', 'Agent').map((row) => row.note)).toEqual(['Champion shared wallet config'])
+  })
+
   it('keeps manually created wallets after reinitializing seed data', () => {
     const created = db.saveRoomWallet({
       room_key: 'nexa',
@@ -633,7 +663,12 @@ describe('TransactionerDatabase', () => {
   it('clears existing wallets once for manual wallet reconfiguration', () => {
     db.close()
     const raw = new Database(dbPath)
-    raw.prepare('DELETE FROM app_settings WHERE key = ?').run('room_wallets_manual_reset_2026_07_02')
+    raw.prepare(`
+      INSERT INTO app_settings (key, value)
+      VALUES (?, 'done')
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run('room_wallets_manual_reset_2026_07_02')
+    raw.prepare('DELETE FROM app_settings WHERE key = ?').run('room_wallets_manual_reset_2026_07_02_v2')
     raw.prepare(`
       INSERT INTO room_wallets (
         room_key, deal_type, currency, network, wallet_address, note, is_active, sort_order
@@ -650,6 +685,15 @@ describe('TransactionerDatabase', () => {
 
     expect(db.getRoomWallets('redstar', 'General')).toHaveLength(0)
     expect(db.getRoomWallets('champion-poker', 'Agent')).toHaveLength(0)
+    db.close()
+    const migrated = new Database(dbPath)
+    expect((
+      migrated.prepare('SELECT value FROM app_settings WHERE key = ?')
+        .get('room_wallets_manual_reset_2026_07_02_v2') as { value: string } | undefined
+    )?.value).toBe('done')
+    migrated.close()
+
+    db = new TransactionerDatabase(dbPath)
 
     const created = db.saveRoomWallet({
       room_key: 'redstar',

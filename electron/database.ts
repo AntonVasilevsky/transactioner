@@ -180,7 +180,7 @@ export interface RoomKnowledgeIndex {
   countryOptions: RoomCountryAvailabilityInfo[]
 }
 
-const roomWalletManualResetMigrationKey = 'room_wallets_manual_reset_2026_07_02'
+const roomWalletManualResetMigrationKey = 'room_wallets_manual_reset_2026_07_02_v2'
 
 const legacyCombinedPaymentMethods = [
   {

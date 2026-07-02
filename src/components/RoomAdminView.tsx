@@ -81,14 +81,18 @@ const walletFromMethod = (
 
 const normalizeAdminToken = (value?: string | null) => String(value || '').trim().toUpperCase()
 
-const findWalletForMethod = (
+export const findWalletForMethod = (
   wallets: RoomWalletInfo[],
-  method: Pick<SaveRoomPaymentMethodInput, 'currency' | 'network'>
+  method: Pick<SaveRoomPaymentMethodInput, 'room_key' | 'deal_type' | 'currency' | 'network'>
 ) => {
+  const roomKey = normalizeAdminToken(method.room_key)
+  const dealType = normalizeAdminToken(method.deal_type)
   const currency = normalizeAdminToken(method.currency)
   const network = normalizeAdminToken(method.network)
-  if (!currency || !network) return undefined
+  if (!roomKey || !dealType || !currency || !network) return undefined
   const matchesMethod = (wallet: RoomWalletInfo) => (
+    normalizeAdminToken(wallet.room_key) === roomKey &&
+    normalizeAdminToken(wallet.deal_type) === dealType &&
     normalizeAdminToken(wallet.currency) === currency &&
     normalizeAdminToken(wallet.network) === network
   )
@@ -341,6 +345,8 @@ export default function RoomAdminView({
     if (!roomKey) return
     let active = true
     const walletDealType = existingDealTypes.includes('Agent') ? 'Agent' : activeDealType
+    setWallets([])
+    setWalletForm(emptyWallet(roomKey, walletDealType))
     window.electronAPI.getRoomWallets(roomKey, walletDealType)
       .then((result) => {
         if (!active) return
@@ -409,6 +415,9 @@ export default function RoomAdminView({
     setDealType(preferredDealTypeForRoom(index, profile.room_key))
     setRoomQuery(profile.display_name)
     setIsRoomPickerOpen(false)
+    setWallets([])
+    setWalletForm(null)
+    setPaymentMethodForm(null)
   }
 
   const saveDeal = async () => {
@@ -1195,7 +1204,12 @@ function PaymentMethodEditor({
                 </div>
                 <button
                   type="button"
-                  onClick={() => onChange(paymentMethodToForm(method))}
+                  onClick={() => {
+                    const nextMethod = paymentMethodToForm(method)
+                    const nextWallet = findWalletForMethod(wallets, nextMethod)
+                    onChange(nextMethod)
+                    onWalletChange(nextWallet ? walletToForm(nextWallet) : walletFromMethod(nextMethod))
+                  }}
                   className="w-full px-4 py-3 text-left"
                 >
                   <div className="flex items-center justify-between gap-3">
