@@ -277,9 +277,13 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
   }, [selectedRoomKey, activeDealType, language, countryBlocksDeals, refreshToken])
 
   const copyText = async (key: string, text: string) => {
-    await navigator.clipboard.writeText(text)
-    setCopied(key)
-    window.setTimeout(() => setCopied(''), 1400)
+    try {
+      await navigator.clipboard.writeText(text)
+      setCopied(key)
+      window.setTimeout(() => setCopied(''), 1400)
+    } catch {
+      setCopied('')
+    }
   }
 
   const selectRoom = (profile: RoomProfileInfo) => {
