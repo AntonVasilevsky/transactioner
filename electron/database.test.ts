@@ -712,6 +712,65 @@ describe('TransactionerDatabase', () => {
     expect(db.getRoomKnowledgeAdminIndex().paymentMethods.some((row) => row.id === created.id)).toBe(false)
   })
 
+  it('updates method and wallet sort order without normalizing duplicate-looking legacy rows', () => {
+    db.close()
+    const raw = new Database(dbPath)
+    const firstMethod = raw.prepare(`
+      INSERT INTO room_payment_methods (
+        room_key, deal_type, operation_type, method_name, currency, network, sort_order, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('sort-room', 'Agent', 'Withdrawal', 'Skrill EUR', 'Skrill', 'EUR', 10, 1)
+    raw.prepare(`
+      INSERT INTO room_payment_methods (
+        room_key, deal_type, operation_type, method_name, currency, network, sort_order, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `).run('sort-room', 'Agent', 'Withdrawal', 'Skrill EUR', 'SKRILL', 'EUR', 20, 1)
+    const firstWallet = raw.prepare(`
+      INSERT INTO room_wallets (
+        room_key, deal_type, currency, network, wallet_address, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('sort-room', 'Agent', 'Skrill', 'EUR', 'legacy@example.com', 1, 10)
+    raw.prepare(`
+      INSERT INTO room_wallets (
+        room_key, deal_type, currency, network, wallet_address, is_active, sort_order
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('sort-room', 'Agent', 'SKRILL', 'EUR', 'manual@example.com', 1, 20)
+    raw.close()
+
+    db = new TransactionerDatabase(dbPath)
+
+    expect(db.saveRoomPaymentMethod({
+      id: Number(firstMethod.lastInsertRowid),
+      room_key: 'sort-room',
+      deal_type: 'Agent',
+      operation_type: 'Withdrawal',
+      method_name: 'Skrill EUR',
+      currency: 'Skrill',
+      network: 'EUR',
+      sort_order: 30,
+      sort_order_only: true,
+    })).toEqual({ success: true, id: Number(firstMethod.lastInsertRowid) })
+    expect(db.saveRoomWallet({
+      id: Number(firstWallet.lastInsertRowid),
+      room_key: 'sort-room',
+      deal_type: 'Agent',
+      currency: 'Skrill',
+      network: 'EUR',
+      wallet_address: 'legacy@example.com',
+      sort_order: 30,
+      sort_order_only: true,
+    })).toEqual({ success: true, id: Number(firstWallet.lastInsertRowid) })
+
+    const methods = db.getRoomKnowledgeAdminIndex().paymentMethods.filter((method) => (
+      method.room_key === 'sort-room' && method.operation_type === 'Withdrawal'
+    ))
+    const wallets = db.getRoomWallets('sort-room', 'Agent')
+    expect(methods.find((method) => method.id === Number(firstMethod.lastInsertRowid))?.sort_order).toBe(30)
+    expect(methods.find((method) => method.id !== Number(firstMethod.lastInsertRowid))?.sort_order).toBe(20)
+    expect(wallets.find((wallet) => wallet.id === Number(firstWallet.lastInsertRowid))?.sort_order).toBe(30)
+    expect(wallets.find((wallet) => wallet.id !== Number(firstWallet.lastInsertRowid))?.sort_order).toBe(20)
+  })
+
   it('returns active room deals filtered by room, language, and deal type', () => {
     db.close()
     const raw = new Database(dbPath)

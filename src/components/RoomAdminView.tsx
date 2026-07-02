@@ -690,7 +690,10 @@ export default function RoomAdminView({
     })
 
     for (const method of reorderedMethods) {
-      const methodResult = await window.electronAPI.saveRoomPaymentMethod(paymentMethodToForm(method))
+      const methodResult = await window.electronAPI.saveRoomPaymentMethod({
+        ...paymentMethodToForm(method),
+        sort_order_only: true,
+      })
       if (!methodResult.success) {
         setMessage('')
         setError(methodResult.error || 'Не удалось сохранить порядок методов')
@@ -703,6 +706,7 @@ export default function RoomAdminView({
           const walletResult = await window.electronAPI.saveRoomWallet({
             ...walletToForm(linkedWallet),
             sort_order: method.sort_order,
+            sort_order_only: true,
           })
           if (!walletResult.success) {
             setMessage('')

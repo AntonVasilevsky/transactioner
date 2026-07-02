@@ -104,6 +104,7 @@ interface SaveRoomWalletInput {
   verified_at?: string | null
   sort_order?: number
   is_active?: number | boolean
+  sort_order_only?: boolean
 }
 
 interface SaveRoomPaymentMethodInput {
@@ -119,6 +120,7 @@ interface SaveRoomPaymentMethodInput {
   note?: string | null
   sort_order?: number
   is_active?: number | boolean
+  sort_order_only?: boolean
 }
 
 interface UpdateCheckResult {

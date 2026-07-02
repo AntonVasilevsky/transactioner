@@ -85,6 +85,7 @@ export interface SaveRoomWalletInput {
   verified_at?: string | null
   sort_order?: number
   is_active?: number | boolean
+  sort_order_only?: boolean
 }
 
 export interface SaveRoomPaymentMethodInput {
@@ -100,6 +101,7 @@ export interface SaveRoomPaymentMethodInput {
   note?: string | null
   sort_order?: number
   is_active?: number | boolean
+  sort_order_only?: boolean
 }
 
 export interface RoomProfileInfo {
@@ -558,6 +560,14 @@ export class TransactionerDatabase {
 
   saveRoomWallet(data: SaveRoomWalletInput): SavePlayerResult {
     try {
+      if (data.id && data.sort_order_only) {
+        const walletId = Number(data.id)
+        if (!Number.isFinite(walletId) || walletId <= 0) return { success: false, error: 'Кошелек не найден' }
+        const result = this.db.prepare('UPDATE room_wallets SET sort_order = ? WHERE id = ?').run(Number(data.sort_order || 0), walletId)
+        if (result.changes === 0) return { success: false, error: 'Кошелек не найден' }
+        return { success: true, id: walletId }
+      }
+
       const roomKey = String(data.room_key || '').trim()
       const dealType = data.deal_type || 'General'
       const currency = String(data.currency || '').trim().toUpperCase()
@@ -652,6 +662,14 @@ export class TransactionerDatabase {
 
   saveRoomPaymentMethod(data: SaveRoomPaymentMethodInput): SavePlayerResult {
     try {
+      if (data.id && data.sort_order_only) {
+        const methodId = Number(data.id)
+        if (!Number.isFinite(methodId) || methodId <= 0) return { success: false, error: 'Метод не найден' }
+        const result = this.db.prepare('UPDATE room_payment_methods SET sort_order = ? WHERE id = ?').run(Number(data.sort_order || 0), methodId)
+        if (result.changes === 0) return { success: false, error: 'Метод не найден' }
+        return { success: true, id: methodId }
+      }
+
       const roomKey = String(data.room_key || '').trim()
       const dealType = data.deal_type || 'General'
       const operationType = data.operation_type || 'Deposit'
