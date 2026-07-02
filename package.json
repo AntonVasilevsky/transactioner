@@ -14,12 +14,14 @@
     "test": "npm rebuild better-sqlite3 && vitest run && electron-rebuild -f -w better-sqlite3",
     "icons": "node scripts/generate-icons.mjs",
     "prepare:api-keys": "node scripts/prepare-api-keys.mjs",
+    "version:bump": "node scripts/bump-version.mjs",
     "preview": "vite preview",
     "dist": "npm run build && electron-builder",
+    "dist:release": "npm run version:bump && npm run prepare:api-keys && npm run build && electron-builder --mac && electron-builder --win --x64",
     "predist:mac": "npm run prepare:api-keys",
     "dist:mac": "npm run build && electron-builder --mac",
     "predist:win": "npm run prepare:api-keys",
-    "dist:win": "npm run build && electron-builder --win"
+    "dist:win": "npm run build && electron-builder --win --x64"
   },
   "build": {
     "appId": "com.transactioner.app",
