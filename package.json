@@ -3,7 +3,7 @@
   "private": true,
   "description": "Desktop helper for poker room transaction templates.",
   "author": "Transactioner",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
