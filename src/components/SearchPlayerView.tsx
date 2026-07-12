@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Search, Loader2, UserRound } from 'lucide-react'
+import { Search, Loader2, UserRound, UserPlus } from 'lucide-react'
 
 const METHOD_COLORS: Record<string, string> = {
   TG: 'bg-blue-500/20 text-blue-400',
@@ -16,17 +16,25 @@ const sortByPrimaryContact = (items: PlayerPayload[]) => [...items].sort((left, 
   })
 )
 
-export default function SearchPlayerView({ onFound }: { onFound: (player: PlayerPayload) => void }) {
+export default function SearchPlayerView({
+  onFound,
+  onCreate,
+}: {
+  onFound: (player: PlayerPayload) => void
+  onCreate: (initialContact: string) => void
+}) {
   const [query, setQuery] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [results, setResults] = useState<PlayerPayload[]>([])
+  const [notFoundQuery, setNotFoundQuery] = useState('')
   const liveSearchRunRef = useRef(0)
 
   const handleQueryChange = (value: string) => {
+    liveSearchRunRef.current += 1
     setQuery(value)
+    setNotFoundQuery('')
     if (!value.trim()) {
-      liveSearchRunRef.current += 1
       setResults([])
       setError('')
       setLoading(false)
@@ -35,24 +43,32 @@ export default function SearchPlayerView({ onFound }: { onFound: (player: Player
 
   const handleSearch = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!query.trim()) return
+    const trimmedQuery = query.trim()
+    if (!trimmedQuery) return
+    const runId = liveSearchRunRef.current + 1
+    liveSearchRunRef.current = runId
 
     setLoading(true)
     setError('')
     setResults([])
+    setNotFoundQuery('')
     try {
-      const result = await window.electronAPI.searchPlayer(query.trim())
+      const result = await window.electronAPI.searchPlayer(trimmedQuery)
+      if (liveSearchRunRef.current !== runId) return
       if (Array.isArray(result)) {
-        setResults(sortByPrimaryContact(result))
+        const sortedResults = sortByPrimaryContact(result)
+        setResults(sortedResults)
+        if (sortedResults.length === 0) setNotFoundQuery(trimmedQuery)
       } else if (result) {
         onFound(result)
       } else {
-        setError('Игрок не найден. Проверьте часть юзернейма или добавьте нового.')
+        setNotFoundQuery(trimmedQuery)
       }
     } catch (err: unknown) {
+      if (liveSearchRunRef.current !== runId) return
       setError('Ошибка поиска: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
-      setLoading(false)
+      if (liveSearchRunRef.current === runId) setLoading(false)
     }
   }
 
@@ -67,14 +83,18 @@ export default function SearchPlayerView({ onFound }: { onFound: (player: Player
 
     let cancelled = false
     const timer = window.setTimeout(() => {
+      if (cancelled || liveSearchRunRef.current !== runId) return
       setLoading(true)
       setError('')
+      setNotFoundQuery('')
       window.electronAPI.searchPlayer(trimmedQuery)
         .then((result) => {
           if (cancelled || liveSearchRunRef.current !== runId) return
 
           if (Array.isArray(result)) {
-            setResults(sortByPrimaryContact(result))
+            const sortedResults = sortByPrimaryContact(result)
+            setResults(sortedResults)
+            if (sortedResults.length === 0) setNotFoundQuery(trimmedQuery)
             return
           }
 
@@ -84,6 +104,7 @@ export default function SearchPlayerView({ onFound }: { onFound: (player: Player
           }
 
           setResults([])
+          setNotFoundQuery(trimmedQuery)
         })
         .catch((err: unknown) => {
           if (cancelled || liveSearchRunRef.current !== runId) return
@@ -141,6 +162,29 @@ export default function SearchPlayerView({ onFound }: { onFound: (player: Player
       {error && (
         <div className="mt-6 p-4 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 text-center animate-in fade-in slide-in-from-top-2">
           {error}
+        </div>
+      )}
+
+      {!error && notFoundQuery && !loading && results.length === 0 && (
+        <div className="mt-6 rounded-2xl border border-emerald-500/25 bg-emerald-500/10 p-5 text-left shadow-lg shadow-emerald-950/10 animate-in fade-in slide-in-from-top-2">
+          <div className="flex items-start gap-4">
+            <div className="mt-1 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/15 text-emerald-300">
+              <UserPlus size={20} />
+            </div>
+            <div className="min-w-0 flex-1">
+              <div className="font-semibold text-slate-100">Игрок не найден</div>
+              <div className="mt-1 break-words text-sm text-slate-400">
+                Можно создать нового игрока с контактом <span className="text-slate-200">{notFoundQuery}</span>.
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => onCreate(notFoundQuery)}
+              className="shrink-0 rounded-xl bg-emerald-500 px-4 py-3 text-sm font-semibold text-white transition-colors hover:bg-emerald-400"
+            >
+              Создать
+            </button>
+          </div>
         </div>
       )}
 

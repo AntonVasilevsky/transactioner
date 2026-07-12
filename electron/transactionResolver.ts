@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
-import { convertUsdToEur } from './currency'
+import { convertUsdToEur, formatMoneyAmount } from './currency'
 
 export type TransactionNetwork = 'ethereum' | 'bsc' | 'tron' | 'bitcoin'
 
@@ -220,10 +220,13 @@ export const formatTokenAmount = (rawAmount: string | number, decimals: string |
   return fraction ? `${whole}.${fraction}` : whole
 }
 
-const displayCryptoAmount = (amount: string, currency?: string) => {
+export const displayCryptoAmount = (amount: string, currency?: string) => {
   const normalizedCurrency = String(currency || '').toUpperCase()
   if (normalizedCurrency === 'USDT' || normalizedCurrency === 'USDC' || normalizedCurrency === 'USD') {
-    return `$${amountFormat.format(Number(amount) || 0)}`
+    return `$${formatMoneyAmount(Number(amount) || 0)}`
+  }
+  if (normalizedCurrency === 'EUR') {
+    return `€${formatMoneyAmount(Number(amount) || 0)}`
   }
   return normalizedCurrency ? `${amount} ${normalizedCurrency}` : amount
 }

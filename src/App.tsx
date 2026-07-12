@@ -19,6 +19,7 @@ function App() {
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   const [operationType, setOperationType] = useState<OperationType>('Deposit')
   const [editingPlayer, setEditingPlayer] = useState<PlayerPayload | null>(null)
+  const [addPlayerInitialContact, setAddPlayerInitialContact] = useState('')
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
   const [updateInfo, setUpdateInfo] = useState<UpdateCheckResult | null>(null)
   const [updateDismissed, setUpdateDismissed] = useState(false)
@@ -103,6 +104,11 @@ function App() {
     setSelectedPlayer((current) => current ? { ...current, ...updates } : current)
   }
 
+  const handleCreatePlayerFromSearch = (initialContact: string) => {
+    setAddPlayerInitialContact(initialContact.trim())
+    navigateTo('add')
+  }
+
   const closeReleaseNotes = () => {
     window.electronAPI.markReleaseNotesSeen().catch(() => {
       // Seeing the same notes again is less harmful than blocking the app.
@@ -149,7 +155,10 @@ function App() {
             icon={<UserPlus size={20} />} 
             label="Добавить игрока" 
             active={currentView === 'add'} 
-            onClick={() => navigateTo('add')}
+            onClick={() => {
+              setAddPlayerInitialContact('')
+              navigateTo('add')
+            }}
           />
           <NavItem
             icon={<Info size={20} />}
@@ -209,7 +218,10 @@ function App() {
             </div>
           )}
           {currentView === 'search' && (
-            <SearchPlayerView onFound={handlePlayerFound} />
+            <SearchPlayerView
+              onFound={handlePlayerFound}
+              onCreate={handleCreatePlayerFromSearch}
+            />
           )}
           {currentView === 'list' && (
             <PlayerListView
@@ -225,7 +237,11 @@ function App() {
             />
           )}
           {currentView === 'add' && (
-            <AddPlayerView onSuccess={(p) => handlePlayerFound(p)} />
+            <AddPlayerView
+              key={addPlayerInitialContact || 'blank'}
+              initialContactValue={addPlayerInitialContact}
+              onSuccess={(p) => handlePlayerFound(p)}
+            />
           )}
           {currentView === 'roomInfo' && (
             <RoomInfoView homeSignal={roomInfoHomeSignal} />

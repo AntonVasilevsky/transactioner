@@ -1,4 +1,5 @@
 export type AmountCurrency = 'EUR' | 'USD'
+type AmountOperationType = 'Deposit' | 'Withdrawal'
 
 const numberFormatSymbols = /[€$]/g
 
@@ -14,6 +15,17 @@ export const amountWithCurrency = (value: string, currency: AmountCurrency) => {
   return `${currency} ${amountValue}`
 }
 
+export const defaultAmountCurrencyForRoom = (
+  roomName: string,
+  operationType: AmountOperationType
+): AmountCurrency => (
+  roomName === 'RedStar' && operationType === 'Withdrawal'
+    ? 'EUR'
+    : roomName === 'Champion Poker'
+      ? 'EUR'
+      : 'USD'
+)
+
 export const euroSymbolAmount = (value: string) => {
   const trimmed = value.trim()
   if (!trimmed) return value
@@ -23,6 +35,13 @@ export const euroSymbolAmount = (value: string) => {
 const isCryptoDisplayAmount = (value: string) => (
   /\b(?:BTC|ETH|BNB|TRX)\b$/i.test(value.trim())
 )
+
+export const currencySymbolAmount = (value: string, currency: AmountCurrency) => {
+  const trimmed = value.trim()
+  if (!trimmed) return value
+  if (isCryptoDisplayAmount(trimmed)) return trimmed
+  return `${currency === 'EUR' ? '€' : '$'}${cleanCurrencyNumber(trimmed)}`
+}
 
 export const championDepositTemplateAmount = (
   value: string,

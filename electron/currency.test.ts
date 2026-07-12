@@ -10,5 +10,6 @@ describe('currency helpers', () => {
 
   it('formats money amounts with cents', () => {
     expect(formatMoneyAmount(15.4)).toBe('15.40')
+    expect(formatMoneyAmount(15)).toBe('15')
   })
 })

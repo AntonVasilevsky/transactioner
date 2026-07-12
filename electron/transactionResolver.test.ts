@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { formatTokenAmount, parseTransactionInput, resolveTransaction } from './transactionResolver'
+import { displayCryptoAmount, formatTokenAmount, parseTransactionInput, resolveTransaction } from './transactionResolver'
 
 const jsonResponse = (data: unknown) => new Response(JSON.stringify(data), {
   status: 200,
@@ -43,6 +43,15 @@ describe('transaction resolver helpers', () => {
     expect(formatTokenAmount('99990000000000000000', 18)).toBe('99.99')
     expect(formatTokenAmount('500000000', 6)).toBe('500')
     expect(formatTokenAmount('1234567890123456789', 18)).toBe('1.234567890123456789')
+  })
+
+  it('rounds fiat transaction display amounts to cents', () => {
+    expect(displayCryptoAmount('24.134', 'USDT')).toBe('$24.13')
+    expect(displayCryptoAmount('24.135663', 'USDT')).toBe('$24.14')
+    expect(displayCryptoAmount('24.135', 'USD')).toBe('$24.14')
+    expect(displayCryptoAmount('24.135', 'EUR')).toBe('€24.14')
+    expect(displayCryptoAmount('59', 'USDT')).toBe('$59')
+    expect(displayCryptoAmount('0.00939351', 'BTC')).toBe('0.00939351 BTC')
   })
 
   it('converts Champion Poker Ethereum USDC deposits to euros using the known token contract fallback', async () => {
@@ -101,7 +110,7 @@ describe('transaction resolver helpers', () => {
       expect(result.success).toBe(true)
       expect(result.currency).toBe('USDC')
       expect(result.displayAmount).toBe('$5000')
-      expect(result.convertedDisplayAmount).toBe('€4600.00')
+      expect(result.convertedDisplayAmount).toBe('€4600')
       expect(result.transactionTimestamp).toBe(new Date(blockTimestamp * 1000).toISOString())
       expect(fetchMock).toHaveBeenCalled()
     } finally {
@@ -220,7 +229,7 @@ describe('transaction resolver helpers', () => {
       expect(result.success).toBe(true)
       expect(result.currency).toBe('USDT')
       expect(result.amount).toBe('220.4')
-      expect(result.displayAmount).toBe('$220.4')
+      expect(result.displayAmount).toBe('$220.40')
     } finally {
       rmSync(tempDir, { recursive: true, force: true })
     }

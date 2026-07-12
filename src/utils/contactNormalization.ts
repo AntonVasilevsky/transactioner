@@ -11,3 +11,13 @@ export const normalizeContactText = (value: string) => String(value || '')
   .trim()
 
 export const contactSearchKey = (value: string) => normalizeContactText(value).toLowerCase()
+
+export const inferContactMethod = (value: string): ContactMethod => {
+  const normalized = normalizeContactText(value)
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalized)) return 'Email'
+
+  const digits = normalized.replace(/\D/g, '')
+  if (/^\+?[\d\s().-]+$/.test(normalized) && digits.length >= 7) return 'WA'
+
+  return 'TG'
+}

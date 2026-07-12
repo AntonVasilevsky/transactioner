@@ -29,7 +29,7 @@ export const parseCurrencyAmount = (value: string) => {
   return Number.isFinite(amount) ? amount : null
 }
 
-export const formatMoneyAmount = (amount: number) => moneyFormat.format(amount)
+export const formatMoneyAmount = (amount: number) => moneyFormat.format(amount).replace(/\.00$/, '')
 
 export const convertUsdToEur = async (usdAmount: number): Promise<CurrencyConversionResult> => {
   const response = await fetch('https://api.frankfurter.dev/v1/latest?base=USD&symbols=EUR')

@@ -3,6 +3,8 @@ import {
   championDepositTemplateAmount,
   championWithdrawalTemplateAmount,
   cleanCurrencyNumber,
+  currencySymbolAmount,
+  defaultAmountCurrencyForRoom,
   euroSymbolAmount,
   resolveRoomPaymentWarning,
 } from './transactionTemplateFormatting'
@@ -54,6 +56,21 @@ describe('transaction template amount formatting', () => {
   it('cleans common currency prefixes and symbols', () => {
     expect(cleanCurrencyNumber('$500')).toBe('500')
     expect(euroSymbolAmount('USD 500.00')).toBe('€500.00')
+  })
+
+  it('formats RedStar amount values with the selected currency symbol', () => {
+    expect(currencySymbolAmount('500', 'USD')).toBe('$500')
+    expect(currencySymbolAmount('500', 'EUR')).toBe('€500')
+    expect(currencySymbolAmount('$500', 'EUR')).toBe('€500')
+    expect(currencySymbolAmount('EUR 500', 'USD')).toBe('$500')
+    expect(currencySymbolAmount('0.00939351 BTC', 'USD')).toBe('0.00939351 BTC')
+  })
+
+  it('uses USD for RedStar deposits and EUR for RedStar withdrawals', () => {
+    expect(defaultAmountCurrencyForRoom('RedStar', 'Deposit')).toBe('USD')
+    expect(defaultAmountCurrencyForRoom('RedStar', 'Withdrawal')).toBe('EUR')
+    expect(defaultAmountCurrencyForRoom('Champion Poker', 'Deposit')).toBe('EUR')
+    expect(defaultAmountCurrencyForRoom('Nexa', 'Deposit')).toBe('USD')
   })
 
   it('warns when a room payment amount is below editable method limits', () => {

@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Plus, Star, Trash2, Save, Loader2 } from 'lucide-react'
+import { inferContactMethod } from '../utils/contactNormalization'
 
 const AVAILABLE_ROOMS = ['RedStar', 'Champion Poker', 'Nexa']
 
@@ -12,8 +13,18 @@ type ContactForm = {
   isPrimary?: boolean
 }
 
-export default function AddPlayerView({ onSuccess }: { onSuccess: (player: PlayerPayload) => void }) {
-  const [contacts, setContacts] = useState<ContactForm[]>([{ contactMethod: 'TG', contactValue: '', isPrimary: true }])
+export default function AddPlayerView({
+  onSuccess,
+  initialContactValue = '',
+}: {
+  onSuccess: (player: PlayerPayload) => void
+  initialContactValue?: string
+}) {
+  const [contacts, setContacts] = useState<ContactForm[]>([{
+    contactMethod: inferContactMethod(initialContactValue),
+    contactValue: initialContactValue,
+    isPrimary: true
+  }])
   const [defaultWallet, setDefaultWallet] = useState('')
   const [defaultWalletNetwork, setDefaultWalletNetwork] = useState('')
   const [accounts, setAccounts] = useState<AccountForm[]>([])

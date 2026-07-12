@@ -5,12 +5,18 @@ import { normalizeContactText } from '../utils/contactNormalization'
 import {
   championDepositTemplateAmount,
   championWithdrawalTemplateAmount,
+  currencySymbolAmount,
+  defaultAmountCurrencyForRoom,
   resolveRoomPaymentWarning,
   type AmountCurrency
 } from '../utils/transactionTemplateFormatting'
 
-const shouldUseAmountCurrency = (targetAccount: Account | null, targetOperationType: OperationType) =>
-  targetAccount?.roomName === 'Nexa' || (targetAccount?.roomName === 'RedStar' && targetOperationType === 'Deposit')
+const isRedStarWithdrawal = (targetAccount: Account | null, targetOperationType: OperationType) =>
+  targetAccount?.roomName === 'RedStar' && targetOperationType === 'Withdrawal'
+
+const shouldUseAmountCurrency = (targetAccount: Account | null) =>
+  targetAccount?.roomName === 'Nexa' ||
+  targetAccount?.roomName === 'RedStar'
 
 const isChampionWithdrawal = (targetAccount: Account | null, targetOperationType: OperationType) =>
   targetAccount?.roomName === 'Champion Poker' && targetOperationType === 'Withdrawal'
@@ -49,10 +55,12 @@ const formatLocalTransactionDate = (value: string) => {
 }
 
 const getInitialAmount = (targetAccount: Account | null, targetOperationType: OperationType) =>
-  shouldUseAmountCurrency(targetAccount, targetOperationType) ? '$' : ''
+  shouldUseAmountCurrency(targetAccount)
+    ? getInitialAmountCurrency(targetAccount, targetOperationType) === 'EUR' ? '€' : '$'
+    : ''
 
 const getInitialAmountCurrency = (targetAccount: Account | null, targetOperationType: OperationType): AmountCurrency =>
-  isChampionOperation(targetAccount, targetOperationType) ? 'EUR' : 'USD'
+  defaultAmountCurrencyForRoom(targetAccount?.roomName || '', targetOperationType)
 
 const formatResolvedTransactionMethod = (
   currency?: string,
@@ -203,6 +211,9 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const handleAmountCurrencyChange = (nextCurrency: AmountCurrency) => {
     setAmountCurrency(nextCurrency)
     resetAmountConversion()
+    if (isRedStarWithdrawal(account, operationType)) {
+      setAmount(current => current.trim() ? currencySymbolAmount(current, nextCurrency) : nextCurrency === 'EUR' ? '€' : '$')
+    }
   }
 
   const handleTxChange = (value: string) => {
@@ -344,6 +355,9 @@ export default function FormView({ player, account, onAccountSelect, operationTy
 
   const getTemplateAmount = () => {
     if (isChampionDeposit(account, operationType)) return championDepositTemplateAmount(amount, amountCurrency, convertedAmount)
+    if (account?.roomName === 'RedStar') {
+      return currencySymbolAmount(amount, isRedStarWithdrawal(account, operationType) ? amountCurrency : 'USD')
+    }
     if (!isChampionWithdrawal(account, operationType)) return amount
     return championWithdrawalTemplateAmount(amount, amountCurrency, convertedAmount)
   }
@@ -390,9 +404,9 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     
     if (roomName === 'RedStar') {
       if (isDeposit) {
-        return `RedStar  ${roomUsername}\nОтправил тебе ${amount} для депозита.\n${txId}`
+        return `RedStar  ${roomUsername}\nОтправил тебе ${templateAmount} для депозита.\n${txId}`
       } else {
-        return `RedStar  ${roomUsername}\nОтправил тебе ${amount} для вывода, кошелёк:\n${network}\n${wallet}`
+        return `RedStar  ${roomUsername}\nОтправил тебе ${templateAmount} для вывода, кошелёк:\n${network}\n${wallet}`
       }
     }
     
@@ -419,6 +433,10 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   }
 
   const generatedText = generateTemplate()
+  const showAmountCurrencySwitch = isChampionOperation(account, operationType) || isRedStarWithdrawal(account, operationType)
+  const amountPlaceholder = shouldUseAmountCurrency(account) || isChampionOperation(account, operationType)
+    ? amountCurrency === 'EUR' ? '€500' : '$500'
+    : '$500'
 
   const getMissingFields = () => {
     if (!account) return ['account']
@@ -693,7 +711,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           <div>
             <div className="mb-1 flex items-center justify-between gap-3">
               <label className="block text-sm font-medium text-slate-400">Сумма</label>
-              {isChampionOperation(account, operationType) && (
+              {showAmountCurrencySwitch && (
                 <div className="flex shrink-0 items-center rounded-lg bg-slate-900 p-1">
                   <button
                     type="button"
@@ -721,7 +739,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
               type="text"
               value={amount}
               onChange={e => handleAmountChange(e.target.value)}
-              placeholder={isChampionOperation(account, operationType) ? (amountCurrency === 'EUR' ? '€500' : '$500') : '$500'}
+              placeholder={amountPlaceholder}
               className={inputClass('amount', amount)}
             />
             {isChampionOperation(account, operationType) && amountCurrency === 'USD' && amountConversionMessage && (
