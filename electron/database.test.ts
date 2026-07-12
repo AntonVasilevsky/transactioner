@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import Database from 'better-sqlite3'
-import { TransactionerDatabase, type SavePlayerInput } from './database'
+import { TransactionerDatabase, type SaveLinkVerificationTemplateInput, type SavePlayerInput } from './database'
 
 let tempDir = ''
 let dbPath = ''
@@ -23,6 +23,20 @@ const basePlayer = (overrides: Partial<SavePlayerInput> = {}): SavePlayerInput =
   ...overrides
 })
 
+const baseLinkVerificationTemplate = (
+  overrides: Partial<SaveLinkVerificationTemplateInput> = {}
+): SaveLinkVerificationTemplateInput => ({
+  room_name: 'Nexa',
+  template_key: 'nexa',
+  label: 'Nexa messenger',
+  channel: 'messenger',
+  body: 'Проверка <player_data>',
+  recipient_email: null,
+  cc_emails: ['first@example.com', ' second@example.com ', ''],
+  notes: 'Тестовый шаблон',
+  ...overrides,
+})
+
 beforeEach(() => {
   tempDir = mkdtempSync(path.join(tmpdir(), 'transactioner-db-'))
   dbPath = path.join(tempDir, 'transactioner.db')
@@ -39,6 +53,117 @@ afterEach(() => {
 })
 
 describe('TransactionerDatabase', () => {
+  it('validates required link-verification template fields', () => {
+    expect(db.getLinkVerificationTemplates('')).toEqual([])
+    expect(db.saveLinkVerificationTemplate(baseLinkVerificationTemplate({ room_name: '' }))).toEqual({
+      success: false,
+      error: 'Выберите рум'
+    })
+    expect(db.saveLinkVerificationTemplate(baseLinkVerificationTemplate({ template_key: '' }))).toEqual({
+      success: false,
+      error: 'Выберите шаблон'
+    })
+    expect(db.saveLinkVerificationTemplate(baseLinkVerificationTemplate({ label: '' }))).toEqual({
+      success: false,
+      error: 'Заполните название шаблона'
+    })
+    expect(db.saveLinkVerificationTemplate(baseLinkVerificationTemplate({ body: '' }))).toEqual({
+      success: false,
+      error: 'Заполните текст шаблона'
+    })
+  })
+
+  it('saves and loads a normalized link-verification template', () => {
+    const saved = db.saveLinkVerificationTemplate(baseLinkVerificationTemplate())
+
+    expect(saved.success).toBe(true)
+    expect(saved.id).toBeTypeOf('number')
+    expect(db.getLinkVerificationTemplates('nexa')).toEqual([
+      expect.objectContaining({
+        id: saved.id,
+        room_name: 'Nexa',
+        template_key: 'nexa',
+        label: 'Nexa messenger',
+        channel: 'messenger',
+        body: 'Проверка <player_data>',
+        recipient_email: null,
+        cc_emails: 'first@example.com,second@example.com',
+        notes: 'Тестовый шаблон',
+      })
+    ])
+  })
+
+  it('upserts and updates link-verification templates without changing their id', () => {
+    const inserted = db.saveLinkVerificationTemplate(baseLinkVerificationTemplate())
+    const second = db.saveLinkVerificationTemplate(baseLinkVerificationTemplate({
+      room_name: 'RedStar',
+      template_key: 'redstar',
+      label: 'RedStar',
+    }))
+    const upserted = db.saveLinkVerificationTemplate(baseLinkVerificationTemplate({
+      room_name: 'nexa',
+      template_key: 'NEXA',
+      channel: 'email',
+      label: 'Nexa email',
+      body: 'Email <email>',
+      recipient_email: ' support@example.com ',
+      cc_emails: 'copy@example.com',
+    }))
+
+    expect(second.success).toBe(true)
+    expect(second.id).not.toBe(inserted.id)
+    expect(upserted).toEqual({ success: true, id: inserted.id })
+
+    const updated = db.saveLinkVerificationTemplate(baseLinkVerificationTemplate({
+      id: inserted.id,
+      label: 'Nexa edited',
+      body: 'Edited <player_data>',
+      cc_emails: null,
+    }))
+
+    expect(updated).toEqual({ success: true, id: inserted.id })
+    expect(db.getLinkVerificationTemplates('NEXA')).toEqual([
+      expect.objectContaining({
+        id: inserted.id,
+        label: 'Nexa edited',
+        body: 'Edited <player_data>',
+        cc_emails: null,
+      })
+    ])
+    expect(db.saveLinkVerificationTemplate(baseLinkVerificationTemplate({ id: 999999 }))).toEqual({
+      success: false,
+      error: 'Шаблон не найден'
+    })
+  })
+
+  it('deletes link-verification template overrides and rejects incomplete keys', () => {
+    db.saveLinkVerificationTemplate(baseLinkVerificationTemplate())
+
+    expect(db.deleteLinkVerificationTemplate('', 'nexa')).toEqual({
+      success: false,
+      error: 'Шаблон не найден'
+    })
+    expect(db.deleteLinkVerificationTemplate('Nexa', '')).toEqual({
+      success: false,
+      error: 'Шаблон не найден'
+    })
+    expect(db.deleteLinkVerificationTemplate('nexa', 'NEXA')).toEqual({ success: true })
+    expect(db.getLinkVerificationTemplates('Nexa')).toEqual([])
+  })
+
+  it('returns mutation errors when link-verification template storage is unavailable', () => {
+    db.close()
+
+    expect(db.saveLinkVerificationTemplate(baseLinkVerificationTemplate())).toEqual(expect.objectContaining({
+      success: false,
+      error: expect.any(String),
+    }))
+    expect(db.deleteLinkVerificationTemplate('Nexa', 'nexa')).toEqual(expect.objectContaining({
+      success: false,
+      error: expect.any(String),
+    }))
+  })
+
   it('saves a player with multiple room accounts and returns all accounts', () => {
     const saved = db.savePlayer(basePlayer({
       accounts: [

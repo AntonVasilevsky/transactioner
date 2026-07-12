@@ -1,8 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
-import { ArrowLeft, Eye, EyeOff, GripVertical, Pencil, Plus, Save, Search, Settings, Trash2 } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, GripVertical, Pencil, Plus, RotateCcw, Save, Search, Settings, Trash2 } from 'lucide-react'
 import { matchesRoomSearch } from '../utils/roomSearch'
+import { resolveLinkVerificationRoomRule, type LinkVerificationTemplate } from '../utils/linkVerificationRules'
+import { findWalletForMethod, normalizeAdminToken } from '../utils/roomAdminWalletMatching'
+import { applyLinkVerificationTemplateOverrides } from '../utils/linkVerificationFormatting'
 
-type AdminMode = 'deals' | 'methods'
+type AdminMode = 'deals' | 'methods' | 'linkVerification'
 const allDealTypes: RoomDealType[] = ['Agent', 'Direct', 'General']
 const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
 
@@ -78,27 +81,6 @@ const walletFromMethod = (
   sort_order: method.sort_order || 0,
   is_active: 1,
 })
-
-const normalizeAdminToken = (value?: string | null) => String(value || '').trim().toUpperCase()
-
-export const findWalletForMethod = (
-  wallets: RoomWalletInfo[],
-  method: Pick<SaveRoomPaymentMethodInput, 'room_key' | 'deal_type' | 'currency' | 'network'>
-) => {
-  const roomKey = normalizeAdminToken(method.room_key)
-  const dealType = normalizeAdminToken(method.deal_type)
-  const currency = normalizeAdminToken(method.currency)
-  const network = normalizeAdminToken(method.network)
-  if (!roomKey || !dealType || !currency || !network) return undefined
-  const matchesMethod = (wallet: RoomWalletInfo) => (
-    normalizeAdminToken(wallet.room_key) === roomKey &&
-    normalizeAdminToken(wallet.deal_type) === dealType &&
-    normalizeAdminToken(wallet.currency) === currency &&
-    normalizeAdminToken(wallet.network) === network
-  )
-  return wallets.find((wallet) => wallet.is_active && matchesMethod(wallet)) ||
-    wallets.find(matchesMethod)
-}
 
 const slugifyRoomKey = (value: string) => value
   .trim()
@@ -216,6 +198,7 @@ export default function RoomAdminView({
   const [language, setLanguage] = useState<RoomLanguage>(initialLanguage)
   const [deals, setDeals] = useState<RoomDealInfo[]>([])
   const [wallets, setWallets] = useState<RoomWalletInfo[]>([])
+  const [linkVerificationTemplates, setLinkVerificationTemplates] = useState<LinkVerificationTemplateInfo[]>([])
   const [isAddingRoom, setIsAddingRoom] = useState(false)
   const [roomForm, setRoomForm] = useState<SaveRoomProfileInput>({
     room_key: '',
@@ -345,8 +328,6 @@ export default function RoomAdminView({
     if (!roomKey) return
     let active = true
     const walletDealType = existingDealTypes.includes('Agent') ? 'Agent' : activeDealType
-    setWallets([])
-    setWalletForm(emptyWallet(roomKey, walletDealType))
     window.electronAPI.getRoomWallets(roomKey, walletDealType)
       .then((result) => {
         if (!active) return
@@ -398,6 +379,25 @@ export default function RoomAdminView({
 
   const selectedRoomName = roomName(index?.profiles || [], roomKey)
   const selectedRoomProfile = index?.profiles.find((profile) => profile.room_key === roomKey)
+  const selectedLinkVerificationRoomName = useMemo(
+    () => resolveLinkVerificationRoomRule(selectedRoomName).canonicalRoomName,
+    [selectedRoomName]
+  )
+
+  useEffect(() => {
+    if (!selectedLinkVerificationRoomName) return
+    let active = true
+    window.electronAPI.getLinkVerificationTemplates(selectedLinkVerificationRoomName)
+      .then((templates) => {
+        if (active) setLinkVerificationTemplates(templates || [])
+      })
+      .catch(() => {
+        if (active) setLinkVerificationTemplates([])
+      })
+    return () => {
+      active = false
+    }
+  }, [selectedLinkVerificationRoomName])
 
   const showMessage = (text: string) => {
     setError('')
@@ -522,6 +522,32 @@ export default function RoomAdminView({
     }
     showMessage(isActive ? 'Рум включен в инфо' : 'Рум скрыт из инфо')
     await loadIndex(selectedRoomProfile.room_key)
+  }
+
+  const saveLinkVerificationTemplate = async (template: SaveLinkVerificationTemplateInput) => {
+    const result = await window.electronAPI.saveLinkVerificationTemplate(template)
+    if (!result.success) {
+      setMessage('')
+      setError(result.error || 'Не удалось сохранить шаблон привязки')
+      return
+    }
+    const nextTemplates = await window.electronAPI.getLinkVerificationTemplates(template.room_name)
+    setLinkVerificationTemplates(nextTemplates || [])
+    showMessage('Шаблон привязки сохранен')
+  }
+
+  const resetLinkVerificationTemplate = async (roomNameValue: string, templateKey: string) => {
+    const confirmed = window.confirm('Вернуть встроенный шаблон для этого рума? Ручная правка будет удалена.')
+    if (!confirmed) return
+    const result = await window.electronAPI.deleteLinkVerificationTemplate(roomNameValue, templateKey)
+    if (!result.success) {
+      setMessage('')
+      setError(result.error || 'Не удалось вернуть дефолтный шаблон')
+      return
+    }
+    const nextTemplates = await window.electronAPI.getLinkVerificationTemplates(roomNameValue)
+    setLinkVerificationTemplates(nextTemplates || [])
+    showMessage('Вернули дефолтный шаблон')
   }
 
   const deleteWallet = async (walletId = walletForm?.id) => {
@@ -834,6 +860,7 @@ export default function RoomAdminView({
           <div className="flex rounded-xl bg-slate-950 p-1">
             <ModeButton active={mode === 'deals'} onClick={() => setMode('deals')}>Сделки</ModeButton>
             <ModeButton active={mode === 'methods'} onClick={() => setMode('methods')}>Методы</ModeButton>
+            <ModeButton active={mode === 'linkVerification'} onClick={() => setMode('linkVerification')}>Привязки</ModeButton>
           </div>
         </div>
         <div className="relative min-w-56">
@@ -963,6 +990,14 @@ export default function RoomAdminView({
           onDelete={deletePaymentMethod}
           onDeleteWallet={deleteWallet}
           onReorder={reorderPaymentMethods}
+        />
+      ) : mode === 'linkVerification' ? (
+        <LinkVerificationTemplateEditor
+          key={selectedRoomName}
+          roomName={selectedRoomName}
+          templates={linkVerificationTemplates}
+          onSave={saveLinkVerificationTemplate}
+          onReset={resetLinkVerificationTemplate}
         />
       ) : (
         null
@@ -1378,6 +1413,160 @@ function PaymentMethodEditor({
         </div>
       </section>
     </div>
+  )
+}
+
+function LinkVerificationTemplateEditor({
+  roomName,
+  templates,
+  onSave,
+  onReset,
+}: {
+  roomName: string
+  templates: LinkVerificationTemplateInfo[]
+  onSave: (template: SaveLinkVerificationTemplateInput) => void
+  onReset: (roomName: string, templateKey: string) => void
+}) {
+  const rule = useMemo(() => resolveLinkVerificationRoomRule(roomName), [roomName])
+  const templateOptions = useMemo(
+    () => applyLinkVerificationTemplateOverrides(rule.templates, templates, rule.canonicalRoomName),
+    [rule.canonicalRoomName, rule.templates, templates]
+  )
+  const [templateKey, setTemplateKey] = useState(rule.defaultTemplateKey)
+  const selectedTemplate = templateOptions.find((template) => template.key === templateKey) || templateOptions[0]
+  const selectedOverride = selectedTemplate
+    ? templates.find((template) => template.template_key === selectedTemplate.key)
+    : undefined
+
+  if (!selectedTemplate) {
+    return (
+      <section className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
+        <h3 className="text-lg font-bold text-slate-100">Шаблоны проверки привязки</h3>
+        <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Для {roomName} нет шаблона. Добавьте шаблон проверки привязки в настройках рума.
+        </div>
+      </section>
+    )
+  }
+
+  return (
+    <LinkVerificationTemplateDraft
+      key={`${selectedTemplate.key}:${selectedOverride?.updated_at || 'builtin'}`}
+      canonicalRoomName={rule.canonicalRoomName}
+      selectedTemplate={selectedTemplate}
+      selectedOverride={selectedOverride}
+      templateOptions={templateOptions}
+      onSelect={setTemplateKey}
+      onSave={onSave}
+      onReset={onReset}
+    />
+  )
+}
+
+function LinkVerificationTemplateDraft({
+  canonicalRoomName,
+  selectedTemplate,
+  selectedOverride,
+  templateOptions,
+  onSelect,
+  onSave,
+  onReset,
+}: {
+  canonicalRoomName: string
+  selectedTemplate: LinkVerificationTemplate
+  selectedOverride?: LinkVerificationTemplateInfo
+  templateOptions: LinkVerificationTemplate[]
+  onSelect: (templateKey: string) => void
+  onSave: (template: SaveLinkVerificationTemplateInput) => void
+  onReset: (roomName: string, templateKey: string) => void
+}) {
+  const [draftLabel, setDraftLabel] = useState(selectedTemplate.label)
+  const [draftChannel, setDraftChannel] = useState<'messenger' | 'email'>(selectedTemplate.channel)
+  const [draftBody, setDraftBody] = useState(selectedTemplate.body)
+
+  const save = () => {
+    onSave({
+      id: selectedOverride?.id,
+      room_name: canonicalRoomName,
+      template_key: selectedTemplate.key,
+      label: draftLabel,
+      channel: draftChannel,
+      body: draftBody,
+      recipient_email: selectedTemplate.recipientEmail || null,
+      cc_emails: selectedTemplate.ccEmails || null,
+      notes: selectedTemplate.notes || null,
+    })
+  }
+
+  return (
+    <section className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-slate-100">Шаблоны проверки привязки</h3>
+          <div className="mt-1 text-sm text-slate-500">
+            {selectedOverride ? 'Используется ручная версия для этого рума.' : 'Сейчас используется встроенный шаблон.'}
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {selectedOverride && (
+            <button
+              type="button"
+              onClick={() => onReset(canonicalRoomName, selectedTemplate.key)}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-amber-500 hover:text-amber-100"
+            >
+              <RotateCcw size={15} />
+              Дефолт
+            </button>
+          )}
+          <SaveButton onClick={save} />
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
+        <div className="space-y-4">
+          <Field label="Шаблон">
+            <select
+              value={selectedTemplate.key}
+              onChange={(event) => onSelect(event.target.value)}
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
+            >
+              {templateOptions.map((template) => (
+                <option key={template.key} value={template.key}>{template.label}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Название">
+            <input
+              value={draftLabel}
+              onChange={(event) => setDraftLabel(event.target.value)}
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
+            />
+          </Field>
+          <Field label="Канал">
+            <select
+              value={draftChannel}
+              onChange={(event) => setDraftChannel(event.target.value as 'messenger' | 'email')}
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
+            >
+              <option value="messenger">Мессенджер</option>
+              <option value="email">Email</option>
+            </select>
+          </Field>
+          <div className="rounded-lg border border-slate-700/70 bg-slate-900/50 p-3 text-xs leading-5 text-slate-500">
+            Плейсхолдеры: {'<room_name>'}, {'<player_data>'}, {'<username>'}, {'<id>'}, {'<nick>'}, {'<email>'}, {'<messenger>'}, {'<messenger_username>'}.
+          </div>
+        </div>
+
+        <Field label="Текст шаблона">
+          <textarea
+            value={draftBody}
+            onChange={(event) => setDraftBody(event.target.value)}
+            rows={16}
+            className="min-h-96 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 font-mono text-sm leading-6 text-slate-100 outline-none focus:border-blue-500"
+          />
+        </Field>
+      </div>
+    </section>
   )
 }
 

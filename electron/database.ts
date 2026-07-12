@@ -104,6 +104,18 @@ export interface SaveRoomPaymentMethodInput {
   sort_order_only?: boolean
 }
 
+export interface SaveLinkVerificationTemplateInput {
+  id?: number
+  room_name: string
+  template_key: string
+  label: string
+  channel: 'messenger' | 'email'
+  body: string
+  recipient_email?: string | null
+  cc_emails?: string[] | string | null
+  notes?: string | null
+}
+
 export interface RoomProfileInfo {
   id: number
   room_key: string
@@ -170,6 +182,19 @@ export interface RoomCountryAvailabilityInfo {
   source_date?: string | null
   sort_order: number
   is_active: number
+}
+
+export interface LinkVerificationTemplateInfo {
+  id: number
+  room_name: string
+  template_key: string
+  label: string
+  channel: 'messenger' | 'email'
+  body: string
+  recipient_email?: string | null
+  cc_emails?: string | null
+  notes?: string | null
+  updated_at?: string | null
 }
 
 export interface RoomKnowledgeIndex {
@@ -475,6 +500,114 @@ export class TransactionerDatabase {
         AND is_active = 1
       ORDER BY sort_order, deal_type COLLATE NOCASE
     `).all(normalizedRoomKey, language) as RoomDealInfo[]
+  }
+
+  getLinkVerificationTemplates(roomName: string): LinkVerificationTemplateInfo[] {
+    const normalizedRoomName = String(roomName || '').trim()
+    if (!normalizedRoomName) return []
+
+    return this.db.prepare(`
+      SELECT * FROM link_verification_templates
+      WHERE room_name = ? COLLATE NOCASE
+      ORDER BY template_key COLLATE NOCASE
+    `).all(normalizedRoomName) as LinkVerificationTemplateInfo[]
+  }
+
+  saveLinkVerificationTemplate(data: SaveLinkVerificationTemplateInput): SavePlayerResult {
+    try {
+      const roomName = String(data.room_name || '').trim()
+      const templateKey = String(data.template_key || '').trim()
+      const label = String(data.label || '').trim()
+      const channel = data.channel === 'email' ? 'email' : 'messenger'
+      const body = String(data.body || '').trim()
+      const ccEmails = Array.isArray(data.cc_emails)
+        ? data.cc_emails.map((item) => String(item).trim()).filter(Boolean).join(',')
+        : data.cc_emails
+          ? String(data.cc_emails).trim()
+          : null
+      const now = new Date().toISOString()
+
+      if (!roomName) return { success: false, error: 'Выберите рум' }
+      if (!templateKey) return { success: false, error: 'Выберите шаблон' }
+      if (!label) return { success: false, error: 'Заполните название шаблона' }
+      if (!body) return { success: false, error: 'Заполните текст шаблона' }
+
+      const payload = {
+        roomName,
+        templateKey,
+        label,
+        channel,
+        body,
+        recipientEmail: data.recipient_email ? String(data.recipient_email).trim() : null,
+        ccEmails,
+        notes: data.notes ? String(data.notes).trim() : null,
+        updatedAt: now,
+      }
+
+      if (data.id) {
+        const result = this.db.prepare(`
+          UPDATE link_verification_templates
+          SET room_name = @roomName,
+              template_key = @templateKey,
+              label = @label,
+              channel = @channel,
+              body = @body,
+              recipient_email = @recipientEmail,
+              cc_emails = @ccEmails,
+              notes = @notes,
+              updated_at = @updatedAt
+          WHERE id = @id
+        `).run({ ...payload, id: Number(data.id) })
+        if (result.changes === 0) return { success: false, error: 'Шаблон не найден' }
+        return { success: true, id: Number(data.id) }
+      }
+
+      this.db.prepare(`
+        INSERT INTO link_verification_templates (
+          room_name, template_key, label, channel, body, recipient_email, cc_emails, notes, updated_at
+        )
+        VALUES (
+          @roomName, @templateKey, @label, @channel, @body, @recipientEmail, @ccEmails, @notes, @updatedAt
+        )
+        ON CONFLICT(room_name, template_key) DO UPDATE SET
+          label = excluded.label,
+          channel = excluded.channel,
+          body = excluded.body,
+          recipient_email = excluded.recipient_email,
+          cc_emails = excluded.cc_emails,
+          notes = excluded.notes,
+          updated_at = excluded.updated_at
+      `).run(payload)
+      const stored = this.db.prepare(`
+        SELECT id FROM link_verification_templates
+        WHERE room_name = ? COLLATE NOCASE
+          AND template_key = ? COLLATE NOCASE
+      `).get(roomName, templateKey) as { id: number } | undefined
+      const id = Number(stored?.id)
+      if (!id) return { success: false, error: 'Не удалось сохранить шаблон' }
+      return { success: true, id }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  deleteLinkVerificationTemplate(roomName: string, templateKey: string): MutationResult {
+    try {
+      const normalizedRoomName = String(roomName || '').trim()
+      const normalizedTemplateKey = String(templateKey || '').trim()
+      if (!normalizedRoomName || !normalizedTemplateKey) return { success: false, error: 'Шаблон не найден' }
+
+      this.db.prepare(`
+        DELETE FROM link_verification_templates
+        WHERE room_name = ? COLLATE NOCASE
+          AND template_key = ? COLLATE NOCASE
+      `).run(normalizedRoomName, normalizedTemplateKey)
+      return { success: true }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
   }
 
   saveRoomDeal(data: SaveRoomDealInput): SavePlayerResult {
@@ -1006,6 +1139,19 @@ export class TransactionerDatabase {
         sort_order INTEGER NOT NULL DEFAULT 0,
         is_active INTEGER NOT NULL DEFAULT 1,
         UNIQUE(room_key, country_code, status, deal_type, language)
+      );
+      CREATE TABLE IF NOT EXISTS link_verification_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_name TEXT COLLATE NOCASE NOT NULL,
+        template_key TEXT COLLATE NOCASE NOT NULL,
+        label TEXT NOT NULL,
+        channel TEXT NOT NULL DEFAULT 'messenger',
+        body TEXT NOT NULL,
+        recipient_email TEXT,
+        cc_emails TEXT,
+        notes TEXT,
+        updated_at TEXT,
+        UNIQUE(room_name, template_key)
       );
       CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY,

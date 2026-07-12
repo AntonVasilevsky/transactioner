@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest'
 import {
+  applyLinkVerificationTemplateOverrides,
   buildLinkVerificationFieldValues,
   buildLinkVerificationRequestText,
   buildLinkVerificationTemplateValues,
   buildCenteredGoogleSheetsRowHtml,
   buildSheet1Tsv,
   composePlayerDataByRule,
+  composeTypedIdentityData,
   getLinkVerificationUsernameFieldLabel,
   normalizeMessengerLabel,
+  resolveSheet2DirectusMessenger,
   resolveIdentityFieldsForRoomChange,
   sortLinkVerificationRoomOptions,
   toDirectusMessenger
@@ -76,6 +79,20 @@ describe('LinkVerificationView helpers', () => {
     expect(fields.nick).toBe('hero-user')
     expect(fields.userId).toBe('hero-user')
     expect(fields.messengerUsername).toBe('hero-user')
+  })
+
+  it('keeps typed username, room id, and email available for sheet rows', () => {
+    expect(composeTypedIdentityData({
+      username: 'hero-user',
+      roomId: '',
+      email: 'hero@example.com'
+    })).toBe('hero-user / hero@example.com')
+
+    expect(composeTypedIdentityData({
+      username: 'hero-user',
+      roomId: '1483304',
+      email: 'hero@example.com'
+    })).toBe('hero-user / 1483304 / hero@example.com')
   })
 
   it('maps legacy request placeholders to the three request fields', () => {
@@ -271,6 +288,53 @@ Telegram: @AlexanderChazov
   it('uses player email for Directus messenger when messenger is Email or Site', () => {
     expect(toDirectusMessenger('Email', '@hero-contact', 'hero@example.com')).toBe('email: hero@example.com')
     expect(toDirectusMessenger('Site', 'site-contact', 'hero@example.com')).toBe('email: hero@example.com')
+  })
+
+  it('uses player email for Directus messenger when the Sheet 2 source is Site', () => {
+    expect(resolveSheet2DirectusMessenger({
+      source: 'Site',
+      messenger: 'Telegram',
+      login: '@hero-contact',
+      email: 'mail@mail.com'
+    })).toBe('email: mail@mail.com')
+  })
+
+  it('applies saved template overrides only to the matching room and key', () => {
+    const rule = resolveLinkVerificationRoomRule('888 Poker')
+    const overrides = [{
+      room_name: '888 POKER',
+      template_key: '888-confirmation',
+      label: 'Edited confirmation',
+      channel: 'email' as const,
+      body: 'Edited <email>',
+      recipient_email: 'support@example.com',
+      cc_emails: 'first@example.com, second@example.com',
+      notes: 'Saved locally',
+    }]
+
+    const templates = applyLinkVerificationTemplateOverrides(rule.templates, overrides, rule.canonicalRoomName)
+
+    expect(templates.find((template) => template.key === '888-confirmation')).toEqual(expect.objectContaining({
+      label: 'Edited confirmation',
+      channel: 'email',
+      body: 'Edited <email>',
+      recipientEmail: 'support@example.com',
+      ccEmails: ['first@example.com', 'second@example.com'],
+      notes: 'Saved locally',
+    }))
+    expect(templates.find((template) => template.key === '888-check')).toEqual(
+      rule.templates.find((template) => template.key === '888-check')
+    )
+    expect(applyLinkVerificationTemplateOverrides(rule.templates, overrides, 'Nexa')).toEqual(rule.templates)
+  })
+
+  it('keeps the selected messenger for non-Site Sheet 2 sources', () => {
+    expect(resolveSheet2DirectusMessenger({
+      source: 'WA',
+      messenger: 'Telegram',
+      login: '@hero-contact',
+      email: 'mail@mail.com'
+    })).toBe('telegram: @hero-contact')
   })
 
   it('builds a centered Google Sheets HTML row for rich clipboard paste', () => {

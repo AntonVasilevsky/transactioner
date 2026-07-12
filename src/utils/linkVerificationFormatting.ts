@@ -1,4 +1,4 @@
-import type { LinkVerificationFieldKey, LinkVerificationRoomRule } from './linkVerificationRules'
+import type { LinkVerificationFieldKey, LinkVerificationRoomRule, LinkVerificationTemplate } from './linkVerificationRules'
 
 export interface RoomRegistrationStatLike {
   roomName?: string | null
@@ -37,6 +37,55 @@ export const toDirectusMessenger = (messenger: string, login: string, userEmail 
       ? 'whatsapp'
       : base || 'messenger'
   return `${prefix}: ${username}`
+}
+
+export const resolveSheet2DirectusMessenger = (values: {
+  source: string
+  messenger: string
+  login: string
+  email: string
+}) => {
+  const messenger = values.source.trim().toLowerCase() === 'site'
+    ? values.source
+    : values.messenger
+  return toDirectusMessenger(messenger, values.login, values.email)
+}
+
+export interface LinkVerificationTemplateOverrideLike {
+  room_name: string
+  template_key: string
+  label: string
+  channel: 'messenger' | 'email'
+  body: string
+  recipient_email?: string | null
+  cc_emails?: string | null
+  notes?: string | null
+}
+
+export const applyLinkVerificationTemplateOverrides = (
+  templates: LinkVerificationTemplate[],
+  overrides: LinkVerificationTemplateOverrideLike[],
+  roomName: string
+) => {
+  const normalizedRoomName = roomName.trim().toLowerCase()
+  return templates.map((template) => {
+    const saved = overrides.find((item) => (
+      item.room_name.trim().toLowerCase() === normalizedRoomName &&
+      item.template_key === template.key
+    ))
+    if (!saved) return template
+    return {
+      ...template,
+      label: saved.label,
+      channel: saved.channel,
+      body: saved.body,
+      recipientEmail: saved.recipient_email || undefined,
+      ccEmails: saved.cc_emails
+        ? saved.cc_emails.split(',').map((item) => item.trim()).filter(Boolean)
+        : template.ccEmails,
+      notes: saved.notes || template.notes,
+    } satisfies LinkVerificationTemplate
+  })
 }
 
 export const uniqueNonEmpty = (values: string[]) => {
@@ -107,6 +156,16 @@ export const composePlayerDataByRule = (
 ) => {
   return uniqueNonEmpty(requiredFields.map((key) => fieldValues[key] || '')).join(' / ')
 }
+
+export const composeTypedIdentityData = (values: {
+  username: string
+  roomId: string
+  email: string
+}) => uniqueNonEmpty([
+  values.username.trim(),
+  values.roomId.trim(),
+  values.email.trim()
+]).join(' / ')
 
 export const buildLinkVerificationFieldValues = (values: {
   username: string

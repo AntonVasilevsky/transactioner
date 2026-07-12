@@ -123,6 +123,18 @@ interface SaveRoomPaymentMethodInput {
   sort_order_only?: boolean
 }
 
+interface SaveLinkVerificationTemplateInput {
+  id?: number
+  room_name: string
+  template_key: string
+  label: string
+  channel: 'messenger' | 'email'
+  body: string
+  recipient_email?: string | null
+  cc_emails?: string[] | string | null
+  notes?: string | null
+}
+
 interface UpdateCheckResult {
   available: boolean
   currentVersion: string
@@ -210,6 +222,19 @@ interface RoomCountryAvailabilityInfo {
   is_active: number
 }
 
+interface LinkVerificationTemplateInfo {
+  id: number
+  room_name: string
+  template_key: string
+  label: string
+  channel: 'messenger' | 'email'
+  body: string
+  recipient_email?: string | null
+  cc_emails?: string | null
+  notes?: string | null
+  updated_at?: string | null
+}
+
 interface RoomKnowledgeIndex {
   profiles: RoomProfileInfo[]
   dealOptions: Array<{ room_key: string; deal_type: RoomDealType; language: RoomLanguage }>
@@ -278,9 +303,12 @@ interface Window {
     getRoomKnowledgeAdminIndex: () => Promise<RoomKnowledgeIndex>;
     getRoomWallets: (roomKey: string, dealType?: RoomDealType) => Promise<RoomWalletInfo[]>;
     getRoomDeals: (roomKey: string, language: RoomLanguage, dealType?: RoomDealType) => Promise<RoomDealInfo[]>;
+    getLinkVerificationTemplates: (roomName: string) => Promise<LinkVerificationTemplateInfo[]>;
     getRoomCountryAvailability: (roomKey: string) => Promise<RoomCountryAvailabilityInfo[]>;
     saveRoomProfile: (data: SaveRoomProfileInput) => Promise<SavePlayerResult>;
     saveRoomDeal: (data: SaveRoomDealInput) => Promise<SavePlayerResult>;
+    saveLinkVerificationTemplate: (data: SaveLinkVerificationTemplateInput) => Promise<SavePlayerResult>;
+    deleteLinkVerificationTemplate: (roomName: string, templateKey: string) => Promise<MutationResult>;
     saveRoomWallet: (data: SaveRoomWalletInput) => Promise<SavePlayerResult>;
     deleteRoomWallet: (id: number) => Promise<MutationResult>;
     saveRoomPaymentMethod: (data: SaveRoomPaymentMethodInput) => Promise<SavePlayerResult>;

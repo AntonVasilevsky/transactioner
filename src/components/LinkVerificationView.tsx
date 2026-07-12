@@ -7,17 +7,19 @@ import {
   resolveLinkVerificationRoomRule
 } from '../utils/linkVerificationRules'
 import {
+  applyLinkVerificationTemplateOverrides,
   buildLinkVerificationFieldValues,
   buildLinkVerificationRequestText,
   buildLinkVerificationTemplateValues,
   buildCenteredGoogleSheetsRowHtml,
   buildSheet1Tsv,
+  composeTypedIdentityData,
   composePlayerDataByRule,
   getLinkVerificationUsernameFieldLabel,
   normalizeMessengerLabel,
   resolveIdentityFieldsForRoomChange,
-  sortLinkVerificationRoomOptions,
-  toDirectusMessenger
+  resolveSheet2DirectusMessenger,
+  sortLinkVerificationRoomOptions
 } from '../utils/linkVerificationFormatting'
 import { matchesRoomSearch } from '../utils/roomSearch'
 
@@ -79,6 +81,8 @@ export default function LinkVerificationView() {
   const [paymentCurrency, setPaymentCurrency] = useState('')
   const [paymentAddress, setPaymentAddress] = useState('')
   const [roomRegistrationStats, setRoomRegistrationStats] = useState<RoomRegistrationStat[]>([])
+  const [roomProfiles, setRoomProfiles] = useState<RoomProfileInfo[]>([])
+  const [savedTemplates, setSavedTemplates] = useState<LinkVerificationTemplateInfo[]>([])
   const [copiedKey, setCopiedKey] = useState<'request' | 'sheet1' | 'sheet2' | ''>('')
   const messengerInputWasFocusedOnMouseDown = useRef(false)
   const sourceInputWasFocusedOnMouseDown = useRef(false)
@@ -90,12 +94,19 @@ export default function LinkVerificationView() {
 
   useEffect(() => {
     let active = true
-    window.electronAPI.getRoomRegistrationStats()
-      .then((stats) => {
-        if (active) setRoomRegistrationStats(stats || [])
+    Promise.all([
+      window.electronAPI.getRoomRegistrationStats(),
+      window.electronAPI.getRoomKnowledgeIndex()
+    ])
+      .then(([stats, index]) => {
+        if (!active) return
+        setRoomRegistrationStats(stats || [])
+        setRoomProfiles(index?.profiles || [])
       })
       .catch(() => {
-        if (active) setRoomRegistrationStats([])
+        if (!active) return
+        setRoomRegistrationStats([])
+        setRoomProfiles([])
       })
     return () => {
       active = false
@@ -103,9 +114,26 @@ export default function LinkVerificationView() {
   }, [])
 
   const rule = useMemo(() => resolveLinkVerificationRoomRule(roomName), [roomName])
-  const templateOptions = rule.templates
-  const selectedTemplate = LINK_VERIFICATION_TEMPLATES[templateKey] || templateOptions[0] || LINK_VERIFICATION_TEMPLATES.default
+  const templateOptions = useMemo(
+    () => applyLinkVerificationTemplateOverrides(rule.templates, savedTemplates, rule.canonicalRoomName),
+    [rule.canonicalRoomName, rule.templates, savedTemplates]
+  )
+  const selectedTemplate = templateOptions.find((template) => template.key === templateKey) || templateOptions[0] || LINK_VERIFICATION_TEMPLATES.default
   const usernameFieldLabel = getLinkVerificationUsernameFieldLabel(rule.canonicalRoomName, selectedTemplate.key)
+
+  useEffect(() => {
+    let active = true
+    window.electronAPI.getLinkVerificationTemplates(rule.canonicalRoomName)
+      .then((templates) => {
+        if (active) setSavedTemplates(templates || [])
+      })
+      .catch(() => {
+        if (active) setSavedTemplates([])
+      })
+    return () => {
+      active = false
+    }
+  }, [rule.canonicalRoomName])
 
   const filteredMessengerOptions = useMemo(() => {
     const rawQuery = messengerQuery.trim()
@@ -154,10 +182,14 @@ export default function LinkVerificationView() {
   )
 
   const effectivePlayerData = ruleBasedPlayerData
+  const sheetPlayerData = useMemo(
+    () => composeTypedIdentityData({ username, roomId, email }),
+    [email, roomId, username]
+  )
 
   const sheet2NickLoginId = isSheet2NickManual
     ? sheet2NickManual.trim()
-    : effectivePlayerData
+    : sheetPlayerData
 
   const autoSheet2RoomUsername = useMemo(
     () => fieldValues[rule.sheet2RoomUsernameField]?.trim() || '',
@@ -197,12 +229,12 @@ export default function LinkVerificationView() {
       messenger: selectedMessenger,
       messengerUsername,
       roomName: rule.canonicalRoomName,
-      loginNickId: effectivePlayerData,
+      loginNickId: sheetPlayerData,
       status,
       deliveredToPlayer,
       updateChat
     })
-  }, [date, deliveredToPlayer, effectivePlayerData, manager, messengerUsername, rule.canonicalRoomName, selectedMessenger, status, updateChat])
+  }, [date, deliveredToPlayer, manager, messengerUsername, rule.canonicalRoomName, selectedMessenger, sheetPlayerData, status, updateChat])
 
   const sheet2Tsv = useMemo(() => {
     const row = [
@@ -213,7 +245,12 @@ export default function LinkVerificationView() {
       country.trim(),
       normalizeMessengerLabel(selectedMessenger),
       messengerUsername.trim(),
-      toDirectusMessenger(selectedMessenger, messengerUsername, email),
+      resolveSheet2DirectusMessenger({
+        source,
+        messenger: selectedMessenger,
+        login: messengerUsername,
+        email
+      }),
       nameNick.trim(),
       accountOnWpd.trim(),
       directusUsername.trim(),
@@ -262,11 +299,12 @@ export default function LinkVerificationView() {
 
   const roomOptions = useMemo(() => {
     const names = new Set<string>()
+    for (const item of roomProfiles) names.add(item.display_name)
     for (const item of linkVerificationRoomRules) names.add(item.canonicalRoomName)
     for (const item of LINK_VERIFICATION_ROOM_SUGGESTIONS) names.add(item)
     for (const item of roomRegistrationStats) names.add(item.roomName)
     return sortLinkVerificationRoomOptions(Array.from(names), roomRegistrationStats)
-  }, [roomRegistrationStats])
+  }, [roomProfiles, roomRegistrationStats])
 
   const filteredRoomOptions = useMemo(() => {
     const rawQuery = roomQuery.trim()
@@ -505,11 +543,12 @@ export default function LinkVerificationView() {
           <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-400">
             <div className="flex items-center gap-2 text-slate-300"><Link2 size={14} /> Правило рума: {rule.canonicalRoomName}</div>
             <div className="mt-2">Данные для запроса: {usernameFieldLabel}, Room ID, Email</div>
-            <div className="mt-1">Сохранение игрока в базу: {rule.persistPlayerInMainDb ? 'Да (core room)' : 'Нет (generator only)'}</div>
+            <div className="mt-1">Автосохранение игрока: нет</div>
             {selectedTemplate.channel === 'email' && selectedTemplate.recipientEmail && (
               <div className="mt-1">Куда отправлять: {selectedTemplate.recipientEmail}{selectedTemplate.ccEmails?.length ? ` | CC: ${selectedTemplate.ccEmails.join(', ')}` : ''}</div>
             )}
           </div>
+
         </div>
 
         <div className="space-y-6">

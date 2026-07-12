@@ -4,7 +4,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDailyDatabaseBackup, createDatabaseSnapshotBackup } from './backup'
 import { convertUsdToEur, parseCurrencyAmount } from './currency'
-import { TransactionerDatabase, type RoomDealType, type RoomLanguage, type SaveRoomDealInput, type SaveRoomPaymentMethodInput, type SaveRoomProfileInput, type SaveRoomWalletInput } from './database'
+import { TransactionerDatabase, type RoomDealType, type RoomLanguage, type SaveLinkVerificationTemplateInput, type SaveRoomDealInput, type SaveRoomPaymentMethodInput, type SaveRoomProfileInput, type SaveRoomWalletInput } from './database'
 import { resolveTransaction, type KnownTransactionWallet } from './transactionResolver'
 import { checkForUpdate, isAllowedReleaseUrl } from './updates'
 
@@ -119,6 +119,9 @@ ipcMain.handle('get-room-wallets', (_, roomKey: string, dealType?: RoomDealType)
 ipcMain.handle('get-room-deals', (_, roomKey: string, language: RoomLanguage, dealType?: RoomDealType) => (
   store?.getRoomDeals(roomKey, language, dealType) ?? []
 ))
+ipcMain.handle('get-link-verification-templates', (_, roomName: string) => (
+  store?.getLinkVerificationTemplates(roomName) ?? []
+))
 ipcMain.handle('get-room-country-availability', (_, roomKey: string) => (
   store?.getRoomCountryAvailability(roomKey) ?? []
 ))
@@ -131,6 +134,18 @@ ipcMain.handle('save-room-profile', (_, data: SaveRoomProfileInput) => {
 ipcMain.handle('save-room-deal', (_, data: SaveRoomDealInput) => {
   runRoomEditBackup()
   const result = store?.saveRoomDeal(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('save-link-verification-template', (_, data: SaveLinkVerificationTemplateInput) => {
+  runRoomEditBackup()
+  const result = store?.saveLinkVerificationTemplate(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('delete-link-verification-template', (_, roomName: string, templateKey: string) => {
+  runRoomEditBackup()
+  const result = store?.deleteLinkVerificationTemplate(roomName, templateKey) ?? { success: false, error: 'База данных недоступна' }
   if (result.success) runDailyBackup()
   return result
 })
