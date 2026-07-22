@@ -320,6 +320,27 @@ describe('TransactionerDatabase', () => {
     expect(db.searchPlayer('2178')).not.toBeNull()
   })
 
+  it('searches player data across keyboard layouts and transliteration', () => {
+    const saved = db.savePlayer(basePlayer({
+      messenger_username: '@anton_wpd',
+      contacts: [
+        { contactMethod: 'TG', contactValue: '@anton_wpd' },
+        { contactMethod: 'Discord', contactValue: 'Антон Support' }
+      ],
+      accounts: [
+        { roomName: 'RedStar', roomUsername: 'Maldoror', roomPlayerId: '217811', email: '' },
+        { roomName: 'WPT Global', roomUsername: 'AntonWPD', roomPlayerId: '317811', email: '' }
+      ]
+    }))
+
+    expect(saved.success).toBe(true)
+    expect(db.searchPlayer('фтещт')).not.toBeNull()
+    expect(db.searchPlayer('anton support')).not.toBeNull()
+    expect(db.searchPlayer('antonwpd')).not.toBeNull()
+    expect(db.searchPlayer('ред стар')).not.toBeNull()
+    expect(db.searchPlayer('впт')).not.toBeNull()
+  })
+
   it('normalizes hidden WhatsApp characters while keeping contacts searchable', () => {
     const dirtyWhatsapp = '\u202A+55\u00A048\u00A099663\u20110764\u202C'
     const cleanWhatsapp = '+55 48 99663-0764'

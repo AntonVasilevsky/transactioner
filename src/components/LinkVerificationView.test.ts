@@ -231,6 +231,13 @@ Telegram: @AlexanderChazov
     expect(resolveLinkVerificationRoomRule('RedStar').deal.directusDealSchema).toBe('standard')
   })
 
+  it('uses the 15% Net Revenue deal from 300 monthly rake for BCPoker', () => {
+    expect(resolveLinkVerificationRoomRule('BCPoker').deal).toEqual({
+      dealText: '15% Net Revenue (300+ rake/month)',
+      directusDealSchema: 'net/ramp\n300, 15%'
+    })
+  })
+
   it('sorts room picker options by core rooms first and registration frequency after', () => {
     const result = sortLinkVerificationRoomOptions(
       ['ACR', 'Nexa', 'RedStar', 'Champion Poker', 'Basepoker', 'WPTG', 'BetOnline'],

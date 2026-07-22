@@ -9,9 +9,32 @@ import PlayerListView from './components/PlayerListView'
 import EditPlayerView from './components/EditPlayerView'
 import RoomInfoView from './components/RoomInfoView'
 import LinkVerificationView from './components/LinkVerificationView'
+import {
+  moveSidebarNavToTarget,
+  normalizeSidebarNavOrder,
+  type SidebarNavId,
+} from './utils/sidebarNavigation'
 
 export type ViewState = 'search' | 'add' | 'form' | 'list' | 'edit' | 'roomInfo' | 'linkVerification'
 export type OperationType = 'Deposit' | 'Withdrawal'
+
+const sidebarNavOrderStorageKey = 'transactioner.sidebarNavOrder'
+
+const loadSidebarNavOrder = () => {
+  try {
+    return normalizeSidebarNavOrder(JSON.parse(localStorage.getItem(sidebarNavOrderStorageKey) || 'null'))
+  } catch {
+    return normalizeSidebarNavOrder(null)
+  }
+}
+
+const saveSidebarNavOrder = (order: SidebarNavId[]) => {
+  try {
+    localStorage.setItem(sidebarNavOrderStorageKey, JSON.stringify(order))
+  } catch {
+    // Navigation still works when local storage is unavailable; only persistence is lost.
+  }
+}
 
 function App() {
   const [currentView, setCurrentView] = useState<ViewState>('search')
@@ -25,7 +48,12 @@ function App() {
   const [updateDismissed, setUpdateDismissed] = useState(false)
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNotesInfo | null>(null)
   const [roomInfoHomeSignal, setRoomInfoHomeSignal] = useState(0)
+  const [sidebarNavOrder, setSidebarNavOrder] = useState(loadSidebarNavOrder)
+  const [draggingNavId, setDraggingNavId] = useState<SidebarNavId | null>(null)
+  const [sidebarDropTarget, setSidebarDropTarget] = useState<SidebarNavId | null>(null)
   const mainRef = useRef<HTMLElement | null>(null)
+  const draggingNavIdRef = useRef<SidebarNavId | null>(null)
+  const suppressNavClickRef = useRef(false)
 
   useEffect(() => {
     let active = true
@@ -116,6 +144,101 @@ function App() {
     setReleaseNotes(null)
   }
 
+  const handleNavDragStart = (event: React.DragEvent<HTMLButtonElement>, navId: SidebarNavId) => {
+    draggingNavIdRef.current = navId
+    suppressNavClickRef.current = true
+    setDraggingNavId(navId)
+    event.dataTransfer.effectAllowed = 'move'
+    event.dataTransfer.setData('text/plain', navId)
+  }
+
+  const handleNavDragOver = (event: React.DragEvent<HTMLDivElement>, targetId: SidebarNavId) => {
+    const draggedId = draggingNavIdRef.current
+    if (!draggedId) return
+    if (draggedId === targetId) {
+      setSidebarDropTarget(null)
+      return
+    }
+    event.preventDefault()
+    event.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleNavDragEnter = (event: React.DragEvent<HTMLDivElement>, targetId: SidebarNavId) => {
+    event.preventDefault()
+    const draggedId = draggingNavIdRef.current
+    if (!draggedId || draggedId === targetId) return
+
+    setSidebarDropTarget(targetId)
+    setSidebarNavOrder((currentOrder) => {
+      const nextOrder = moveSidebarNavToTarget(currentOrder, draggedId, targetId)
+      saveSidebarNavOrder(nextOrder)
+      return nextOrder
+    })
+  }
+
+  const handleNavDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setSidebarDropTarget(null)
+  }
+
+  const handleNavDragEnd = () => {
+    draggingNavIdRef.current = null
+    setDraggingNavId(null)
+    setSidebarDropTarget(null)
+    window.setTimeout(() => {
+      suppressNavClickRef.current = false
+    }, 0)
+  }
+
+  const handleNavClick = (onClick: () => void) => {
+    if (suppressNavClickRef.current) return
+    onClick()
+  }
+
+  const sidebarNavItems: Record<SidebarNavId, {
+    icon: React.ReactNode
+    label: string
+    active: boolean
+    onClick: () => void
+  }> = {
+    search: {
+      icon: <Search size={20} />,
+      label: 'Поиск игрока',
+      active: currentView === 'search' || currentView === 'form',
+      onClick: () => navigateTo('search'),
+    },
+    list: {
+      icon: <Users size={20} />,
+      label: 'Все игроки',
+      active: currentView === 'list',
+      onClick: () => navigateTo('list'),
+    },
+    add: {
+      icon: <UserPlus size={20} />,
+      label: 'Добавить игрока',
+      active: currentView === 'add',
+      onClick: () => {
+        setAddPlayerInitialContact('')
+        navigateTo('add')
+      },
+    },
+    roomInfo: {
+      icon: <Info size={20} />,
+      label: 'Инфо по румам',
+      active: currentView === 'roomInfo',
+      onClick: () => {
+        navigateTo('roomInfo')
+        setRoomInfoHomeSignal((value) => value + 1)
+      },
+    },
+    linkVerification: {
+      icon: <Link2 size={20} />,
+      label: 'Проверка привязки',
+      active: currentView === 'linkVerification',
+      onClick: () => navigateTo('linkVerification'),
+    },
+  }
+
   return (
     <div className="flex h-screen bg-slate-900 text-slate-100 overflow-hidden font-sans">
       {/* Sidebar Navigation */}
@@ -139,42 +262,25 @@ function App() {
         </div>
 
         <div className="flex-1 flex flex-col gap-2 px-3">
-          <NavItem 
-            icon={<Search size={20} />} 
-            label="Поиск игрока" 
-            active={currentView === 'search' || currentView === 'form'} 
-            onClick={() => navigateTo('search')}
-          />
-          <NavItem 
-            icon={<Users size={20} />} 
-            label="Все игроки" 
-            active={currentView === 'list'} 
-            onClick={() => navigateTo('list')}
-          />
-          <NavItem 
-            icon={<UserPlus size={20} />} 
-            label="Добавить игрока" 
-            active={currentView === 'add'} 
-            onClick={() => {
-              setAddPlayerInitialContact('')
-              navigateTo('add')
-            }}
-          />
-          <NavItem
-            icon={<Info size={20} />}
-            label="Инфо по румам"
-            active={currentView === 'roomInfo'}
-            onClick={() => {
-              navigateTo('roomInfo')
-              setRoomInfoHomeSignal((value) => value + 1)
-            }}
-          />
-          <NavItem
-            icon={<Link2 size={20} />}
-            label="Проверка привязки"
-            active={currentView === 'linkVerification'}
-            onClick={() => navigateTo('linkVerification')}
-          />
+          {sidebarNavOrder.map((navId) => {
+            const item = sidebarNavItems[navId]
+            return (
+              <NavItem
+                key={navId}
+                icon={item.icon}
+                label={item.label}
+                active={item.active}
+                dragging={draggingNavId === navId}
+                dragTarget={sidebarDropTarget === navId}
+                onClick={() => handleNavClick(item.onClick)}
+                onDragStart={(event) => handleNavDragStart(event, navId)}
+                onDragEnter={(event) => handleNavDragEnter(event, navId)}
+                onDragOver={(event) => handleNavDragOver(event, navId)}
+                onDrop={handleNavDrop}
+                onDragEnd={handleNavDragEnd}
+              />
+            )
+          })}
         </div>
 
         {appInfo?.version && (
@@ -304,23 +410,62 @@ function App() {
   )
 }
 
-function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active: boolean, onClick: () => void }) {
+function NavItem({
+  icon,
+  label,
+  active,
+  dragging,
+  dragTarget,
+  onClick,
+  onDragStart,
+  onDragEnter,
+  onDragOver,
+  onDrop,
+  onDragEnd,
+}: {
+  icon: React.ReactNode
+  label: string
+  active: boolean
+  dragging: boolean
+  dragTarget: boolean
+  onClick: () => void
+  onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void
+  onDragEnter: (event: React.DragEvent<HTMLDivElement>) => void
+  onDragOver: (event: React.DragEvent<HTMLDivElement>) => void
+  onDrop: (event: React.DragEvent<HTMLDivElement>) => void
+  onDragEnd: () => void
+}) {
   return (
-    <button
-      onClick={onClick}
-      className={`
-        flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 group
-        ${active 
-          ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-inner' 
-          : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'}
-      `}
+    <div
+      className="relative"
+      onDragEnter={onDragEnter}
+      onDragOver={onDragOver}
+      onDrop={onDrop}
     >
-      <div className={`${active ? 'scale-110' : 'group-hover:scale-110'} transition-transform duration-200`}>
-        {icon}
-      </div>
-      <span className="hidden lg:block font-medium">{label}</span>
-      {active && <ChevronRight size={16} className="hidden lg:block ml-auto opacity-50" />}
-    </button>
+      <button
+        type="button"
+        draggable
+        aria-grabbed={dragging}
+        title={`${label}. Перетащите, чтобы изменить порядок`}
+        onClick={onClick}
+        onDragStart={onDragStart}
+        onDragEnd={onDragEnd}
+        className={`
+          flex items-center gap-3 w-full p-3 rounded-xl transition-all duration-200 group cursor-grab active:cursor-grabbing
+          ${dragging ? 'opacity-40 scale-[0.98]' : ''}
+          ${dragTarget ? 'ring-2 ring-blue-400/70' : ''}
+          ${active
+            ? 'bg-blue-600/10 text-blue-400 border border-blue-500/20 shadow-inner'
+            : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200 border border-transparent'}
+        `}
+      >
+        <div className={`${active ? 'scale-110' : 'group-hover:scale-110'} transition-transform duration-200`}>
+          {icon}
+        </div>
+        <span className="hidden lg:block font-medium">{label}</span>
+        {active && <ChevronRight size={16} className="hidden lg:block ml-auto opacity-50" />}
+      </button>
+    </div>
   )
 }
 

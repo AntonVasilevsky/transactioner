@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import { contactSearchKey, normalizeContactText } from '../src/utils/contactNormalization'
+import { matchesRoomSearch } from '../src/utils/roomSearch'
 import { roomKnowledgeSeed, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
 
 export type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
@@ -307,7 +308,11 @@ export class TransactionerDatabase {
       LEFT JOIN accounts a ON a.player_id = p.id
       GROUP BY p.id
     `).all() as SearchPlayerRow[])
-      .filter((player) => contactSearchKey(`${player.messenger_username} ${player.contact_summary || ''} ${player.room_summary || ''}`).includes(queryKey))
+      .filter((player) => matchesRoomSearch([
+        player.messenger_username,
+        player.contact_summary,
+        player.room_summary,
+      ], query))
       .sort((left, right) => {
         const leftExact = contactSearchKey(left.messenger_username) === queryKey ? 0 : 1
         const rightExact = contactSearchKey(right.messenger_username) === queryKey ? 0 : 1

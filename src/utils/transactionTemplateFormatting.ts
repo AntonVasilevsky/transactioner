@@ -1,5 +1,35 @@
 export type AmountCurrency = 'EUR' | 'USD'
 type AmountOperationType = 'Deposit' | 'Withdrawal'
+export type TransactionTemplateLanguage = 'EN' | 'ES'
+
+interface TransactionTemplateAccountLineInput {
+  language: TransactionTemplateLanguage
+  roomName: string
+  roomUsername: string
+  roomPlayerId?: string | null
+  email?: string | null
+}
+
+const slashSeparated = (...parts: Array<string | null | undefined>) =>
+  parts.map(part => String(part || '').trim()).filter(Boolean).join(' / ')
+
+export const transactionTemplateAccountLine = ({
+  language,
+  roomName,
+  roomUsername,
+  roomPlayerId,
+  email,
+}: TransactionTemplateAccountLineInput) => {
+  if (language === 'ES') {
+    return roomName === 'Nexa'
+      ? slashSeparated(roomUsername, roomPlayerId)
+      : slashSeparated(roomUsername)
+  }
+
+  return roomName === 'Nexa'
+    ? slashSeparated(roomUsername, roomPlayerId, email)
+    : slashSeparated(roomUsername, email)
+}
 
 const numberFormatSymbols = /[€$]/g
 

@@ -8,6 +8,7 @@ import {
   currencySymbolAmount,
   defaultAmountCurrencyForRoom,
   resolveRoomPaymentWarning,
+  transactionTemplateAccountLine,
   type AmountCurrency
 } from '../utils/transactionTemplateFormatting'
 
@@ -372,9 +373,6 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     const accountLine = (...parts: Array<string | null | undefined>) =>
       parts.map(part => String(part || '').trim()).filter(Boolean).join(' / ')
 
-    const englishAccountLine = roomName === 'Nexa'
-      ? accountLine(roomUsername, roomPlayerId, email)
-      : accountLine(roomUsername, email)
     const englishAmount = templateAmount
       .replace(/^EUR\s+/i, '€')
       .replace(/^USD\s+/i, '$')
@@ -382,24 +380,24 @@ export default function FormView({ player, account, onAccountSelect, operationTy
       .replace(/^\$\s*/, '$')
       .trim()
 
-    if (templateLanguage === 'EN') {
-      const operationLabel = isDeposit ? 'deposit' : 'withdrawal'
+    if (templateLanguage === 'EN' || templateLanguage === 'ES') {
+      const localizedAccountLine = transactionTemplateAccountLine({
+        language: templateLanguage,
+        roomName: roomName || '',
+        roomUsername: roomUsername || '',
+        roomPlayerId,
+        email,
+      })
+      const operationLabel = templateLanguage === 'EN'
+        ? isDeposit ? 'deposit' : 'withdrawal'
+        : isDeposit ? 'Deposit' : 'withdrawal'
       const amountLine = `${englishAmount} ${operationLabel}`
       if (isDeposit) {
-        return `${roomName}\n${englishAccountLine}\n\n${amountLine}\n\n${txId}`
+        return `${roomName}\n${localizedAccountLine}\n\n${amountLine}\n\n${txId}`
       }
 
-      return `${roomName}\n${englishAccountLine}\n\n${amountLine}\n\n${network}\n${wallet}`
-    }
-
-    if (templateLanguage === 'ES') {
-      const operationLabel = isDeposit ? 'Deposit' : 'withdrawal'
-      const amountLine = `${englishAmount} ${operationLabel}`
-      if (isDeposit) {
-        return `${roomName}\n${roomUsername}\n\n${amountLine}\n\n${txId}`
-      }
-
-      return `${roomName}\n${roomUsername}\n\n${amountLine}\n\n${network}\n\n${wallet}`
+      const withdrawalSeparator = templateLanguage === 'ES' ? '\n\n' : '\n'
+      return `${roomName}\n${localizedAccountLine}\n\n${amountLine}\n\n${network}${withdrawalSeparator}${wallet}`
     }
     
     if (roomName === 'RedStar') {

@@ -7,6 +7,7 @@ import {
   defaultAmountCurrencyForRoom,
   euroSymbolAmount,
   resolveRoomPaymentWarning,
+  transactionTemplateAccountLine,
 } from './transactionTemplateFormatting'
 
 const roomPaymentContext = {
@@ -35,6 +36,24 @@ const roomPaymentContext = {
 }
 
 describe('transaction template amount formatting', () => {
+  it('includes the Nexa player ID in Spanish account lines', () => {
+    expect(transactionTemplateAccountLine({
+      language: 'ES' as const,
+      roomName: 'Nexa',
+      roomUsername: 'govgut',
+      roomPlayerId: '273679',
+      email: '',
+    })).toBe('govgut / 273679')
+
+    expect(transactionTemplateAccountLine({
+      language: 'ES',
+      roomName: 'Nexa',
+      roomUsername: 'govgut',
+      roomPlayerId: '',
+      email: '',
+    })).toBe('govgut')
+  })
+
   it('formats Champion deposit manual EUR amounts with the euro symbol', () => {
     expect(championDepositTemplateAmount('500', 'EUR')).toBe('€500')
     expect(championDepositTemplateAmount('EUR 500.00', 'EUR')).toBe('€500.00')

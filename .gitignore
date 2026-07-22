@@ -17,6 +17,7 @@ release
 public/icon.iconset
 build/private/*
 !build/private/.gitkeep
+/docs/supabase/creds.txt
 
 # Editor directories and files
 .vscode/*
