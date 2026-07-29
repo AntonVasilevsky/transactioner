@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Users, Clock, Search, Pencil } from 'lucide-react'
-import { contactSearchKey } from '../utils/contactNormalization'
+import { matchesRoomSearch } from '../utils/roomSearch'
 
 const METHOD_COLORS: Record<string, string> = {
   TG: 'bg-blue-500/20 text-blue-400',
@@ -25,8 +25,10 @@ export default function PlayerListView({ onSelect, onEdit }: { onSelect: (player
   }, [])
 
   const filtered = players.filter(p => {
-    const haystack = contactSearchKey(`${p.messenger_username || ''} ${p.contact_summary || ''} ${p.room_summary || ''}`)
-    return haystack.includes(contactSearchKey(filter))
+    return matchesRoomSearch(
+      [p.messenger_username, p.contact_summary, p.room_summary],
+      filter
+    )
   })
 
   const handleSelect = async (p: Player) => {

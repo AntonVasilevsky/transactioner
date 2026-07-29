@@ -306,6 +306,84 @@ describe('TransactionerDatabase', () => {
     expect(db.searchPlayer('wpd')).not.toBeNull()
   })
 
+  it('prefers an exact saved chat name over unrelated fuzzy room matches', () => {
+    const target = db.savePlayer(basePlayer({
+      messenger_username: 'T H',
+      contacts: [
+        { contactMethod: 'TG', contactValue: 'T H' },
+        { contactMethod: 'TG', contactValue: 'Алексей + WPD support' }
+      ],
+      accounts: []
+    }))
+    const distractor = db.savePlayer(basePlayer({
+      messenger_username: '@other',
+      contacts: [{ contactMethod: 'TG', contactValue: '@other' }],
+      accounts: [{ roomName: 'PokerKing', roomUsername: 'unrelated' }]
+    }))
+
+    expect(target.success).toBe(true)
+    expect(distractor.success).toBe(true)
+    expect(db.searchPlayer('T H')).toMatchObject({
+      player: {
+        id: target.id,
+        messenger_username: 'T H'
+      }
+    })
+  })
+
+  it('prefers an exact secondary chat name over unrelated fuzzy room matches', () => {
+    const target = db.savePlayer(basePlayer({
+      messenger_username: '@target',
+      contacts: [
+        { contactMethod: 'TG', contactValue: '@target' },
+        { contactMethod: 'TG', contactValue: 'T H' }
+      ],
+      accounts: []
+    }))
+    const distractor = db.savePlayer(basePlayer({
+      messenger_username: '@other',
+      contacts: [{ contactMethod: 'TG', contactValue: '@other' }],
+      accounts: [{ roomName: 'PokerKing', roomUsername: 'unrelated' }]
+    }))
+
+    expect(target.success).toBe(true)
+    expect(distractor.success).toBe(true)
+    expect(db.searchPlayer('T H')).toMatchObject({
+      player: {
+        id: target.id,
+        messenger_username: '@target'
+      }
+    })
+  })
+
+  it('keeps layout and transliteration matches when there is no exact saved contact', () => {
+    const literal = db.savePlayer(basePlayer({
+      messenger_username: '@anton',
+      contacts: [{ contactMethod: 'TG', contactValue: '@anton' }],
+      accounts: []
+    }))
+    const transliterated = db.savePlayer(basePlayer({
+      messenger_username: '@other',
+      contacts: [
+        { contactMethod: 'TG', contactValue: '@other' },
+        { contactMethod: 'Discord', contactValue: 'Антон Support' }
+      ],
+      accounts: []
+    }))
+
+    expect(literal.success).toBe(true)
+    expect(transliterated.success).toBe(true)
+
+    const result = db.searchPlayer('anton')
+    expect(Array.isArray(result)).toBe(true)
+    const resultIds = Array.isArray(result)
+      ? result.map((player) => player.player.id)
+      : []
+    expect(resultIds).toEqual(
+      expect.arrayContaining([literal.id, transliterated.id])
+    )
+  })
+
   it('searches by room usernames and room player ids', () => {
     const saved = db.savePlayer(basePlayer({
       messenger_username: '@roomsearch',
@@ -428,6 +506,46 @@ describe('TransactionerDatabase', () => {
     expect(player?.player.default_wallet).toBe('TNEW')
     expect(player?.player.default_wallet_network).toBe('USDT TRC20')
     expect(player?.accounts[0].room_username).toBe('redstar test1')
+  })
+
+  it('rejects a transaction hash in every wallet persistence path', () => {
+    const transactionHash = '0xdf8f94418d9cda8e30fd00ad8b1e91a7708ec841691ed708f49ebc438a7e325a'
+    const expectedError = expect.stringContaining('хеш')
+
+    const createWithHash = db.savePlayer(basePlayer({
+      messenger_username: '@hash-on-create',
+      contacts: [{ contactMethod: 'TG', contactValue: '@hash-on-create' }],
+      default_wallet: transactionHash,
+    }))
+    expect(createWithHash).toEqual({ success: false, error: expectedError })
+    expect(db.searchPlayer('@hash-on-create')).toBeNull()
+
+    const saved = db.savePlayer(basePlayer())
+    expect(saved.success).toBe(true)
+
+    expect(db.updateDefaultWallet(saved.id!, transactionHash)).toEqual({
+      success: false,
+      error: expectedError,
+    })
+    expect(db.updateDefaultWalletDetails(saved.id!, transactionHash, 'USDT ERC20')).toEqual({
+      success: false,
+      error: expectedError,
+    })
+    expect(db.getPlayerById(saved.id!)?.player.default_wallet).toBeFalsy()
+
+    expect(db.saveRoomWallet({
+      room_key: 'redstar',
+      deal_type: 'General',
+      currency: 'USDT',
+      network: 'ERC20',
+      wallet_address: transactionHash,
+      is_active: 1,
+      sort_order: 10,
+    })).toEqual({
+      success: false,
+      error: expectedError,
+    })
+    expect(db.getRoomWallets('redstar', 'General')).toHaveLength(0)
   })
 
   it('deletes player contacts and room accounts with the player', () => {

@@ -22,6 +22,7 @@ import {
   sortLinkVerificationRoomOptions
 } from '../utils/linkVerificationFormatting'
 import { matchesRoomSearch } from '../utils/roomSearch'
+import { getWalletAddressValidationError } from '../utils/walletValidation'
 
 const formatDate = (date: Date) => {
   const day = String(date.getDate()).padStart(2, '0')
@@ -84,6 +85,7 @@ export default function LinkVerificationView() {
   const [roomProfiles, setRoomProfiles] = useState<RoomProfileInfo[]>([])
   const [savedTemplates, setSavedTemplates] = useState<LinkVerificationTemplateInfo[]>([])
   const [copiedKey, setCopiedKey] = useState<'request' | 'sheet1' | 'sheet2' | ''>('')
+  const walletInputRef = useRef<HTMLInputElement | null>(null)
   const messengerInputWasFocusedOnMouseDown = useRef(false)
   const sourceInputWasFocusedOnMouseDown = useRef(false)
   const sourceWasSelectedManually = useRef(false)
@@ -296,6 +298,7 @@ export default function LinkVerificationView() {
 
   const sheet1Html = useMemo(() => buildCenteredGoogleSheetsRowHtml(sheet1Tsv), [sheet1Tsv])
   const sheet2Html = useMemo(() => buildCenteredGoogleSheetsRowHtml(sheet2Tsv), [sheet2Tsv])
+  const walletError = useMemo(() => getWalletAddressValidationError(wallet), [wallet])
 
   const roomOptions = useMemo(() => {
     const names = new Set<string>()
@@ -343,6 +346,13 @@ export default function LinkVerificationView() {
   }
 
   const copy = async (key: 'request' | 'sheet1' | 'sheet2', value: string, htmlValue?: string) => {
+    if (key === 'sheet2' && walletError) {
+      const input = walletInputRef.current
+      input?.focus()
+      input?.select()
+      return
+    }
+
     if (htmlValue && 'ClipboardItem' in window && navigator.clipboard.write) {
       try {
         await navigator.clipboard.write([
@@ -736,7 +746,20 @@ export default function LinkVerificationView() {
               </label>
               <label className="text-sm text-slate-400">
                 Кошелек
-                <input value={wallet} onChange={(event) => setWallet(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
+                <input
+                  ref={walletInputRef}
+                  value={wallet}
+                  onChange={(event) => setWallet(event.target.value)}
+                  aria-invalid={Boolean(walletError)}
+                  className={`mt-1 w-full bg-slate-900 border rounded-lg p-3 text-slate-100 outline-none ${
+                    walletError
+                      ? 'border-red-500 focus:border-red-400'
+                      : 'border-slate-700 focus:border-blue-500'
+                  }`}
+                />
+                {walletError && (
+                  <span className="mt-1 block text-xs text-red-300">{walletError}</span>
+                )}
               </label>
               <label className="text-sm text-slate-400">
                 directusPaymentSystem

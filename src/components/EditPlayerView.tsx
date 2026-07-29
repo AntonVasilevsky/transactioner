@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Plus, Star, Trash2, Save, Loader2, AlertTriangle, X } from 'lucide-react'
+import { getWalletAddressValidationError } from '../utils/walletValidation'
 
 const AVAILABLE_ROOMS = ['RedStar', 'Champion Poker', 'Nexa']
 
@@ -47,6 +48,8 @@ export default function EditPlayerView({ playerData, onSuccess, onDeleted }: Pro
   const [error, setError] = useState('')
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const defaultWalletInputRef = useRef<HTMLInputElement | null>(null)
+  const defaultWalletError = getWalletAddressValidationError(defaultWallet)
 
   const handleAddAccount = () => {
     setAccounts([...accounts, { roomName: AVAILABLE_ROOMS[0], roomUsername: '', roomPlayerId: '', email: '' }])
@@ -102,6 +105,12 @@ export default function EditPlayerView({ playerData, onSuccess, onDeleted }: Pro
     if (normalizedContacts.length === 0) { setError('Добавьте хотя бы один контакт'); return }
     if (accounts.length === 0) { setError('Добавьте хотя бы один аккаунт'); return }
     if (!player.id) { setError('Не найден ID игрока'); return }
+    if (defaultWalletError) {
+      setError(defaultWalletError)
+      defaultWalletInputRef.current?.focus()
+      defaultWalletInputRef.current?.select()
+      return
+    }
 
     setLoading(true)
     setError('')
@@ -281,13 +290,22 @@ export default function EditPlayerView({ playerData, onSuccess, onDeleted }: Pro
               className="bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-700 outline-none focus:border-violet-500 transition-all"
             />
             <input
+              ref={defaultWalletInputRef}
               type="text"
               value={defaultWallet}
               onChange={e => setDefaultWallet(e.target.value)}
               placeholder="T..."
-              className="md:col-span-2 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-700 outline-none focus:border-violet-500 transition-all"
+              aria-invalid={Boolean(defaultWalletError)}
+              className={`md:col-span-2 bg-slate-900 border rounded-xl p-3 text-slate-100 placeholder-slate-700 outline-none transition-all ${
+                defaultWalletError
+                  ? 'border-red-500 focus:border-red-400'
+                  : 'border-slate-700 focus:border-violet-500'
+              }`}
             />
           </div>
+          {defaultWalletError && (
+            <p className="mt-2 text-xs text-red-300">{defaultWalletError}</p>
+          )}
         </div>
 
         <div className="space-y-4">

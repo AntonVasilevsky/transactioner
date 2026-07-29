@@ -11,6 +11,7 @@ import {
   transactionTemplateAccountLine,
   type AmountCurrency
 } from '../utils/transactionTemplateFormatting'
+import { getWalletAddressValidationError } from '../utils/walletValidation'
 
 const isRedStarWithdrawal = (targetAccount: Account | null, targetOperationType: OperationType) =>
   targetAccount?.roomName === 'RedStar' && targetOperationType === 'Withdrawal'
@@ -471,10 +472,15 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     contactValue: 'контакт игрока'
   }
 
+  const walletValidationError = operationType === 'Withdrawal'
+    ? getWalletAddressValidationError(wallet)
+    : null
+
   const inputClass = (field: string, value?: string) => {
     const isMissing = missingFields.includes(field) && !String(value || '').trim()
+    const isInvalidWallet = field === 'wallet' && Boolean(walletValidationError)
     return `min-w-0 max-w-full w-full bg-slate-900 border rounded-lg p-3 text-slate-100 placeholder-slate-700 outline-none transition-colors ${
-      isMissing ? 'border-red-500 focus:border-red-400' : 'border-slate-700 focus:border-blue-500'
+      isMissing || isInvalidWallet ? 'border-red-500 focus:border-red-400' : 'border-slate-700 focus:border-blue-500'
     }`
   }
 
@@ -572,6 +578,14 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   }
 
   const handleCopy = async () => {
+    if (walletValidationError) {
+      const field = fieldRefs.current.wallet
+      field?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      field?.focus({ preventScroll: true })
+      field?.select()
+      return
+    }
+
     const missing = getMissingFields()
     setMissingFields(missing)
     scrollToFirstMissingField(missing)
@@ -783,6 +797,9 @@ export default function FormView({ player, account, onAccountSelect, operationTy
               <div>
                 <label className="block text-sm font-medium text-slate-400 mb-1">Адрес кошелька</label>
                 <input ref={el => { fieldRefs.current.wallet = el }} type="text" value={wallet} onChange={e => setWallet(e.target.value)} placeholder="T..." className={inputClass('wallet', wallet)} />
+                {walletValidationError && (
+                  <p className="mt-2 text-xs text-red-300">{walletValidationError}</p>
+                )}
               </div>
             </>
           )}

@@ -2,6 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowLeft, Check, Copy, Info, Search, Settings } from 'lucide-react'
 import RoomAdminView from './RoomAdminView'
 import { matchesRoomSearch } from '../utils/roomSearch'
+import {
+  roomWalletCopyText,
+  roomWalletDisplayTitle,
+  roomWalletListTitle,
+} from '../utils/roomWalletFormatting'
 
 type RoomInfoMode = 'wallets' | 'deals'
 const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
@@ -83,23 +88,6 @@ const findWalletDepositMethod = (
     const methodText = normalizePaymentToken([method.method_name, method.currency, method.network].filter(Boolean).join(' '))
     return Boolean(currency && network && methodText.includes(currency) && methodText.includes(network))
   })
-}
-
-const walletDisplayTitle = (wallet: RoomWalletInfo, method?: RoomPaymentMethodInfo) => {
-  const base = `${wallet.currency} ${wallet.network}`.trim()
-  const fee = method?.fee_text || wallet.fee_text
-  return fee ? `${base} (${fee})` : base
-}
-
-const walletCopyTextWithMethod = (wallet: RoomWalletInfo, method?: RoomPaymentMethodInfo) => [
-  walletDisplayTitle(wallet, method),
-  wallet.wallet_address,
-].filter(Boolean).join('\n')
-
-const walletListTitle = (roomTitle: string, language: RoomLanguage) => {
-  if (language === 'EN') return `${roomTitle} - deposit wallets`
-  if (language === 'ES') return `${roomTitle} - billeteras de depósito`
-  return `${roomTitle} — депозитные кошельки`
 }
 
 const dealCopyText = (deal: RoomDealInfo, kind: 'short' | 'full') => {
@@ -550,12 +538,13 @@ function WalletsPanel({
     .filter(({ method }) => !hasConfiguredMethods || method)
     .sort((left, right) => (
       ((left.method?.sort_order ?? left.wallet.sort_order) || 0) - ((right.method?.sort_order ?? right.wallet.sort_order) || 0) ||
-      walletDisplayTitle(left.wallet, left.method).localeCompare(walletDisplayTitle(right.wallet, right.method), undefined, { sensitivity: 'base' })
+      roomWalletDisplayTitle(left.wallet, left.method, language)
+        .localeCompare(roomWalletDisplayTitle(right.wallet, right.method, language), undefined, { sensitivity: 'base' })
     ))
   const walletListText = walletRows.length
     ? [
-        walletListTitle(roomTitle, language),
-        ...walletRows.map(({ wallet, method }) => walletCopyTextWithMethod(wallet, method)),
+        roomWalletListTitle(roomTitle, language),
+        ...walletRows.map(({ wallet, method }) => roomWalletCopyText(wallet, method, language)),
       ].join('\n\n')
     : ''
 
@@ -580,14 +569,19 @@ function WalletsPanel({
                 className="flex items-start justify-between gap-3 rounded-lg border border-slate-700/60 bg-slate-900/50 px-4 py-3"
               >
                 <div className="min-w-0">
-                  <div className="font-semibold text-slate-100">{walletDisplayTitle(wallet, method)}</div>
+                  <div className="font-semibold text-slate-100">
+                    {roomWalletDisplayTitle(wallet, method, language)}
+                  </div>
                   {method?.limits_text && <div className="mt-1 text-xs text-amber-200">{method.limits_text}</div>}
                   <div className="mt-2 break-all font-mono text-xs text-slate-300">{wallet.wallet_address}</div>
                 </div>
                 <GhostIconCopyButton
                   copied={copied === `wallet-${wallet.id}`}
                   label={`Скопировать ${wallet.currency} ${wallet.network}`}
-                  onClick={() => onCopy(`wallet-${wallet.id}`, walletCopyTextWithMethod(wallet, method))}
+                  onClick={() => onCopy(
+                    `wallet-${wallet.id}`,
+                    roomWalletCopyText(wallet, method, language)
+                  )}
                 />
               </div>
             ))}

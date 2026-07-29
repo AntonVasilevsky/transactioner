@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import { contactSearchKey, normalizeContactText } from '../src/utils/contactNormalization'
 import { matchesRoomSearch } from '../src/utils/roomSearch'
+import { getWalletAddressValidationError } from '../src/utils/walletValidation'
 import { roomKnowledgeSeed, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
 
 export type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
@@ -298,7 +299,7 @@ export class TransactionerDatabase {
     const queryKey = contactSearchKey(query)
     if (!queryKey) return null
 
-    const players = (this.db.prepare(`
+    const allPlayers = this.db.prepare(`
       SELECT
         p.*,
         GROUP_CONCAT(DISTINCT c.contact_value) AS contact_summary,
@@ -307,15 +308,32 @@ export class TransactionerDatabase {
       LEFT JOIN player_contacts c ON c.player_id = p.id
       LEFT JOIN accounts a ON a.player_id = p.id
       GROUP BY p.id
-    `).all() as SearchPlayerRow[])
-      .filter((player) => matchesRoomSearch([
+    `).all() as SearchPlayerRow[]
+
+    const exactContactPlayerIds = new Set(
+      (this.db.prepare(`
+        SELECT player_id, contact_value
+        FROM player_contacts
+      `).all() as Array<Pick<DbContact, 'player_id' | 'contact_value'>>)
+        .filter((contact) => contactSearchKey(contact.contact_value) === queryKey)
+        .map((contact) => contact.player_id)
+    )
+    const isExactPlayer = (player: SearchPlayerRow) => (
+      contactSearchKey(player.messenger_username) === queryKey
+      || exactContactPlayerIds.has(player.id)
+    )
+    const exactPlayers = allPlayers.filter(isExactPlayer)
+
+    const players = (exactPlayers.length > 0
+      ? exactPlayers
+      : allPlayers.filter((player) => matchesRoomSearch([
         player.messenger_username,
         player.contact_summary,
         player.room_summary,
-      ], query))
+      ], query)))
       .sort((left, right) => {
-        const leftExact = contactSearchKey(left.messenger_username) === queryKey ? 0 : 1
-        const rightExact = contactSearchKey(right.messenger_username) === queryKey ? 0 : 1
+        const leftExact = isExactPlayer(left) ? 0 : 1
+        const rightExact = isExactPlayer(right) ? 0 : 1
         if (leftExact !== rightExact) return leftExact - rightExact
         if ((right.last_used_at || 0) !== (left.last_used_at || 0)) return (right.last_used_at || 0) - (left.last_used_at || 0)
         return left.messenger_username.localeCompare(right.messenger_username, undefined, { sensitivity: 'base' })
@@ -716,6 +734,8 @@ export class TransactionerDatabase {
       if (!currency) return { success: false, error: 'Заполните монету' }
       if (!network) return { success: false, error: 'Заполните сеть' }
       if (!walletAddress) return { success: false, error: 'Заполните адрес кошелька' }
+      const walletValidationError = getWalletAddressValidationError(walletAddress)
+      if (walletValidationError) return { success: false, error: walletValidationError }
 
       const payload = {
         roomKey,
@@ -924,6 +944,10 @@ export class TransactionerDatabase {
       if (!username) {
         return { success: false, error: 'Добавьте хотя бы один контакт игрока' }
       }
+      const walletValidationError = getWalletAddressValidationError(defaultWallet)
+      if (walletValidationError) {
+        return { success: false, error: walletValidationError }
+      }
 
       const savePlayer = this.db.transaction(() => {
         const seenContacts = new Set<string>()
@@ -1018,6 +1042,8 @@ export class TransactionerDatabase {
     try {
       const playerId = Number(id)
       const defaultWallet = wallet ? String(wallet).trim() : null
+      const walletValidationError = getWalletAddressValidationError(defaultWallet)
+      if (walletValidationError) return { success: false, error: walletValidationError }
       const result = this.db.prepare('UPDATE players SET default_wallet = ? WHERE id = ?').run(defaultWallet, playerId)
       if (result.changes === 0) {
         return { success: false, error: 'Игрок не найден' }
@@ -1034,6 +1060,8 @@ export class TransactionerDatabase {
       const playerId = Number(id)
       const defaultWallet = wallet ? String(wallet).trim() : null
       const defaultWalletNetwork = network ? String(network).trim() : null
+      const walletValidationError = getWalletAddressValidationError(defaultWallet)
+      if (walletValidationError) return { success: false, error: walletValidationError }
       const result = this.db.prepare(`
         UPDATE players
         SET default_wallet = ?, default_wallet_network = ?

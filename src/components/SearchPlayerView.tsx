@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Search, Loader2, UserRound, UserPlus } from 'lucide-react'
+import { toPlayerSearchResults } from '../utils/playerSearchResults'
 
 const METHOD_COLORS: Record<string, string> = {
   TG: 'bg-blue-500/20 text-blue-400',
@@ -8,13 +9,6 @@ const METHOD_COLORS: Record<string, string> = {
   Teams: 'bg-violet-500/20 text-violet-400',
   Email: 'bg-amber-500/20 text-amber-400',
 }
-
-const sortByPrimaryContact = (items: PlayerPayload[]) => [...items].sort((left, right) =>
-  left.player.messenger_username.localeCompare(right.player.messenger_username, undefined, {
-    numeric: true,
-    sensitivity: 'base'
-  })
-)
 
 export default function SearchPlayerView({
   onFound,
@@ -56,9 +50,8 @@ export default function SearchPlayerView({
       const result = await window.electronAPI.searchPlayer(trimmedQuery)
       if (liveSearchRunRef.current !== runId) return
       if (Array.isArray(result)) {
-        const sortedResults = sortByPrimaryContact(result)
-        setResults(sortedResults)
-        if (sortedResults.length === 0) setNotFoundQuery(trimmedQuery)
+        setResults(toPlayerSearchResults(result))
+        if (result.length === 0) setNotFoundQuery(trimmedQuery)
       } else if (result) {
         onFound(result)
       } else {
@@ -92,14 +85,13 @@ export default function SearchPlayerView({
           if (cancelled || liveSearchRunRef.current !== runId) return
 
           if (Array.isArray(result)) {
-            const sortedResults = sortByPrimaryContact(result)
-            setResults(sortedResults)
-            if (sortedResults.length === 0) setNotFoundQuery(trimmedQuery)
+            setResults(toPlayerSearchResults(result))
+            if (result.length === 0) setNotFoundQuery(trimmedQuery)
             return
           }
 
           if (result) {
-            setResults(sortByPrimaryContact([result]))
+            setResults(toPlayerSearchResults(result))
             return
           }
 
