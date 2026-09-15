@@ -25,6 +25,12 @@ export interface DealRule {
   notes?: string
 }
 
+export interface LinkVerificationDealDefaultScope {
+  key: string
+  label: string
+  roomNames: string[]
+}
+
 export interface LinkVerificationRoomRule {
   canonicalRoomName: string
   aliases: string[]
@@ -42,6 +48,35 @@ const normalizeRoomName = (value: string) => value
 
 const netRamp = (percent: string) => `net/ramp\n0, ${percent}%`
 const grossRamp = (percent: string) => `gross/ramp\n0, ${percent}%`
+
+const dealDefaultScopes: Array<LinkVerificationDealDefaultScope & { aliases: string[] }> = [
+  {
+    key: 'chico-network',
+    label: 'Chico Network',
+    aliases: ['tigergaming', 'betonline', 'sportsbetting', 'chico'],
+    roomNames: ['SportsBetting', 'TigerGaming', 'BetOnline', 'Chico'],
+  },
+]
+
+const dealDefaultScopeIndex = new Map<string, LinkVerificationDealDefaultScope>()
+for (const scope of dealDefaultScopes) {
+  for (const alias of scope.aliases) {
+    dealDefaultScopeIndex.set(normalizeRoomName(alias), {
+      key: scope.key,
+      label: scope.label,
+      roomNames: scope.roomNames,
+    })
+  }
+}
+
+export const resolveLinkVerificationDealDefaultScope = (roomName: string): LinkVerificationDealDefaultScope => {
+  const normalized = normalizeRoomName(roomName)
+  return dealDefaultScopeIndex.get(normalized) || {
+    key: normalized || 'default',
+    label: roomName || 'Default',
+    roomNames: roomName ? [roomName] : [],
+  }
+}
 
 export const LINK_VERIFICATION_TEMPLATES: Record<string, LinkVerificationTemplate> = {
   default: {
@@ -153,7 +188,7 @@ const dealByRoomAlias: Array<{ aliases: string[]; deal: DealRule }> = [
   { aliases: ['ignition'], deal: { dealText: '15% Net Revenue', directusDealSchema: netRamp('15'), notes: 'Legacy players may have 20%.' } },
   { aliases: ['bwin'], deal: { dealText: '20% Net Revenue', directusDealSchema: netRamp('20') } },
   { aliases: ['championpoker'], deal: { dealText: '25% Net Revenue', directusDealSchema: netRamp('25'), notes: 'Direct and agent cash desk.' } },
-  { aliases: ['tigergaming', 'betonline', 'sportsbetting', 'chico'], deal: { dealText: '20% Net Revenue', directusDealSchema: netRamp('20') } },
+  { aliases: ['tigergaming', 'betonline', 'sportsbetting', 'chico'], deal: { dealText: '15% Net Revenue', directusDealSchema: netRamp('15') } },
   { aliases: ['coinpoker'], deal: { dealText: 'Гонка', directusDealSchema: 'race' } },
   { aliases: ['grompoker'], deal: { dealText: '15% Net Revenue', directusDealSchema: netRamp('15') } },
   { aliases: ['partypoker'], deal: { dealText: '20% Net Revenue', directusDealSchema: netRamp('20') } },

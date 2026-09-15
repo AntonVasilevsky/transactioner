@@ -66,12 +66,29 @@ export interface RoomCountryAvailabilitySeed {
   isActive?: boolean
 }
 
+export type LinkVerificationResponseOutcome = 'ok' | 'denied' | 'need_more_data' | 'custom'
+
+export interface LinkVerificationResponseTemplateSeed {
+  roomKey: string
+  dealType?: RoomDealType
+  language: RoomLanguage
+  templateKey: string
+  label: string
+  body: string
+  outcome?: LinkVerificationResponseOutcome
+  notes?: string
+  sortOrder?: number
+  isActive?: boolean
+  updatedAt?: string
+}
+
 export interface RoomKnowledgeSeed {
   profiles: RoomProfileSeed[]
   deals: RoomDealSeed[]
   paymentMethods: RoomPaymentMethodSeed[]
   wallets: RoomWalletSeed[]
   countries: RoomCountryAvailabilitySeed[]
+  linkVerificationResponses: LinkVerificationResponseTemplateSeed[]
 }
 
 export const roomKnowledgeSeed: RoomKnowledgeSeed = {
@@ -92,9 +109,38 @@ export const roomKnowledgeSeed: RoomKnowledgeSeed = {
       displayName: 'RedStar',
       networkName: 'iPoker',
       notes: 'Direct and Agent deal variants share the same current template.'
+    },
+    {
+      roomKey: 'shenpoker',
+      displayName: 'Shenpoker',
+      notes: 'Room profile added for link-verification response templates.'
     }
   ],
   countries: [],
+  linkVerificationResponses: [
+    {
+      roomKey: 'shenpoker',
+      dealType: 'General',
+      language: 'EN',
+      templateKey: 'general',
+      label: 'Подтверждение привязки',
+      outcome: 'ok',
+      body: [
+        'Your account in Shenpoker has been successfully tracked by us, and the deal is active. You can deposit and start playing.',
+        '',
+        'No verification required.',
+        '',
+        'First deposit bonus: 100% up to MYR 10,000 with a 50X turnover requirement.',
+        '(This turnover requirement applies only to Poker, Super 10, Omaha, and Domino).',
+        'Promo code: WB',
+        'The minimum deposit required to activate the bonus is MYR 50.To receive the bonus, you must contact customer support via LiveChat to activate it before you start playing. If the deposit balance has been used, the bonus will not be granted.',
+        '',
+        'Could you also provide us with a wallet where we are going to send extra rakeback to (USDT, USDC, Skrill)?',
+      ].join('\n'),
+      sortOrder: 10,
+      updatedAt: '2026-08-08',
+    },
+  ],
   deals: [
     {
       roomKey: 'champion-poker',

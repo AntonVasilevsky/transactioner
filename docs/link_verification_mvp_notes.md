@@ -46,6 +46,64 @@ No Google API integration. Clipboard only.
 Core payment workflow remains unchanged.
 Link verification is a separate generation flow, with optional player persistence only for core rooms.
 
+## 2026-08-08: Link Verification Response Templates
+
+The UI section formerly named `Проверка привязки` is now the broader `Привязки` area with two modes:
+
+1. `Проверка` — existing request + Google Sheets TSV generation flow.
+2. `Ответ` — room/language lookup for ready-to-copy player response templates.
+
+Response templates are intentionally separate from request templates. A response is not generated from deal fields, bonus fields, or placeholders in the first version; it is stored as a complete ready-to-copy confirmation text.
+
+Current product rule: `шаблон ответа на привязку` means only `шаблон подтверждения привязки`.
+
+- 1 room + 1 language = 1 confirmation template.
+- If the room has both Direct and Agent deal variants, store a separate confirmation template per deal type.
+- The operator-facing editor should not expose technical fields like key/outcome/sort/active. Internally these are fixed as `template_key = deal_type`, `outcome = ok`, `label = Подтверждение привязки`, `sort_order = 0`, `is_active = 1`.
+
+Storage uses the local SQLite table `link_verification_response_templates`:
+
+```sql
+room_key TEXT              -- existing room_profiles.room_key only
+deal_type TEXT             -- General / Direct / Agent
+language TEXT              -- RU / EN / ES
+template_key TEXT          -- internal technical key, not shown in UI
+label TEXT                 -- internal label: Подтверждение привязки
+outcome TEXT               -- internal outcome: ok
+body TEXT                  -- full player-facing text
+notes TEXT
+sort_order INTEGER
+is_active INTEGER
+updated_at TEXT
+UNIQUE(room_key, deal_type, language)
+```
+
+Important constraint: a response template cannot be created for an arbitrary room name. It must use an existing `room_profiles.room_key`. The database has insert/update guards, and the admin UI creates templates only from the selected room in the room directory.
+
+Search in the response-template lookup reuses `matchesRoomSearch`, the same helper used by room info/player search, so partial words, transliteration, and wrong RU/EN keyboard layout are handled consistently.
+
+## 2026-09-03: Autosaved Deal Defaults For Link Verification TSV
+
+In the link-verification form, manual edits to Sheet #2 fields `Сделки` and `directusDealSchema` are autosaved as the new default after a short debounce. There is no explicit save button.
+
+Defaults are stored separately from room-info deal descriptions in `link_verification_deal_defaults`:
+
+```sql
+scope_key TEXT PRIMARY KEY
+scope_label TEXT
+deal_text TEXT
+directus_deal_schema TEXT
+updated_at TEXT
+```
+
+The important design point is `scope_key`: it represents a shared deal source, not necessarily a single UI room name. This keeps the shape compatible with the planned future Notion integration, where one Notion deal record can feed several room aliases.
+
+Current shared scope:
+
+- `chico-network`: `SportsBetting`, `TigerGaming`, `BetOnline`, `Chico`
+
+All Chico-network rooms currently use the same built-in fallback: `15% Net Revenue` with `net/ramp\n0, 15%`. If an operator edits the deal fields for any room in this group, the saved value is reused for the entire group.
+
 ## Known GBrain Slugs Mentioned During Planning
 
 - `transactioner/link-verification-required-fields`

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Copy, CheckCircle2 } from 'lucide-react'
 import type { OperationType } from '../App'
 import { normalizeContactText } from '../utils/contactNormalization'
@@ -11,6 +11,7 @@ import {
   transactionTemplateAccountLine,
   type AmountCurrency
 } from '../utils/transactionTemplateFormatting'
+import { filterPaymentAccountsForOperation } from '../utils/roomAccountOptions'
 import { getWalletAddressValidationError } from '../utils/walletValidation'
 
 const isRedStarWithdrawal = (targetAccount: Account | null, targetOperationType: OperationType) =>
@@ -88,7 +89,7 @@ interface FormViewProps {
   onPlayerUpdate?: (updates: Partial<Player>) => void
 }
 
-export default function FormView({ player, account, onAccountSelect, operationType, onOperationChange, onPlayerUpdate }: FormViewProps) {
+export default function FormView({ player, account: selectedAccount, onAccountSelect, operationType, onOperationChange, onPlayerUpdate }: FormViewProps) {
   const primaryContact = player?.contacts?.find((contact) => contact.isPrimary) || player?.contacts?.[0]
   const playerContacts = player.contacts || []
   const [copied, setCopied] = useState(false)
@@ -104,8 +105,8 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const amountConversionRunRef = useRef(0)
   
   // Form fields state
-  const [amount, setAmount] = useState(() => getInitialAmount(account, operationType))
-  const [amountCurrency, setAmountCurrency] = useState<AmountCurrency>(() => getInitialAmountCurrency(account, operationType))
+  const [amount, setAmount] = useState(() => getInitialAmount(selectedAccount, operationType))
+  const [amountCurrency, setAmountCurrency] = useState<AmountCurrency>(() => getInitialAmountCurrency(selectedAccount, operationType))
   const [convertedAmount, setConvertedAmount] = useState('')
   const [amountConversionStatus, setAmountConversionStatus] = useState<'idle' | 'loading' | 'converted' | 'error'>('idle')
   const [amountConversionMessage, setAmountConversionMessage] = useState('')
@@ -121,6 +122,13 @@ export default function FormView({ player, account, onAccountSelect, operationTy
   const [selectedContactIndex, setSelectedContactIndex] = useState(0)
   const [templateLanguage, setTemplateLanguage] = useState<TemplateLanguage>('RU')
   const [roomKnowledgeIndex, setRoomKnowledgeIndex] = useState<RoomKnowledgeIndex | null>(null)
+  const paymentAccounts = useMemo(
+    () => filterPaymentAccountsForOperation(player.accounts || [], roomKnowledgeIndex, operationType),
+    [operationType, player.accounts, roomKnowledgeIndex]
+  )
+  const account = selectedAccount && paymentAccounts.includes(selectedAccount)
+    ? selectedAccount
+    : paymentAccounts[0] || null
 
   const loadRoomKnowledgeIndex = async () => {
     try {
@@ -201,6 +209,22 @@ export default function FormView({ player, account, onAccountSelect, operationTy
     setMissingFields([])
     onAccountSelect(nextAccount)
   }
+
+  useEffect(() => {
+    if (!paymentAccounts.length) return
+    if (selectedAccount && paymentAccounts.includes(selectedAccount)) return
+
+    const nextAccount = paymentAccounts[0]
+    const frame = window.requestAnimationFrame(() => {
+      amountEditedRef.current = false
+      setAmount(getInitialAmount(nextAccount, operationType))
+      setAmountCurrency(getInitialAmountCurrency(nextAccount, operationType))
+      resetAmountConversion()
+      setMissingFields([])
+      onAccountSelect(nextAccount)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [operationType, paymentAccounts, selectedAccount, onAccountSelect])
 
   const handleAmountChange = (value: string) => {
     amountEditedRef.current = true
@@ -664,7 +688,7 @@ export default function FormView({ player, account, onAccountSelect, operationTy
           <div ref={accountSectionRef}>
             <label className="block text-sm font-medium text-slate-400 mb-2">Выберите аккаунт рума</label>
             <div className="flex flex-wrap gap-2">
-              {player.accounts?.map((acc, i) => (
+              {paymentAccounts.map((acc, i) => (
                 <button
                   key={i}
                   onClick={() => handleAccountSelect(acc)}
@@ -678,6 +702,11 @@ export default function FormView({ player, account, onAccountSelect, operationTy
                 </button>
               ))}
               {player.accounts?.length === 0 && <span className="text-red-400 text-sm">У игрока нет привязанных румов.</span>}
+              {Boolean(player.accounts?.length) && paymentAccounts.length === 0 && (
+                <span className="text-amber-300 text-sm">
+                  Для {operationType === 'Deposit' ? 'депозита' : 'вывода'} у игрока нет аккаунтов в румах с настроенными платежами.
+                </span>
+              )}
             </div>
             {hasAccountMissing && (
               <p className="mt-3 text-sm text-red-400">

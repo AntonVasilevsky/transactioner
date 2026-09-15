@@ -6,6 +6,7 @@ import { findWalletForMethod, normalizeAdminToken } from '../utils/roomAdminWall
 import { applyLinkVerificationTemplateOverrides } from '../utils/linkVerificationFormatting'
 
 type AdminMode = 'deals' | 'methods' | 'linkVerification'
+type LinkVerificationAdminMode = 'request' | 'response'
 const allDealTypes: RoomDealType[] = ['Agent', 'Direct', 'General']
 const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
 
@@ -88,6 +89,8 @@ const slugifyRoomKey = (value: string) => value
   .replace(/[^a-z0-9]+/g, '-')
   .replace(/^-+|-+$/g, '')
 
+const slugifyTemplateKey = (value: string) => slugifyRoomKey(value) || 'ok'
+
 const emptyDeal = (roomKey: string, dealType: RoomDealType, language: RoomLanguage): SaveRoomDealInput => ({
   room_key: roomKey,
   deal_type: dealType,
@@ -149,6 +152,40 @@ const paymentMethodToForm = (method: RoomPaymentMethodInfo): SaveRoomPaymentMeth
   is_active: method.is_active,
 })
 
+const emptyLinkVerificationResponseTemplate = (
+  roomKey: string,
+  dealType: RoomDealType,
+  language: RoomLanguage
+): SaveLinkVerificationResponseTemplateInput => ({
+  room_key: roomKey,
+  deal_type: dealType,
+  language,
+  template_key: slugifyTemplateKey(dealType),
+  label: 'Подтверждение привязки',
+  outcome: 'ok',
+  body: '',
+  notes: '',
+  sort_order: 0,
+  is_active: 1,
+})
+
+const linkVerificationResponseTemplateToForm = (
+  template: LinkVerificationResponseTemplateInfo
+): SaveLinkVerificationResponseTemplateInput => ({
+  id: template.id,
+  room_key: template.room_key,
+  deal_type: template.deal_type,
+  language: template.language,
+  template_key: template.template_key,
+  label: template.label,
+  outcome: template.outcome,
+  body: template.body,
+  notes: template.notes || '',
+  sort_order: template.sort_order || 0,
+  is_active: template.is_active,
+  updated_at: template.updated_at || '',
+})
+
 const hasPaymentMethodDraftContent = (method: SaveRoomPaymentMethodInput) => [
   method.method_name,
   method.currency,
@@ -199,6 +236,8 @@ export default function RoomAdminView({
   const [deals, setDeals] = useState<RoomDealInfo[]>([])
   const [wallets, setWallets] = useState<RoomWalletInfo[]>([])
   const [linkVerificationTemplates, setLinkVerificationTemplates] = useState<LinkVerificationTemplateInfo[]>([])
+  const [linkVerificationResponseTemplates, setLinkVerificationResponseTemplates] = useState<LinkVerificationResponseTemplateInfo[]>([])
+  const [linkVerificationAdminMode, setLinkVerificationAdminMode] = useState<LinkVerificationAdminMode>('request')
   const [isAddingRoom, setIsAddingRoom] = useState(false)
   const [roomForm, setRoomForm] = useState<SaveRoomProfileInput>({
     room_key: '',
@@ -294,6 +333,21 @@ export default function RoomAdminView({
       ? 'Agent'
       : existingDealTypes[0] || 'Agent'
   const activeMethodDealType = existingDealTypes.includes('Agent') ? 'Agent' : activeDealType
+  const linkVerificationDealTypes = existingDealTypes.length
+    ? existingDealTypes.filter((type) => (
+      existingDealTypes.includes('Agent') && existingDealTypes.includes('Direct')
+        ? type === 'Agent' || type === 'Direct'
+        : true
+    ))
+    : ['General'] as RoomDealType[]
+  const activeLinkVerificationDealType = linkVerificationDealTypes.includes(activeDealType)
+    ? activeDealType
+    : linkVerificationDealTypes.includes('Agent')
+      ? 'Agent'
+      : linkVerificationDealTypes[0] || 'General'
+  const visibleDealTypes = mode === 'linkVerification' ? linkVerificationDealTypes : dealTypes
+  const showDealTypeSelector = mode !== 'linkVerification'
+    || (linkVerificationAdminMode === 'response' && visibleDealTypes.length > 1)
 
   const filteredRoomProfiles = useMemo(() => {
     const profiles = index?.profiles || []
@@ -398,6 +452,21 @@ export default function RoomAdminView({
       active = false
     }
   }, [selectedLinkVerificationRoomName])
+
+  useEffect(() => {
+    if (!roomKey) return
+    let active = true
+    window.electronAPI.getLinkVerificationResponseTemplatesAdmin(roomKey, language, activeLinkVerificationDealType)
+      .then((templates) => {
+        if (active) setLinkVerificationResponseTemplates(templates || [])
+      })
+      .catch(() => {
+        if (active) setLinkVerificationResponseTemplates([])
+      })
+    return () => {
+      active = false
+    }
+  }, [activeLinkVerificationDealType, language, roomKey])
 
   const showMessage = (text: string) => {
     setError('')
@@ -534,6 +603,18 @@ export default function RoomAdminView({
     const nextTemplates = await window.electronAPI.getLinkVerificationTemplates(template.room_name)
     setLinkVerificationTemplates(nextTemplates || [])
     showMessage('Шаблон привязки сохранен')
+  }
+
+  const saveLinkVerificationResponseTemplate = async (template: SaveLinkVerificationResponseTemplateInput) => {
+    const result = await window.electronAPI.saveLinkVerificationResponseTemplate(template)
+    if (!result.success) {
+      setMessage('')
+      setError(result.error || 'Не удалось сохранить шаблон ответа')
+      return
+    }
+    const nextTemplates = await window.electronAPI.getLinkVerificationResponseTemplatesAdmin(template.room_key, template.language, template.deal_type)
+    setLinkVerificationResponseTemplates(nextTemplates || [])
+    showMessage('Шаблон ответа сохранен')
   }
 
   const resetLinkVerificationTemplate = async (roomNameValue: string, templateKey: string) => {
@@ -944,19 +1025,21 @@ export default function RoomAdminView({
             onClick={() => updateSelectedRoomActive(!selectedRoomProfile.is_active)}
           />
         )}
+        {showDealTypeSelector && (
         <div className="min-w-44">
           <label className="mb-1 block text-sm font-medium text-slate-400">Тип сделки</label>
           <select
-            value={activeDealType}
+            value={mode === 'linkVerification' ? activeLinkVerificationDealType : activeDealType}
             onChange={(event) => setDealType(event.target.value as RoomDealType)}
             className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
           >
-            {dealTypes.map((type) => (
+            {visibleDealTypes.map((type) => (
               <option key={type} value={type}>{dealTypeLabels[type]}</option>
             ))}
           </select>
         </div>
-        {mode === 'deals' && (
+        )}
+        {(mode === 'deals' || mode === 'linkVerification') && (
           <div>
             <label className="mb-1 block text-sm font-medium text-slate-400">Язык</label>
             <div className="flex rounded-xl bg-slate-950 p-1">
@@ -992,12 +1075,19 @@ export default function RoomAdminView({
           onReorder={reorderPaymentMethods}
         />
       ) : mode === 'linkVerification' ? (
-        <LinkVerificationTemplateEditor
-          key={selectedRoomName}
+        <LinkVerificationAdminEditor
+          key={`${selectedRoomName}:${language}`}
+          mode={linkVerificationAdminMode}
+          onModeChange={setLinkVerificationAdminMode}
+          roomKey={roomKey}
           roomName={selectedRoomName}
+          dealType={activeLinkVerificationDealType}
+          language={language}
           templates={linkVerificationTemplates}
+          responseTemplates={linkVerificationResponseTemplates}
           onSave={saveLinkVerificationTemplate}
           onReset={resetLinkVerificationTemplate}
+          onSaveResponse={saveLinkVerificationResponseTemplate}
         />
       ) : (
         null
@@ -1416,6 +1506,59 @@ function PaymentMethodEditor({
   )
 }
 
+function LinkVerificationAdminEditor({
+  mode,
+  onModeChange,
+  roomKey,
+  roomName,
+  dealType,
+  language,
+  templates,
+  responseTemplates,
+  onSave,
+  onReset,
+  onSaveResponse,
+}: {
+  mode: LinkVerificationAdminMode
+  onModeChange: (mode: LinkVerificationAdminMode) => void
+  roomKey: string
+  roomName: string
+  dealType: RoomDealType
+  language: RoomLanguage
+  templates: LinkVerificationTemplateInfo[]
+  responseTemplates: LinkVerificationResponseTemplateInfo[]
+  onSave: (template: SaveLinkVerificationTemplateInput) => void
+  onReset: (roomName: string, templateKey: string) => void
+  onSaveResponse: (template: SaveLinkVerificationResponseTemplateInput) => void
+}) {
+  return (
+    <div className="space-y-4">
+      <div className="inline-flex rounded-xl bg-slate-950 p-1">
+        <ModeButton active={mode === 'request'} onClick={() => onModeChange('request')}>Запрос</ModeButton>
+        <ModeButton active={mode === 'response'} onClick={() => onModeChange('response')}>Ответ</ModeButton>
+      </div>
+
+      {mode === 'request' ? (
+        <LinkVerificationTemplateEditor
+          roomName={roomName}
+          templates={templates}
+          onSave={onSave}
+          onReset={onReset}
+        />
+      ) : (
+        <LinkVerificationResponseTemplateEditor
+          roomKey={roomKey}
+          roomName={roomName}
+          dealType={dealType}
+          language={language}
+          templates={responseTemplates}
+          onSave={onSaveResponse}
+        />
+      )}
+    </div>
+  )
+}
+
 function LinkVerificationTemplateEditor({
   roomName,
   templates,
@@ -1460,6 +1603,97 @@ function LinkVerificationTemplateEditor({
       onSave={onSave}
       onReset={onReset}
     />
+  )
+}
+
+function LinkVerificationResponseTemplateEditor({
+  roomKey,
+  roomName,
+  dealType,
+  language,
+  templates,
+  onSave,
+}: {
+  roomKey: string
+  roomName: string
+  dealType: RoomDealType
+  language: RoomLanguage
+  templates: LinkVerificationResponseTemplateInfo[]
+  onSave: (template: SaveLinkVerificationResponseTemplateInput) => void
+}) {
+  const selectedTemplate = templates[0]
+
+  return (
+    <section className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h3 className="text-lg font-bold text-slate-100">Шаблон подтверждения привязки</h3>
+          <div className="mt-1 text-sm text-slate-500">
+            Рум: {roomName} · {dealTypeLabels[dealType]} сделка · язык: {language}.
+          </div>
+        </div>
+      </div>
+
+      <LinkVerificationResponseTemplateDraft
+        key={`${roomKey}:${dealType}:${language}:${selectedTemplate?.updated_at || 'new'}`}
+        roomKey={roomKey}
+        dealType={dealType}
+        language={language}
+        selectedTemplate={selectedTemplate}
+        onSave={onSave}
+      />
+    </section>
+  )
+}
+
+function LinkVerificationResponseTemplateDraft({
+  roomKey,
+  dealType,
+  language,
+  selectedTemplate,
+  onSave,
+}: {
+  roomKey: string
+  dealType: RoomDealType
+  language: RoomLanguage
+  selectedTemplate?: LinkVerificationResponseTemplateInfo
+  onSave: (template: SaveLinkVerificationResponseTemplateInput) => void
+}) {
+  const initialDraft = selectedTemplate
+    ? linkVerificationResponseTemplateToForm(selectedTemplate)
+    : emptyLinkVerificationResponseTemplate(roomKey, dealType, language)
+  const [body, setBody] = useState(initialDraft.body)
+
+  const save = () => {
+    onSave({
+      ...initialDraft,
+      room_key: roomKey,
+      deal_type: dealType,
+      language,
+      template_key: slugifyTemplateKey(dealType),
+      label: 'Подтверждение привязки',
+      outcome: 'ok',
+      body: body.trim(),
+      notes: '',
+      sort_order: 0,
+      is_active: 1,
+    })
+  }
+
+  return (
+    <div className="space-y-4">
+      <Field label="Текст подтверждения привязки">
+        <textarea
+          value={body}
+          onChange={(event) => setBody(event.target.value)}
+          onPaste={preservePageScrollAfterPaste}
+          rows={18}
+          placeholder="Готовый текст, который оператор будет копировать игроку после подтверждения привязки."
+          className="min-h-[28rem] w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm leading-6 text-slate-100 outline-none focus:border-blue-500"
+        />
+      </Field>
+      <SaveButton onClick={save} />
+    </div>
   )
 }
 

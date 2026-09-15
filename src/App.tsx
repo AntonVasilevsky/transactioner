@@ -9,6 +9,7 @@ import PlayerListView from './components/PlayerListView'
 import EditPlayerView from './components/EditPlayerView'
 import RoomInfoView from './components/RoomInfoView'
 import LinkVerificationView from './components/LinkVerificationView'
+import RakebackView from './components/RakebackView'
 import {
   moveSidebarNavToTarget,
   normalizeSidebarNavOrder,
@@ -41,6 +42,7 @@ function App() {
   const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null)
   const [operationType, setOperationType] = useState<OperationType>('Deposit')
+  const [playerWorkspaceTab, setPlayerWorkspaceTab] = useState<'accounts' | 'rakeback'>('accounts')
   const [editingPlayer, setEditingPlayer] = useState<PlayerPayload | null>(null)
   const [addPlayerInitialContact, setAddPlayerInitialContact] = useState('')
   const [appInfo, setAppInfo] = useState<AppInfo | null>(null)
@@ -125,6 +127,7 @@ function App() {
     const flat = { ...playerData.player, accounts, contacts }
     setSelectedPlayer(flat)
     setSelectedAccount(accounts[0] || null)
+    setPlayerWorkspaceTab('accounts')
     setCurrentView('form')
   }
 
@@ -233,7 +236,7 @@ function App() {
     },
     linkVerification: {
       icon: <Link2 size={20} />,
-      label: 'Проверка привязки',
+      label: 'Привязки',
       active: currentView === 'linkVerification',
       onClick: () => navigateTo('linkVerification'),
     },
@@ -356,15 +359,41 @@ function App() {
             <LinkVerificationView />
           )}
           {currentView === 'form' && selectedPlayer && (
-            <FormView
-              key={`${selectedPlayer.id || selectedPlayer.messenger_username}`}
-              player={selectedPlayer} 
-              account={selectedAccount}
-              onAccountSelect={setSelectedAccount}
-              operationType={operationType}
-              onOperationChange={setOperationType}
-              onPlayerUpdate={handlePlayerUpdate}
-            />
+            <div className="space-y-6">
+              <div className="mx-auto flex max-w-4xl rounded-xl bg-slate-950 p-1">
+                <PlayerWorkspaceTabButton
+                  active={playerWorkspaceTab === 'accounts'}
+                  onClick={() => setPlayerWorkspaceTab('accounts')}
+                >
+                  Аккаунты
+                </PlayerWorkspaceTabButton>
+                <PlayerWorkspaceTabButton
+                  active={playerWorkspaceTab === 'rakeback'}
+                  onClick={() => setPlayerWorkspaceTab('rakeback')}
+                >
+                  Рейкбек
+                </PlayerWorkspaceTabButton>
+              </div>
+              {playerWorkspaceTab === 'accounts' ? (
+                <FormView
+                  key={`${selectedPlayer.id || selectedPlayer.messenger_username}`}
+                  player={selectedPlayer}
+                  account={selectedAccount}
+                  onAccountSelect={setSelectedAccount}
+                  operationType={operationType}
+                  onOperationChange={setOperationType}
+                  onPlayerUpdate={handlePlayerUpdate}
+                />
+              ) : (
+                <RakebackView
+                  key={`${selectedPlayer.id || selectedPlayer.messenger_username}-rakeback`}
+                  player={selectedPlayer}
+                  account={selectedAccount}
+                  onAccountSelect={setSelectedAccount}
+                  onPlayerUpdate={handlePlayerUpdate}
+                />
+              )}
+            </div>
           )}
         </div>
       </main>
@@ -407,6 +436,28 @@ function App() {
         </div>
       )}
     </div>
+  )
+}
+
+function PlayerWorkspaceTabButton({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean
+  children: React.ReactNode
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${
+        active ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-slate-100'
+      }`}
+    >
+      {children}
+    </button>
   )
 }
 

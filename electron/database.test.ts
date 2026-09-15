@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import Database from 'better-sqlite3'
-import { TransactionerDatabase, type SaveLinkVerificationTemplateInput, type SavePlayerInput } from './database'
+import { TransactionerDatabase, type SaveLinkVerificationResponseTemplateInput, type SaveLinkVerificationTemplateInput, type SavePlayerInput } from './database'
 
 let tempDir = ''
 let dbPath = ''
@@ -34,6 +34,22 @@ const baseLinkVerificationTemplate = (
   recipient_email: null,
   cc_emails: ['first@example.com', ' second@example.com ', ''],
   notes: 'Тестовый шаблон',
+  ...overrides,
+})
+
+const baseLinkVerificationResponseTemplate = (
+  overrides: Partial<SaveLinkVerificationResponseTemplateInput> = {}
+): SaveLinkVerificationResponseTemplateInput => ({
+  room_key: 'nexa',
+  deal_type: 'Agent',
+  language: 'EN',
+  template_key: 'agent',
+  label: 'Подтверждение привязки',
+  outcome: 'ok',
+  body: 'Your account has been tracked.',
+  notes: 'Тестовый ответ',
+  sort_order: 0,
+  is_active: 1,
   ...overrides,
 })
 
@@ -162,6 +178,113 @@ describe('TransactionerDatabase', () => {
       success: false,
       error: expect.any(String),
     }))
+  })
+
+  it('loads seeded link-verification response templates by existing room and language', () => {
+    const templates = db.getLinkVerificationResponseTemplates('shenpoker', 'EN')
+
+    expect(templates).toEqual([
+      expect.objectContaining({
+        room_key: 'shenpoker',
+        deal_type: 'General',
+        language: 'EN',
+        template_key: 'general',
+        outcome: 'ok',
+        label: 'Подтверждение привязки',
+        body: expect.stringContaining('successfully tracked by us'),
+      })
+    ])
+    expect(db.getLinkVerificationResponseTemplates('shenpoker', 'RU')).toEqual([])
+    expect(db.getRoomKnowledgeIndex().linkVerificationResponseOptions).toContainEqual({
+      room_key: 'shenpoker',
+      deal_type: 'General',
+      language: 'EN',
+      template_count: 1,
+    })
+  })
+
+  it('saves link-verification response templates only for existing rooms', () => {
+    expect(db.saveLinkVerificationResponseTemplate(baseLinkVerificationResponseTemplate({
+      room_key: 'missing-room',
+    }))).toEqual({
+      success: false,
+      error: 'Шаблон ответа можно создать только для существующего рума',
+    })
+    expect(db.saveLinkVerificationResponseTemplate(baseLinkVerificationResponseTemplate({
+      template_key: 'тест',
+    }))).toEqual({
+      success: false,
+      error: 'Ключ шаблона может содержать только латиницу, цифры и дефис',
+    })
+
+    const saved = db.saveLinkVerificationResponseTemplate(baseLinkVerificationResponseTemplate())
+    expect(saved.success).toBe(true)
+
+    expect(db.getLinkVerificationResponseTemplates('nexa', 'EN', 'Agent')).toEqual([
+      expect.objectContaining({
+        id: saved.id,
+        room_key: 'nexa',
+        deal_type: 'Agent',
+        language: 'EN',
+        template_key: 'agent',
+        label: 'Подтверждение привязки',
+        body: 'Your account has been tracked.',
+      })
+    ])
+
+    const updated = db.saveLinkVerificationResponseTemplate(baseLinkVerificationResponseTemplate({
+      id: saved.id,
+      label: 'Tracked edited',
+      body: 'Edited response.',
+      is_active: 0,
+    }))
+    expect(updated).toEqual({ success: true, id: saved.id })
+    expect(db.getLinkVerificationResponseTemplates('nexa', 'EN', 'Agent')).toEqual([])
+    expect(db.getLinkVerificationResponseTemplatesAdmin('nexa', 'EN', 'Agent')).toEqual([
+      expect.objectContaining({
+        id: saved.id,
+        label: 'Tracked edited',
+        deal_type: 'Agent',
+        is_active: 0,
+      })
+    ])
+  })
+
+  it('autosaves link-verification deal defaults by shared scope key', () => {
+    expect(db.getLinkVerificationDealDefaults('chico-network')).toEqual([])
+
+    const saved = db.saveLinkVerificationDealDefaults({
+      scope_key: 'chico-network',
+      scope_label: 'Chico Network',
+      deal_text: '15% Net Revenue',
+      directus_deal_schema: 'net/ramp\n0, 15%',
+    })
+
+    expect(saved).toEqual({ success: true })
+    expect(db.getLinkVerificationDealDefaults('CHICO-NETWORK')).toEqual([
+      {
+        scope_key: 'chico-network',
+        scope_label: 'Chico Network',
+        deal_text: '15% Net Revenue',
+        directus_deal_schema: 'net/ramp\n0, 15%',
+        updated_at: expect.any(String),
+      }
+    ])
+
+    expect(db.saveLinkVerificationDealDefaults({
+      scope_key: 'chico-network',
+      scope_label: 'Chico Network',
+      deal_text: '30% Net Revenue',
+      directus_deal_schema: 'net/ramp\n0, 30%',
+    })).toEqual({ success: true })
+    expect(db.getLinkVerificationDealDefaults('chico-network')).toEqual([
+      expect.objectContaining({
+        scope_key: 'chico-network',
+        scope_label: 'Chico Network',
+        deal_text: '30% Net Revenue',
+        directus_deal_schema: 'net/ramp\n0, 30%',
+      })
+    ])
   })
 
   it('saves a player with multiple room accounts and returns all accounts', () => {
@@ -681,7 +804,8 @@ describe('TransactionerDatabase', () => {
     expect(firstIndex.profiles.map((profile) => profile.room_key).sort()).toEqual([
       'champion-poker',
       'nexa',
-      'redstar'
+      'redstar',
+      'shenpoker'
     ])
     const championMethods = firstIndex.paymentMethods.filter((method) => method.room_key === 'champion-poker')
     expect(championMethods).toHaveLength(12)

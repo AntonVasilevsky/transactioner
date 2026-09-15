@@ -2,7 +2,7 @@ import Database from 'better-sqlite3'
 import { contactSearchKey, normalizeContactText } from '../src/utils/contactNormalization'
 import { matchesRoomSearch } from '../src/utils/roomSearch'
 import { getWalletAddressValidationError } from '../src/utils/walletValidation'
-import { roomKnowledgeSeed, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
+import { roomKnowledgeSeed, type LinkVerificationResponseOutcome, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
 
 export type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
 export type RoomDealType = 'General' | 'Direct' | 'Agent'
@@ -118,6 +118,29 @@ export interface SaveLinkVerificationTemplateInput {
   notes?: string | null
 }
 
+export interface SaveLinkVerificationDealDefaultsInput {
+  scope_key: string
+  scope_label?: string | null
+  deal_text?: string | null
+  directus_deal_schema?: string | null
+  updated_at?: string | null
+}
+
+export interface SaveLinkVerificationResponseTemplateInput {
+  id?: number
+  room_key: string
+  deal_type?: RoomDealType
+  language: RoomLanguage
+  template_key: string
+  label: string
+  outcome?: LinkVerificationResponseOutcome
+  body: string
+  notes?: string | null
+  sort_order?: number
+  is_active?: number | boolean
+  updated_at?: string | null
+}
+
 export interface RoomProfileInfo {
   id: number
   room_key: string
@@ -199,12 +222,36 @@ export interface LinkVerificationTemplateInfo {
   updated_at?: string | null
 }
 
+export interface LinkVerificationDealDefaultsInfo {
+  scope_key: string
+  scope_label: string
+  deal_text: string
+  directus_deal_schema: string
+  updated_at?: string | null
+}
+
+export interface LinkVerificationResponseTemplateInfo {
+  id: number
+  room_key: string
+  deal_type: RoomDealType
+  language: RoomLanguage
+  template_key: string
+  label: string
+  outcome: LinkVerificationResponseOutcome
+  body: string
+  notes?: string | null
+  sort_order: number
+  is_active: number
+  updated_at?: string | null
+}
+
 export interface RoomKnowledgeIndex {
   profiles: RoomProfileInfo[]
   dealOptions: Array<{ room_key: string; deal_type: RoomDealType; language: RoomLanguage }>
   paymentMethods: RoomPaymentMethodInfo[]
   walletOptions: Array<{ room_key: string; deal_type: RoomDealType; currency: string; network: string; is_active: number }>
   countryOptions: RoomCountryAvailabilityInfo[]
+  linkVerificationResponseOptions: Array<{ room_key: string; deal_type: RoomDealType; language: RoomLanguage; template_count: number }>
 }
 
 const roomWalletManualResetMigrationKey = 'room_wallets_manual_reset_2026_07_02_v2'
@@ -414,8 +461,15 @@ export class TransactionerDatabase {
       WHERE is_active = 1
       ORDER BY room_key COLLATE NOCASE, sort_order, country_name COLLATE NOCASE, deal_type COLLATE NOCASE
     `).all() as RoomCountryAvailabilityInfo[]
+    const linkVerificationResponseOptions = this.db.prepare(`
+      SELECT room_key, deal_type, language, COUNT(*) AS template_count
+      FROM link_verification_response_templates
+      WHERE is_active = 1
+      GROUP BY room_key, deal_type, language
+      ORDER BY room_key COLLATE NOCASE, deal_type COLLATE NOCASE, language
+    `).all() as RoomKnowledgeIndex['linkVerificationResponseOptions']
 
-    return { profiles, dealOptions, paymentMethods, walletOptions, countryOptions }
+    return { profiles, dealOptions, paymentMethods, walletOptions, countryOptions, linkVerificationResponseOptions }
   }
 
   saveRoomProfile(data: SaveRoomProfileInput): SavePlayerResult {
@@ -534,6 +588,216 @@ export class TransactionerDatabase {
       WHERE room_name = ? COLLATE NOCASE
       ORDER BY template_key COLLATE NOCASE
     `).all(normalizedRoomName) as LinkVerificationTemplateInfo[]
+  }
+
+  getLinkVerificationDealDefaults(scopeKey?: string): LinkVerificationDealDefaultsInfo[] {
+    const normalizedScopeKey = String(scopeKey || '').trim()
+    if (normalizedScopeKey) {
+      return this.db.prepare(`
+        SELECT * FROM link_verification_deal_defaults
+        WHERE scope_key = ? COLLATE NOCASE
+        ORDER BY scope_key COLLATE NOCASE
+      `).all(normalizedScopeKey) as LinkVerificationDealDefaultsInfo[]
+    }
+
+    return this.db.prepare(`
+      SELECT * FROM link_verification_deal_defaults
+      ORDER BY scope_key COLLATE NOCASE
+    `).all() as LinkVerificationDealDefaultsInfo[]
+  }
+
+  saveLinkVerificationDealDefaults(data: SaveLinkVerificationDealDefaultsInput): MutationResult {
+    try {
+      const scopeKey = String(data.scope_key || '').trim()
+      const scopeLabel = String(data.scope_label || scopeKey).trim()
+      const dealText = String(data.deal_text || '').trim()
+      const directusDealSchema = String(data.directus_deal_schema || '').trim()
+      const now = new Date().toISOString().slice(0, 10)
+
+      if (!scopeKey) return { success: false, error: 'Не удалось определить группу сделки' }
+
+      this.db.prepare(`
+        INSERT INTO link_verification_deal_defaults (
+          scope_key, scope_label, deal_text, directus_deal_schema, updated_at
+        )
+        VALUES (
+          @scopeKey, @scopeLabel, @dealText, @directusDealSchema, @updatedAt
+        )
+        ON CONFLICT(scope_key) DO UPDATE SET
+          scope_label = excluded.scope_label,
+          deal_text = excluded.deal_text,
+          directus_deal_schema = excluded.directus_deal_schema,
+          updated_at = excluded.updated_at
+      `).run({
+        scopeKey,
+        scopeLabel,
+        dealText,
+        directusDealSchema,
+        updatedAt: data.updated_at ? String(data.updated_at).trim() : now,
+      })
+
+      return { success: true }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  getLinkVerificationResponseTemplates(roomKey: string, language?: RoomLanguage, dealType?: RoomDealType): LinkVerificationResponseTemplateInfo[] {
+    const normalizedRoomKey = String(roomKey || '').trim()
+    if (!normalizedRoomKey) return []
+    const normalizedDealType = dealType ? String(dealType).trim() : ''
+
+    if (language && normalizedDealType) {
+      return this.db.prepare(`
+        SELECT * FROM link_verification_response_templates
+        WHERE room_key = ? COLLATE NOCASE
+          AND language = ? COLLATE NOCASE
+          AND deal_type = ? COLLATE NOCASE
+          AND is_active = 1
+        ORDER BY sort_order, label COLLATE NOCASE, template_key COLLATE NOCASE
+      `).all(normalizedRoomKey, language, normalizedDealType) as LinkVerificationResponseTemplateInfo[]
+    }
+
+    if (language) {
+      return this.db.prepare(`
+        SELECT * FROM link_verification_response_templates
+        WHERE room_key = ? COLLATE NOCASE
+          AND language = ? COLLATE NOCASE
+          AND is_active = 1
+        ORDER BY sort_order, label COLLATE NOCASE, template_key COLLATE NOCASE
+      `).all(normalizedRoomKey, language) as LinkVerificationResponseTemplateInfo[]
+    }
+
+    return this.db.prepare(`
+      SELECT * FROM link_verification_response_templates
+      WHERE room_key = ? COLLATE NOCASE
+        AND is_active = 1
+      ORDER BY language COLLATE NOCASE, sort_order, label COLLATE NOCASE, template_key COLLATE NOCASE
+    `).all(normalizedRoomKey) as LinkVerificationResponseTemplateInfo[]
+  }
+
+  getLinkVerificationResponseTemplatesAdmin(roomKey: string, language?: RoomLanguage, dealType?: RoomDealType): LinkVerificationResponseTemplateInfo[] {
+    const normalizedRoomKey = String(roomKey || '').trim()
+    if (!normalizedRoomKey) return []
+    const normalizedDealType = dealType ? String(dealType).trim() : ''
+
+    if (language && normalizedDealType) {
+      return this.db.prepare(`
+        SELECT * FROM link_verification_response_templates
+        WHERE room_key = ? COLLATE NOCASE
+          AND language = ? COLLATE NOCASE
+          AND deal_type = ? COLLATE NOCASE
+        ORDER BY is_active DESC, sort_order, label COLLATE NOCASE, template_key COLLATE NOCASE
+      `).all(normalizedRoomKey, language, normalizedDealType) as LinkVerificationResponseTemplateInfo[]
+    }
+
+    if (language) {
+      return this.db.prepare(`
+        SELECT * FROM link_verification_response_templates
+        WHERE room_key = ? COLLATE NOCASE
+          AND language = ? COLLATE NOCASE
+        ORDER BY is_active DESC, sort_order, label COLLATE NOCASE, template_key COLLATE NOCASE
+      `).all(normalizedRoomKey, language) as LinkVerificationResponseTemplateInfo[]
+    }
+
+    return this.db.prepare(`
+      SELECT * FROM link_verification_response_templates
+      WHERE room_key = ? COLLATE NOCASE
+      ORDER BY language COLLATE NOCASE, is_active DESC, sort_order, label COLLATE NOCASE, template_key COLLATE NOCASE
+    `).all(normalizedRoomKey) as LinkVerificationResponseTemplateInfo[]
+  }
+
+  saveLinkVerificationResponseTemplate(data: SaveLinkVerificationResponseTemplateInput): SavePlayerResult {
+    try {
+      const roomKey = String(data.room_key || '').trim()
+      const room = this.db.prepare('SELECT room_key FROM room_profiles WHERE room_key = ? COLLATE NOCASE')
+        .get(roomKey) as { room_key: string } | undefined
+      const dealType = data.deal_type || 'General'
+      const language = data.language || 'RU'
+      const templateKey = String(data.template_key || dealType).trim().toLowerCase()
+      const label = String(data.label || '').trim()
+      const outcome = data.outcome || 'ok'
+      const body = String(data.body || '').trim()
+      const now = new Date().toISOString().slice(0, 10)
+
+      if (!roomKey) return { success: false, error: 'Выберите рум из справочника' }
+      if (!room) return { success: false, error: 'Шаблон ответа можно создать только для существующего рума' }
+      if (!['General', 'Direct', 'Agent'].includes(dealType)) return { success: false, error: 'Выберите тип сделки' }
+      if (!['RU', 'EN', 'ES'].includes(language)) return { success: false, error: 'Выберите язык шаблона' }
+      if (!templateKey) return { success: false, error: 'Заполните ключ шаблона' }
+      if (!/^[a-z0-9-]+$/.test(templateKey)) return { success: false, error: 'Ключ шаблона может содержать только латиницу, цифры и дефис' }
+      if (!['ok', 'denied', 'need_more_data', 'custom'].includes(outcome)) return { success: false, error: 'Выберите результат привязки' }
+      if (!label) return { success: false, error: 'Заполните название шаблона' }
+      if (!body) return { success: false, error: 'Заполните текст ответа' }
+
+      const payload = {
+        id: data.id ? Number(data.id) : null,
+        roomKey: room.room_key,
+        dealType,
+        language,
+        templateKey,
+        label,
+        outcome,
+        body,
+        notes: data.notes ? String(data.notes).trim() : null,
+        sortOrder: Number(data.sort_order || 0),
+        isActive: data.is_active === false || data.is_active === 0 ? 0 : 1,
+        updatedAt: data.updated_at ? String(data.updated_at).trim() : now,
+      }
+
+      if (payload.id) {
+        const result = this.db.prepare(`
+          UPDATE link_verification_response_templates
+          SET room_key = @roomKey,
+              deal_type = @dealType,
+              language = @language,
+              template_key = @templateKey,
+              label = @label,
+              outcome = @outcome,
+              body = @body,
+              notes = @notes,
+              sort_order = @sortOrder,
+              is_active = @isActive,
+              updated_at = @updatedAt
+          WHERE id = @id
+        `).run(payload)
+        if (result.changes === 0) return { success: false, error: 'Шаблон ответа не найден' }
+        return { success: true, id: payload.id }
+      }
+
+      this.db.prepare(`
+        INSERT INTO link_verification_response_templates (
+          room_key, deal_type, language, template_key, label, outcome, body, notes,
+          sort_order, is_active, updated_at
+        )
+        VALUES (
+          @roomKey, @dealType, @language, @templateKey, @label, @outcome, @body, @notes,
+          @sortOrder, @isActive, @updatedAt
+        )
+        ON CONFLICT(room_key, deal_type, language) DO UPDATE SET
+          template_key = excluded.template_key,
+          label = excluded.label,
+          outcome = excluded.outcome,
+          body = excluded.body,
+          notes = excluded.notes,
+          sort_order = excluded.sort_order,
+          is_active = excluded.is_active,
+          updated_at = excluded.updated_at
+      `).run(payload)
+      const stored = this.db.prepare(`
+        SELECT id FROM link_verification_response_templates
+        WHERE room_key = ? COLLATE NOCASE
+          AND deal_type = ? COLLATE NOCASE
+          AND language = ? COLLATE NOCASE
+      `).get(payload.roomKey, dealType, language) as { id: number } | undefined
+      const id = Number(stored?.id)
+      if (!id) return { success: false, error: 'Не удалось сохранить шаблон ответа' }
+      return { success: true, id }
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
   }
 
   saveLinkVerificationTemplate(data: SaveLinkVerificationTemplateInput): SavePlayerResult {
@@ -1186,6 +1450,50 @@ export class TransactionerDatabase {
         updated_at TEXT,
         UNIQUE(room_name, template_key)
       );
+      CREATE TABLE IF NOT EXISTS link_verification_deal_defaults (
+        scope_key TEXT COLLATE NOCASE PRIMARY KEY,
+        scope_label TEXT NOT NULL DEFAULT '',
+        deal_text TEXT NOT NULL DEFAULT '',
+        directus_deal_schema TEXT NOT NULL DEFAULT '',
+        updated_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS link_verification_response_templates (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_key TEXT COLLATE NOCASE NOT NULL,
+        deal_type TEXT COLLATE NOCASE NOT NULL DEFAULT 'General',
+        language TEXT COLLATE NOCASE NOT NULL,
+        template_key TEXT COLLATE NOCASE NOT NULL,
+        label TEXT NOT NULL,
+        outcome TEXT NOT NULL DEFAULT 'ok',
+        body TEXT NOT NULL,
+        notes TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
+        updated_at TEXT,
+        UNIQUE(room_key, deal_type, language)
+      );
+      CREATE INDEX IF NOT EXISTS idx_link_verification_response_templates_room
+        ON link_verification_response_templates(room_key COLLATE NOCASE, deal_type COLLATE NOCASE, language COLLATE NOCASE, is_active);
+      CREATE TRIGGER IF NOT EXISTS trg_link_verification_response_templates_room_exists_insert
+      BEFORE INSERT ON link_verification_response_templates
+      FOR EACH ROW
+      WHEN NOT EXISTS (
+        SELECT 1 FROM room_profiles
+        WHERE room_key = NEW.room_key COLLATE NOCASE
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'link verification response template room does not exist');
+      END;
+      CREATE TRIGGER IF NOT EXISTS trg_link_verification_response_templates_room_exists_update
+      BEFORE UPDATE OF room_key ON link_verification_response_templates
+      FOR EACH ROW
+      WHEN NOT EXISTS (
+        SELECT 1 FROM room_profiles
+        WHERE room_key = NEW.room_key COLLATE NOCASE
+      )
+      BEGIN
+        SELECT RAISE(ABORT, 'link verification response template room does not exist');
+      END;
       CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
@@ -1218,6 +1526,8 @@ export class TransactionerDatabase {
       CREATE UNIQUE INDEX IF NOT EXISTS idx_player_contacts_value_unique_nocase
       ON player_contacts(contact_value COLLATE NOCASE);
     `)
+    this.migrateLinkVerificationResponseTemplates()
+    this.migrateLinkVerificationDealDefaults()
     this.seedRoomKnowledge(roomKnowledgeSeed)
     this.cleanupLegacyCombinedPaymentMethods()
     this.resetRoomWalletsForManualConfiguration()
@@ -1240,6 +1550,100 @@ export class TransactionerDatabase {
     })
 
     reset()
+  }
+
+  private migrateLinkVerificationResponseTemplates() {
+    const cols = this.db.prepare("PRAGMA table_info(link_verification_response_templates)").all() as Array<{ name: string }>
+    const colNames = cols.map((c) => c.name)
+    if (!colNames.includes('deal_type')) {
+      this.db.exec(`ALTER TABLE link_verification_response_templates ADD COLUMN deal_type TEXT NOT NULL DEFAULT 'General';`)
+    }
+    this.db.exec(`
+      UPDATE link_verification_response_templates
+      SET deal_type = 'General'
+      WHERE TRIM(IFNULL(deal_type, '')) = '';
+
+      DELETE FROM link_verification_response_templates
+      WHERE id IN (
+        SELECT id
+        FROM (
+          SELECT
+            id,
+            ROW_NUMBER() OVER (
+              PARTITION BY LOWER(TRIM(room_key)), LOWER(TRIM(deal_type)), LOWER(TRIM(language))
+              ORDER BY
+                CASE WHEN is_active = 1 THEN 0 ELSE 1 END,
+                CASE WHEN LOWER(TRIM(outcome)) = 'ok' THEN 0 ELSE 1 END,
+                CASE
+                  WHEN LOWER(TRIM(template_key)) IN ('general', 'ok', LOWER(TRIM(deal_type))) THEN 0
+                  ELSE 1
+                END,
+                sort_order ASC,
+                COALESCE(updated_at, '') DESC,
+                id DESC
+            ) AS row_rank
+          FROM link_verification_response_templates
+        )
+        WHERE row_rank > 1
+      );
+
+      UPDATE link_verification_response_templates
+      SET
+        template_key = LOWER(TRIM(deal_type)),
+        label = 'Подтверждение привязки',
+        outcome = 'ok',
+        notes = NULL,
+        sort_order = 0,
+        is_active = 1
+      WHERE TRIM(IFNULL(body, '')) != '';
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_link_verification_response_templates_unique_deal_language
+      ON link_verification_response_templates(
+        room_key COLLATE NOCASE,
+        deal_type COLLATE NOCASE,
+        language COLLATE NOCASE
+      );
+    `)
+  }
+
+  private migrateLinkVerificationDealDefaults() {
+    const cols = this.db.prepare("PRAGMA table_info(link_verification_deal_defaults)").all() as Array<{ name: string }>
+    const colNames = cols.map((c) => c.name)
+    if (colNames.includes('scope_key')) return
+
+    const legacyTable = 'link_verification_deal_defaults_legacy_2026_09_15'
+    this.db.exec(`
+      DROP TABLE IF EXISTS ${legacyTable};
+      ALTER TABLE link_verification_deal_defaults RENAME TO ${legacyTable};
+      CREATE TABLE link_verification_deal_defaults (
+        scope_key TEXT COLLATE NOCASE PRIMARY KEY,
+        scope_label TEXT NOT NULL DEFAULT '',
+        deal_text TEXT NOT NULL DEFAULT '',
+        directus_deal_schema TEXT NOT NULL DEFAULT '',
+        updated_at TEXT
+      );
+    `)
+
+    const legacyCols = this.db.prepare(`PRAGMA table_info(${legacyTable})`).all() as Array<{ name: string }>
+    const legacyColNames = legacyCols.map((c) => c.name)
+    if (!legacyColNames.includes('room_name')) return
+
+    const dealTextExpression = legacyColNames.includes('deal_text') ? 'deal_text' : "''"
+    const schemaExpression = legacyColNames.includes('directus_deal_schema') ? 'directus_deal_schema' : "''"
+    const updatedAtExpression = legacyColNames.includes('updated_at') ? 'updated_at' : 'NULL'
+    this.db.exec(`
+      INSERT OR REPLACE INTO link_verification_deal_defaults (
+        scope_key, scope_label, deal_text, directus_deal_schema, updated_at
+      )
+      SELECT
+        LOWER(REPLACE(TRIM(room_name), ' ', '')),
+        TRIM(room_name),
+        IFNULL(${dealTextExpression}, ''),
+        IFNULL(${schemaExpression}, ''),
+        ${updatedAtExpression}
+      FROM ${legacyTable}
+      WHERE TRIM(IFNULL(room_name, '')) != '';
+    `)
   }
 
   private cleanupLegacyCombinedPaymentMethods() {
@@ -1387,6 +1791,17 @@ export class TransactionerDatabase {
         )
         ON CONFLICT(room_key, country_code, status, deal_type, language) DO NOTHING
       `)
+      const insertLinkVerificationResponse = this.db.prepare(`
+        INSERT INTO link_verification_response_templates (
+          room_key, deal_type, language, template_key, label, outcome, body, notes,
+          sort_order, is_active, updated_at
+        )
+        VALUES (
+          @roomKey, @dealType, @language, @templateKey, @label, @outcome, @body, @notes,
+          @sortOrder, @isActive, @updatedAt
+        )
+        ON CONFLICT(room_key, deal_type, language) DO NOTHING
+      `)
 
       for (const profile of seed.profiles) {
         insertProfile.run({
@@ -1442,6 +1857,23 @@ export class TransactionerDatabase {
           sourceDate: country.sourceDate || null,
           sortOrder: country.sortOrder || 0,
           isActive: country.isActive === false ? 0 : 1
+        })
+      }
+
+      for (const template of seed.linkVerificationResponses) {
+        const dealType = template.dealType || 'General'
+        insertLinkVerificationResponse.run({
+          roomKey: template.roomKey,
+          dealType,
+          language: template.language,
+          templateKey: template.templateKey.trim().toLowerCase() || dealType.toLowerCase(),
+          label: template.label,
+          outcome: template.outcome || 'ok',
+          body: template.body,
+          notes: template.notes || null,
+          sortOrder: template.sortOrder || 0,
+          isActive: template.isActive === false ? 0 : 1,
+          updatedAt: template.updatedAt || null
         })
       }
     })

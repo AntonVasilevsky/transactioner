@@ -1,9 +1,8 @@
-import { useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Star, Trash2, Save, Loader2 } from 'lucide-react'
 import { inferContactMethod } from '../utils/contactNormalization'
+import { legacyPaymentRoomNames, roomNameOptionsFromKnowledge } from '../utils/roomAccountOptions'
 import { getWalletAddressValidationError } from '../utils/walletValidation'
-
-const AVAILABLE_ROOMS = ['RedStar', 'Champion Poker', 'Nexa']
 
 type AccountFormField = 'roomName' | 'roomUsername' | 'roomPlayerId' | 'email'
 type ContactFormField = 'contactMethod' | 'contactValue'
@@ -29,13 +28,32 @@ export default function AddPlayerView({
   const [defaultWallet, setDefaultWallet] = useState('')
   const [defaultWalletNetwork, setDefaultWalletNetwork] = useState('')
   const [accounts, setAccounts] = useState<AccountForm[]>([])
+  const [roomKnowledgeIndex, setRoomKnowledgeIndex] = useState<RoomKnowledgeIndex | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const defaultWalletInputRef = useRef<HTMLInputElement | null>(null)
   const defaultWalletError = getWalletAddressValidationError(defaultWallet)
+  const roomOptions = useMemo(
+    () => roomNameOptionsFromKnowledge(roomKnowledgeIndex, accounts.map(account => account.roomName)),
+    [accounts, roomKnowledgeIndex]
+  )
+
+  useEffect(() => {
+    let active = true
+    window.electronAPI.getRoomKnowledgeIndex()
+      .then((result) => {
+        if (active) setRoomKnowledgeIndex(result)
+      })
+      .catch(() => {
+        if (active) setRoomKnowledgeIndex(null)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
 
   const handleAddAccount = () => {
-    setAccounts([...accounts, { roomName: AVAILABLE_ROOMS[0], roomUsername: '', roomPlayerId: '', email: '' }])
+    setAccounts([...accounts, { roomName: roomOptions[0] || legacyPaymentRoomNames[0], roomUsername: '', roomPlayerId: '', email: '' }])
   }
 
   const handleUpdateAccount = (index: number, field: AccountFormField, value: string) => {
@@ -255,6 +273,9 @@ export default function AddPlayerView({
             </div>
           ) : (
             <div className="space-y-4">
+              <datalist id="add-player-room-options">
+                {roomOptions.map(r => <option key={r} value={r} />)}
+              </datalist>
               {accounts.map((acc, index) => (
                 <div key={index} className="bg-slate-800 border border-slate-700 p-5 rounded-2xl relative group">
                   <button
@@ -268,13 +289,12 @@ export default function AddPlayerView({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                     <div>
                       <label className="block text-xs font-medium text-slate-400 mb-1">Покер-рум</label>
-                      <select
+                      <input
+                        list="add-player-room-options"
                         value={acc.roomName}
                         onChange={(e) => handleUpdateAccount(index, 'roomName', e.target.value)}
                         className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-100 outline-none focus:border-emerald-500"
-                      >
-                        {AVAILABLE_ROOMS.map(r => <option key={r} value={r}>{r}</option>)}
-                      </select>
+                      />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-slate-400 mb-1">Юзернейм в руме</label>

@@ -4,8 +4,9 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createDailyDatabaseBackup, createDatabaseSnapshotBackup } from './backup'
 import { convertUsdToEur, parseCurrencyAmount } from './currency'
-import { TransactionerDatabase, type RoomDealType, type RoomLanguage, type SaveLinkVerificationTemplateInput, type SaveRoomDealInput, type SaveRoomPaymentMethodInput, type SaveRoomProfileInput, type SaveRoomWalletInput } from './database'
+import { TransactionerDatabase, type RoomDealType, type RoomLanguage, type SaveLinkVerificationDealDefaultsInput, type SaveLinkVerificationResponseTemplateInput, type SaveLinkVerificationTemplateInput, type SaveRoomDealInput, type SaveRoomPaymentMethodInput, type SaveRoomProfileInput, type SaveRoomWalletInput } from './database'
 import { resolveTransaction, type KnownTransactionWallet } from './transactionResolver'
+import { searchRakebackTransaction } from './rakebackTransactionSearch'
 import { checkForUpdate, isAllowedReleaseUrl } from './updates'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -105,6 +106,7 @@ ipcMain.handle('get-room-knowledge-index', () => store?.getRoomKnowledgeIndex() 
   paymentMethods: [],
   walletOptions: [],
   countryOptions: [],
+  linkVerificationResponseOptions: [],
 })
 ipcMain.handle('get-room-knowledge-admin-index', () => store?.getRoomKnowledgeAdminIndex() ?? {
   profiles: [],
@@ -112,6 +114,7 @@ ipcMain.handle('get-room-knowledge-admin-index', () => store?.getRoomKnowledgeAd
   paymentMethods: [],
   walletOptions: [],
   countryOptions: [],
+  linkVerificationResponseOptions: [],
 })
 ipcMain.handle('get-room-wallets', (_, roomKey: string, dealType?: RoomDealType) => (
   store?.getRoomWallets(roomKey, dealType) ?? []
@@ -121,6 +124,15 @@ ipcMain.handle('get-room-deals', (_, roomKey: string, language: RoomLanguage, de
 ))
 ipcMain.handle('get-link-verification-templates', (_, roomName: string) => (
   store?.getLinkVerificationTemplates(roomName) ?? []
+))
+ipcMain.handle('get-link-verification-deal-defaults', (_, scopeKey?: string) => (
+  store?.getLinkVerificationDealDefaults(scopeKey) ?? []
+))
+ipcMain.handle('get-link-verification-response-templates', (_, roomKey: string, language?: RoomLanguage, dealType?: RoomDealType) => (
+  store?.getLinkVerificationResponseTemplates(roomKey, language, dealType) ?? []
+))
+ipcMain.handle('get-link-verification-response-templates-admin', (_, roomKey: string, language?: RoomLanguage, dealType?: RoomDealType) => (
+  store?.getLinkVerificationResponseTemplatesAdmin(roomKey, language, dealType) ?? []
 ))
 ipcMain.handle('get-room-country-availability', (_, roomKey: string) => (
   store?.getRoomCountryAvailability(roomKey) ?? []
@@ -140,6 +152,17 @@ ipcMain.handle('save-room-deal', (_, data: SaveRoomDealInput) => {
 ipcMain.handle('save-link-verification-template', (_, data: SaveLinkVerificationTemplateInput) => {
   runRoomEditBackup()
   const result = store?.saveLinkVerificationTemplate(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('save-link-verification-deal-defaults', (_, data: SaveLinkVerificationDealDefaultsInput) => {
+  const result = store?.saveLinkVerificationDealDefaults(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('save-link-verification-response-template', (_, data: SaveLinkVerificationResponseTemplateInput) => {
+  runRoomEditBackup()
+  const result = store?.saveLinkVerificationResponseTemplate(data) ?? { success: false, error: 'База данных недоступна' }
   if (result.success) runDailyBackup()
   return result
 })
@@ -178,6 +201,7 @@ ipcMain.handle('resolve-transaction', (_, input) => resolveTransaction({
   ...input,
   knownWallets: getActiveTransactionWallets(),
 }))
+ipcMain.handle('search-rakeback-transaction', (_, input) => searchRakebackTransaction(input))
 ipcMain.handle('convert-usd-to-eur', async (_, amountText: string) => {
   try {
     const amount = parseCurrencyAmount(amountText)

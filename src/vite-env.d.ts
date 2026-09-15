@@ -5,6 +5,7 @@ type RoomDealType = 'General' | 'Direct' | 'Agent'
 type RoomLanguage = 'RU' | 'EN' | 'ES'
 type RoomOperationType = 'Deposit' | 'Withdrawal'
 type RoomCountryStatus = 'Available' | 'Unavailable' | 'Check'
+type LinkVerificationResponseOutcome = 'ok' | 'denied' | 'need_more_data' | 'custom'
 
 interface Account {
   id?: number
@@ -135,6 +136,29 @@ interface SaveLinkVerificationTemplateInput {
   notes?: string | null
 }
 
+interface SaveLinkVerificationDealDefaultsInput {
+  scope_key: string
+  scope_label?: string | null
+  deal_text?: string | null
+  directus_deal_schema?: string | null
+  updated_at?: string | null
+}
+
+interface SaveLinkVerificationResponseTemplateInput {
+  id?: number
+  room_key: string
+  deal_type?: RoomDealType
+  language: RoomLanguage
+  template_key: string
+  label: string
+  outcome?: LinkVerificationResponseOutcome
+  body: string
+  notes?: string | null
+  sort_order?: number
+  is_active?: number | boolean
+  updated_at?: string | null
+}
+
 interface UpdateCheckResult {
   available: boolean
   currentVersion: string
@@ -235,12 +259,36 @@ interface LinkVerificationTemplateInfo {
   updated_at?: string | null
 }
 
+interface LinkVerificationDealDefaultsInfo {
+  scope_key: string
+  scope_label: string
+  deal_text: string
+  directus_deal_schema: string
+  updated_at?: string | null
+}
+
+interface LinkVerificationResponseTemplateInfo {
+  id: number
+  room_key: string
+  deal_type: RoomDealType
+  language: RoomLanguage
+  template_key: string
+  label: string
+  outcome: LinkVerificationResponseOutcome
+  body: string
+  notes?: string | null
+  sort_order: number
+  is_active: number
+  updated_at?: string | null
+}
+
 interface RoomKnowledgeIndex {
   profiles: RoomProfileInfo[]
   dealOptions: Array<{ room_key: string; deal_type: RoomDealType; language: RoomLanguage }>
   paymentMethods: RoomPaymentMethodInfo[]
   walletOptions: Array<{ room_key: string; deal_type: RoomDealType; currency: string; network: string; is_active: number }>
   countryOptions: RoomCountryAvailabilityInfo[]
+  linkVerificationResponseOptions: Array<{ room_key: string; deal_type: RoomDealType; language: RoomLanguage; template_count: number }>
 }
 
 interface AppInfo {
@@ -270,6 +318,30 @@ interface ResolveTransactionResult {
   fxDate?: string
   warning?: string
   requiresManualAmount?: boolean
+  error?: string
+}
+
+interface SearchRakebackTransactionInput {
+  amount: string
+  network: string
+  wallet: string
+  periodFrom: string
+  periodTo: string
+  affiliateWallets: string
+}
+
+interface RakebackTransactionCandidate {
+  hash: string
+  amount: string
+  from: string
+  date: string
+  explorerUrl: string
+}
+
+interface SearchRakebackTransactionResult {
+  success: boolean
+  status: 'found' | 'not_found' | 'not_configured' | 'error'
+  candidates?: RakebackTransactionCandidate[]
   error?: string
 }
 
@@ -304,10 +376,15 @@ interface Window {
     getRoomWallets: (roomKey: string, dealType?: RoomDealType) => Promise<RoomWalletInfo[]>;
     getRoomDeals: (roomKey: string, language: RoomLanguage, dealType?: RoomDealType) => Promise<RoomDealInfo[]>;
     getLinkVerificationTemplates: (roomName: string) => Promise<LinkVerificationTemplateInfo[]>;
+    getLinkVerificationDealDefaults: (scopeKey?: string) => Promise<LinkVerificationDealDefaultsInfo[]>;
+    getLinkVerificationResponseTemplates: (roomKey: string, language?: RoomLanguage, dealType?: RoomDealType) => Promise<LinkVerificationResponseTemplateInfo[]>;
+    getLinkVerificationResponseTemplatesAdmin: (roomKey: string, language?: RoomLanguage, dealType?: RoomDealType) => Promise<LinkVerificationResponseTemplateInfo[]>;
     getRoomCountryAvailability: (roomKey: string) => Promise<RoomCountryAvailabilityInfo[]>;
     saveRoomProfile: (data: SaveRoomProfileInput) => Promise<SavePlayerResult>;
     saveRoomDeal: (data: SaveRoomDealInput) => Promise<SavePlayerResult>;
     saveLinkVerificationTemplate: (data: SaveLinkVerificationTemplateInput) => Promise<SavePlayerResult>;
+    saveLinkVerificationDealDefaults: (data: SaveLinkVerificationDealDefaultsInput) => Promise<MutationResult>;
+    saveLinkVerificationResponseTemplate: (data: SaveLinkVerificationResponseTemplateInput) => Promise<SavePlayerResult>;
     deleteLinkVerificationTemplate: (roomName: string, templateKey: string) => Promise<MutationResult>;
     saveRoomWallet: (data: SaveRoomWalletInput) => Promise<SavePlayerResult>;
     deleteRoomWallet: (id: number) => Promise<MutationResult>;
@@ -315,6 +392,7 @@ interface Window {
     deleteRoomPaymentMethod: (id: number) => Promise<MutationResult>;
     checkForUpdates: () => Promise<UpdateCheckResult>;
     resolveTransaction: (input: ResolveTransactionInput) => Promise<ResolveTransactionResult>;
+    searchRakebackTransaction: (input: SearchRakebackTransactionInput) => Promise<SearchRakebackTransactionResult>;
     convertUsdToEur: (amount: string) => Promise<CurrencyConversionResult>;
     getReleaseNotes: () => Promise<ReleaseNotesInfo>;
     markReleaseNotesSeen: () => Promise<MutationResult>;

@@ -15,7 +15,7 @@ import {
   sortLinkVerificationRoomOptions,
   toDirectusMessenger
 } from '../utils/linkVerificationFormatting'
-import { LINK_VERIFICATION_TEMPLATES, resolveLinkVerificationRoomRule } from '../utils/linkVerificationRules'
+import { LINK_VERIFICATION_TEMPLATES, resolveLinkVerificationDealDefaultScope, resolveLinkVerificationRoomRule } from '../utils/linkVerificationRules'
 
 describe('LinkVerificationView helpers', () => {
   it('replaces placeholders in request template from form values', () => {
@@ -235,6 +235,22 @@ Telegram: @AlexanderChazov
     expect(resolveLinkVerificationRoomRule('BCPoker').deal).toEqual({
       dealText: '15% Net Revenue (300+ rake/month)',
       directusDealSchema: 'net/ramp\n300, 15%'
+    })
+  })
+
+  it('uses 15% Net Revenue as the current shared Chico fallback', () => {
+    expect(resolveLinkVerificationRoomRule('SportsBetting').deal).toEqual({
+      dealText: '15% Net Revenue',
+      directusDealSchema: 'net/ramp\n0, 15%'
+    })
+    expect(resolveLinkVerificationRoomRule('BetOnline').deal).toEqual({
+      dealText: '15% Net Revenue',
+      directusDealSchema: 'net/ramp\n0, 15%'
+    })
+    expect(resolveLinkVerificationDealDefaultScope('TigerGaming')).toEqual({
+      key: 'chico-network',
+      label: 'Chico Network',
+      roomNames: ['SportsBetting', 'TigerGaming', 'BetOnline', 'Chico']
     })
   })
 

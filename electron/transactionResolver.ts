@@ -360,7 +360,7 @@ const selectEthereumTransferLog = (
   return { value: transferLogs[0] }
 }
 
-const loadApiKeys = (): ApiKeys => {
+export const loadApiKeys = (): ApiKeys => {
   const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
   const envPaths = [
     process.env.TRANSACTIONER_API_KEYS_PATH,
