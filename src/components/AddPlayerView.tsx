@@ -3,6 +3,7 @@ import { Plus, Star, Trash2, Save, Loader2 } from 'lucide-react'
 import { inferContactMethod } from '../utils/contactNormalization'
 import { legacyPaymentRoomNames, roomNameOptionsFromKnowledge } from '../utils/roomAccountOptions'
 import { getWalletAddressValidationError } from '../utils/walletValidation'
+import RoomNamePicker from './RoomNamePicker'
 
 type AccountFormField = 'roomName' | 'roomUsername' | 'roomPlayerId' | 'email'
 type ContactFormField = 'contactMethod' | 'contactValue'
@@ -273,9 +274,6 @@ export default function AddPlayerView({
             </div>
           ) : (
             <div className="space-y-4">
-              <datalist id="add-player-room-options">
-                {roomOptions.map(r => <option key={r} value={r} />)}
-              </datalist>
               {accounts.map((acc, index) => (
                 <div key={index} className="bg-slate-800 border border-slate-700 p-5 rounded-2xl relative group">
                   <button
@@ -289,11 +287,11 @@ export default function AddPlayerView({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-2">
                     <div>
                       <label className="block text-xs font-medium text-slate-400 mb-1">Покер-рум</label>
-                      <input
-                        list="add-player-room-options"
+                      <RoomNamePicker
                         value={acc.roomName}
-                        onChange={(e) => handleUpdateAccount(index, 'roomName', e.target.value)}
-                        className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-slate-100 outline-none focus:border-emerald-500"
+                        options={roomOptions}
+                        onChange={(value) => handleUpdateAccount(index, 'roomName', value)}
+                        focusBorderClass="focus:border-emerald-500"
                       />
                     </div>
                     <div>

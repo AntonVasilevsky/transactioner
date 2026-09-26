@@ -12,11 +12,11 @@ import {
   buildLinkVerificationFieldValues,
   buildLinkVerificationRequestText,
   buildLinkVerificationTemplateValues,
-  buildCenteredGoogleSheetsRowHtml,
   buildSheet1Tsv,
   composeTypedIdentityData,
   composePlayerDataByRule,
   getLinkVerificationUsernameFieldLabel,
+  googleSheetsTsvCell,
   normalizeMessengerLabel,
   resolveIdentityFieldsForRoomChange,
   resolveSheet2DirectusMessenger,
@@ -445,7 +445,7 @@ export default function LinkVerificationView() {
       paymentAddress.trim(),
       paymentAddress.trim()
     ]
-    return row.join('\t')
+    return row.map(googleSheetsTsvCell).join('\t')
   }, [
     accountOnWpd,
     country,
@@ -471,8 +471,6 @@ export default function LinkVerificationView() {
     wallet
   ])
 
-  const sheet1Html = useMemo(() => buildCenteredGoogleSheetsRowHtml(sheet1Tsv), [sheet1Tsv])
-  const sheet2Html = useMemo(() => buildCenteredGoogleSheetsRowHtml(sheet2Tsv), [sheet2Tsv])
   const walletError = useMemo(() => getWalletAddressValidationError(wallet), [wallet])
 
   const roomOptions = useMemo(() => {
@@ -810,7 +808,7 @@ export default function LinkVerificationView() {
               title="TSV — Таблица 1"
               value={sheet1Tsv}
               copied={copiedKey === 'sheet1'}
-              onCopy={() => copy('sheet1', sheet1Tsv, sheet1Html)}
+              onCopy={() => copy('sheet1', sheet1Tsv)}
               compact
             />
           </div>
@@ -1020,7 +1018,7 @@ export default function LinkVerificationView() {
               title="TSV — Таблица 2"
               value={sheet2Tsv}
               copied={copiedKey === 'sheet2'}
-              onCopy={() => copy('sheet2', sheet2Tsv, sheet2Html)}
+              onCopy={() => copy('sheet2', sheet2Tsv)}
               compact
             />
           </div>

@@ -281,6 +281,13 @@ export const buildLinkVerificationRequestText = (
   return result
 }
 
+export const googleSheetsTsvCell = (value: string) => String(value || '')
+  .trim()
+  .replace(/\r\n|\r/g, '\n')
+  .replace(/[ \f\v]+/g, ' ')
+  .replace(/"/g, '""')
+  .replace(/^([\s\S]*[\t\n"][\s\S]*)$/, '"$1"')
+
 export const buildSheet1Tsv = (values: {
   date: string
   manager: string
@@ -292,16 +299,16 @@ export const buildSheet1Tsv = (values: {
   deliveredToPlayer: string
   updateChat: boolean
 }) => [
-  values.date.trim(),
-  values.manager.trim(),
+  values.date,
+  values.manager,
   normalizeMessengerLabel(values.messenger),
-  values.messengerUsername.trim(),
-  values.roomName.trim(),
-  values.loginNickId.trim(),
-  values.status.trim() || 'Check',
-  values.deliveredToPlayer.trim(),
+  values.messengerUsername,
+  values.roomName,
+  values.loginNickId,
+  values.status || 'Check',
+  values.deliveredToPlayer,
   values.updateChat ? 'TRUE' : 'FALSE'
-].join('\t')
+].map(googleSheetsTsvCell).join('\t')
 
 const escapeHtml = (value: string) => value
   .replace(/&/g, '&amp;')
@@ -312,7 +319,7 @@ const escapeHtml = (value: string) => value
 
 export const buildCenteredGoogleSheetsRowHtml = (tsv: string) => {
   const cells = tsv.split('\t').map((value) => (
-    `<td style="text-align:center;vertical-align:middle;white-space:pre-wrap;">${escapeHtml(value).replace(/\r\n|\r|\n/g, '<br>')}</td>`
+    `<td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">${escapeHtml(value).replace(/\r\n|\r|\n/g, '<br>')}</td>`
   ))
-  return `<table><tbody><tr>${cells.join('')}</tr></tbody></table>`
+  return `<table><tbody><tr valign="middle" style="vertical-align:middle;">${cells.join('')}</tr></tbody></table>`
 }

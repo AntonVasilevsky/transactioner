@@ -5,6 +5,8 @@ const normalizeRoomIdentity = (value: string) => String(value || '')
   .toLowerCase()
   .replace(/[^a-z0-9а-яё]+/gi, '')
 
+const legacyPaymentRoomKeys = new Set(legacyPaymentRoomNames.map(normalizeRoomIdentity))
+
 const isActive = (value?: number | boolean) => value !== false && value !== 0
 
 export const roomNameOptionsFromKnowledge = (
@@ -54,6 +56,8 @@ export const isPaymentAccountForOperation = (
   index: RoomKnowledgeIndex | null | undefined,
   operationType: RoomOperationType
 ) => {
+  const roomName = account.roomName || account.room_name || ''
+  if (legacyPaymentRoomKeys.has(normalizeRoomIdentity(roomName))) return true
   if (!index) return true
   const payableKeys = payableRoomKeysForOperation(index, operationType)
   const keys = accountRoomKeys(account, index)

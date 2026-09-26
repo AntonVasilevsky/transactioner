@@ -9,6 +9,7 @@ import {
   composePlayerDataByRule,
   composeTypedIdentityData,
   getLinkVerificationUsernameFieldLabel,
+  googleSheetsTsvCell,
   normalizeMessengerLabel,
   resolveSheet2DirectusMessenger,
   resolveIdentityFieldsForRoomChange,
@@ -308,6 +309,26 @@ Telegram: @AlexanderChazov
     expect(toDirectusMessenger('', '@hero')).toBe('')
   })
 
+  it('quotes pasted sheet cells with line breaks so Google Sheets keeps them in one cell', () => {
+    const row = buildSheet1Tsv({
+      date: '02.06.2026',
+      manager: 'Антон',
+      messenger: 'Telegram',
+      messengerUsername: '@hero',
+      roomName: 'WPTG',
+      loginNickId: 'Hero\n1483304\tmail@example.com',
+      status: 'Check',
+      deliveredToPlayer: '',
+      updateChat: false
+    })
+
+    expect(row).toBe('02.06.2026\tАнтон\tTelegram\t@hero\tWPTG\t"Hero\n1483304\tmail@example.com"\tCheck\t\tFALSE')
+  })
+
+  it('keeps Directus deal schema as a multi-line value inside one Google Sheets cell', () => {
+    expect(googleSheetsTsvCell('net/ramp\n0, 40%')).toBe('"net/ramp\n0, 40%"')
+  })
+
   it('uses player email for Directus messenger when messenger is Email or Site', () => {
     expect(toDirectusMessenger('Email', '@hero-contact', 'hero@example.com')).toBe('email: hero@example.com')
     expect(toDirectusMessenger('Site', 'site-contact', 'hero@example.com')).toBe('email: hero@example.com')
@@ -363,6 +384,6 @@ Telegram: @AlexanderChazov
   it('builds a centered Google Sheets HTML row for rich clipboard paste', () => {
     const html = buildCenteredGoogleSheetsRowHtml('Hero & Co\t<Check>\tline 1\nline 2\tFALSE')
 
-    expect(html).toBe('<table><tbody><tr><td style="text-align:center;vertical-align:middle;white-space:pre-wrap;">Hero &amp; Co</td><td style="text-align:center;vertical-align:middle;white-space:pre-wrap;">&lt;Check&gt;</td><td style="text-align:center;vertical-align:middle;white-space:pre-wrap;">line 1<br>line 2</td><td style="text-align:center;vertical-align:middle;white-space:pre-wrap;">FALSE</td></tr></tbody></table>')
+    expect(html).toBe('<table><tbody><tr valign="middle" style="vertical-align:middle;"><td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">Hero &amp; Co</td><td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">&lt;Check&gt;</td><td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">line 1<br>line 2</td><td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">FALSE</td></tr></tbody></table>')
   })
 })

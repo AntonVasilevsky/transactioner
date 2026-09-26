@@ -231,10 +231,12 @@ export default function RakebackView({
       if (!result.success || !candidate) {
         setFoundTransactions([])
         setSelectedTransactionHashes([])
-        setSearchState(result.status === 'not_configured' ? 'not_configured' : 'not_found')
+        setSearchState(result.status === 'not_configured' ? 'not_configured' : result.status === 'error' ? 'error' : 'not_found')
         setMessage(result.status === 'not_configured'
           ? (result.error || 'Добавьте кошелек, с которого отправляется рейкбек.')
-          : 'Транзакция не найдена')
+          : result.status === 'error'
+            ? (result.error || 'Не удалось проверить транзакции.')
+            : 'Транзакция не найдена')
         return
       }
       setFoundTransactions(candidates)
@@ -639,7 +641,7 @@ export default function RakebackView({
                   type="button"
                   onClick={() => searchTransactions(undefined, 'custom')}
                   disabled={isSearching}
-                  className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-blue-500 disabled:cursor-wait disabled:opacity-70"
+                  className="rounded-lg bg-slate-700 px-3 py-2 text-sm text-slate-200 transition-colors hover:bg-slate-600 disabled:cursor-wait disabled:opacity-70"
                 >
                   {quickSearchButton === 'custom' ? 'Ищу…' : 'Кастом по дате'}
                 </button>
