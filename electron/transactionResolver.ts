@@ -65,7 +65,12 @@ interface TronTransfer {
 }
 
 interface TronTransactionResponse {
+  code?: number
+  message?: string
+  error?: string | { message?: string }
   hash?: string
+  contractRet?: string
+  confirmed?: boolean
   block_timestamp?: string | number
   blockTimestamp?: string | number
   timestamp?: string | number
@@ -86,7 +91,9 @@ interface BinplorerOperation {
 }
 
 interface BinplorerTransactionResponse {
+  error?: string | { message?: string }
   hash?: string
+  success?: boolean
   timestamp?: string | number
   time?: string | number
   blockTime?: string | number
@@ -94,6 +101,8 @@ interface BinplorerTransactionResponse {
 }
 
 interface EtherscanProxyResponse {
+  status?: string
+  message?: string
   result?: unknown
 }
 
@@ -104,6 +113,7 @@ interface EthereumLog {
 }
 
 interface EthereumReceipt {
+  status?: string
   logs?: EthereumLog[]
 }
 
@@ -120,6 +130,7 @@ interface EthereumBlock {
 interface BitcoinTransactionResponse {
   txid?: string
   status?: {
+    confirmed?: boolean
     block_time?: number
   }
   vout?: Array<{
@@ -391,7 +402,7 @@ const fetchJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
 }
 
 const isLookupMissError = (err: unknown) => (
-  err instanceof Error && /^HTTP (400|404)$/.test(err.message)
+  err instanceof Error && err.message === 'HTTP 404'
 )
 
 const withEuroConversion = async (
@@ -458,8 +469,22 @@ const resolveTronTransaction = async (
     headers: keys.TRONSCAN_API_KEY ? { 'TRON-PRO-API-KEY': keys.TRONSCAN_API_KEY } : undefined,
   })
 
+  if (data?.code !== undefined && data.code !== 200) {
+    throw new Error(`TronScan API: ${data.message || `code ${data.code}`}`)
+  }
+  if (data?.error) {
+    const detail = typeof data.error === 'string' ? data.error : data.error.message
+    throw new Error(`TronScan API: ${detail || 'ошибка провайдера'}`)
+  }
+  if (!data || typeof data !== 'object') throw new Error('TronScan API вернул неожиданный формат транзакции')
   if (!data.hash) return null
+  if (data.hash.toLowerCase() !== hash.toLowerCase()) throw new Error('TronScan API вернул другую транзакцию')
   const transactionTimestamp = parseTransactionTimestamp(data.block_timestamp || data.blockTimestamp || data.timestamp)
+  if (data.confirmed === false || (data.contractRet && data.contractRet !== 'SUCCESS')) {
+    return withTransactionTimestamp(manualAmountResult(
+      'tron', hash, 'Транзакция неуспешна или не подтверждена. Сумма не заполнена.'
+    ), transactionTimestamp)
+  }
 
   const transfers = [
     data.tokenTransferInfo,
@@ -514,8 +539,20 @@ const resolveBscTransaction = async (
 ): Promise<ResolveTransactionResult | null> => {
   const url = `https://api.binplorer.com/getTxInfo/${hash}?apiKey=freekey`
   const data = await fetchJson<BinplorerTransactionResponse>(url)
-  if (!data.hash) return null
+  if (data?.error) {
+    const detail = typeof data.error === 'string' ? data.error : data.error.message
+    throw new Error(`Binplorer API: ${detail || 'ошибка провайдера'}`)
+  }
+  if (!data || typeof data !== 'object' || typeof data.hash !== 'string' || !Array.isArray(data.operations)) {
+    throw new Error('Binplorer API вернул неожиданный формат транзакции')
+  }
+  if (data.hash.toLowerCase() !== hash.toLowerCase()) throw new Error('Binplorer API вернул другую транзакцию')
   const transactionTimestamp = parseTransactionTimestamp(data.timestamp || data.time || data.blockTime)
+  if (data.success === false) {
+    return withTransactionTimestamp(manualAmountResult(
+      'bsc', hash, 'Транзакция неуспешна. Сумма не заполнена.'
+    ), transactionTimestamp)
+  }
 
   const operations = Array.isArray(data.operations) ? data.operations.filter(item => item.type === 'transfer') : []
   let operation = operations[0] || (Array.isArray(data.operations) ? data.operations[0] : null)
@@ -564,8 +601,16 @@ const resolveBitcoinTransaction = async (
   input: ResolveTransactionInput
 ): Promise<ResolveTransactionResult | null> => {
   const data = await fetchJson<BitcoinTransactionResponse>(`https://blockstream.info/api/tx/${hash}`)
-  if (data.txid !== hash) return null
+  if (!data || typeof data !== 'object' || typeof data.txid !== 'string' || !Array.isArray(data.vout)) {
+    throw new Error('Blockstream API вернул неожиданный формат транзакции')
+  }
+  if (data.txid.toLowerCase() !== hash.toLowerCase()) throw new Error('Blockstream API вернул другую транзакцию')
   const transactionTimestamp = parseTransactionTimestamp(data.status?.block_time)
+  if (data.status?.confirmed === false) {
+    return withTransactionTimestamp(manualAmountResult(
+      'bitcoin', hash, 'Транзакция не подтверждена. Сумма не заполнена.'
+    ), transactionTimestamp)
+  }
 
   const outputs = data.vout || []
   let matchedOutput: BitcoinTransactionResponse['vout'][number] | undefined
@@ -604,7 +649,15 @@ const fetchEtherscanProxy = async (params: Record<string, string>, apiKey: strin
     ...params,
     apikey: apiKey,
   })
-  return fetchJson<EtherscanProxyResponse>(`https://api.etherscan.io/v2/api?${search.toString()}`)
+  const response = await fetchJson<EtherscanProxyResponse>(`https://api.etherscan.io/v2/api?${search.toString()}`)
+  if (response?.status === '0') {
+    const detail = typeof response.result === 'string' ? response.result : response.message
+    throw new Error(`Etherscan API: ${detail || 'ошибка провайдера'}`)
+  }
+  if (!response || typeof response !== 'object' || !Object.hasOwn(response, 'result')) {
+    throw new Error('Etherscan API вернул неожиданный формат ответа')
+  }
+  return response
 }
 
 const fetchEthereumTransactionTimestamp = async (blockNumber: string | undefined, apiKey: string) => {
@@ -629,7 +682,7 @@ const resolveEthereumTransaction = async (
   keys: ApiKeys,
   input: ResolveTransactionInput
 ): Promise<ResolveTransactionResult | null> => {
-  if (!keys.ETHERSCAN_API_KEY) return null
+  if (!keys.ETHERSCAN_API_KEY) throw new Error('Не найден ETHERSCAN_API_KEY в общих ключах приложения')
 
   const receiptData = await fetchEtherscanProxy({
     action: 'eth_getTransactionReceipt',
@@ -638,6 +691,9 @@ const resolveEthereumTransaction = async (
   const receipt = receiptData.result
   if (!receipt || typeof receipt !== 'object') return null
   const typedReceipt = receipt as EthereumReceipt
+  if (typedReceipt.status === '0x0') {
+    return manualAmountResult('ethereum', hash, 'Транзакция неуспешна. Сумма не заполнена.')
+  }
 
   const transactionData = await fetchEtherscanProxy({
     action: 'eth_getTransactionByHash',

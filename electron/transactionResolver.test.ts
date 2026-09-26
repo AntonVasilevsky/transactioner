@@ -392,6 +392,16 @@ describe('transaction resolver helpers', () => {
     expect(result.error).toBe('Транзакция не найдена в поддерживаемых сетях')
   })
 
+  it('does not treat an explorer HTTP 400 configuration failure as missing transaction', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response('bad request', { status: 400 }))
+    const result = await resolveTransaction({
+      txInput: `https://bscscan.com/tx/0x${'a'.repeat(64)}`,
+      roomName: 'Nexa', operationType: 'Deposit',
+    })
+    expect(result.status).toBe('error')
+    expect(result.error).toBe('HTTP 400')
+  })
+
   it('resolves a plain Bitcoin transaction hash after Tron misses', async () => {
     const txHash = '5f52529ab5d4ebb711a879ba30435062b58d0dcee4c82a98d479a398ca72145a'
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
@@ -400,7 +410,7 @@ describe('transaction resolver helpers', () => {
         return new Response('not found', { status: 404 })
       }
       if (url === `https://blockstream.info/api/tx/${txHash}`) {
-        return jsonResponse({ txid: txHash })
+        return jsonResponse({ txid: txHash, vout: [] })
       }
       return new Response('not found', { status: 404 })
     })
@@ -519,5 +529,148 @@ describe('transaction resolver helpers', () => {
     expect(result.requiresManualAmount).toBe(true)
     expect(result.displayAmount).toBeUndefined()
     expect(result.warning).toContain('несколько переводов')
+  })
+
+  it('reports a TronScan API failure instead of saying a deposit is not found', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ code: 500, message: 'Explorer temporarily unavailable' }))
+    const result = await resolveTransaction({
+      txInput: `https://tronscan.org/#/transaction/${'1'.repeat(64)}`,
+      roomName: 'Nexa', operationType: 'Deposit',
+    })
+    expect(result.status).toBe('error')
+    expect(result.error).toContain('Explorer temporarily unavailable')
+  })
+
+  it('reports a Binplorer API failure instead of saying a deposit is not found', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ error: { code: 999, message: 'Internal Error' } }))
+    const result = await resolveTransaction({
+      txInput: `https://bscscan.com/tx/0x${'2'.repeat(64)}`,
+      roomName: 'Nexa', operationType: 'Deposit',
+    })
+    expect(result.status).toBe('error')
+    expect(result.error).toContain('Internal Error')
+  })
+
+  it('never fills a failed BSC transaction amount', async () => {
+    const wallet = '0x3ca9feab5bc29852f16b3a30ca4deb5117979fb7'
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      hash: `0x${'3'.repeat(64)}`, success: false,
+      operations: [{ type: 'transfer', to: wallet, value: '40000000000000000000', tokenInfo: { symbol: 'USDT', decimals: 18 } }],
+    }))
+    const result = await resolveTransaction({
+      txInput: `https://bscscan.com/tx/0x${'3'.repeat(64)}`,
+      roomName: 'Nexa', operationType: 'Deposit',
+      knownWallets: [{ address: wallet, roomName: 'Nexa' }],
+    })
+    expect(result.status).toBe('resolved')
+    expect(result.requiresManualAmount).toBe(true)
+    expect(result.amount).toBeUndefined()
+    expect(result.warning).toContain('неуспеш')
+  })
+
+  it('reads a successful Binplorer token operation sent to the selected room', async () => {
+    const hash = `0x${'7'.repeat(64)}`
+    const wallet = '0x3ca9feab5bc29852f16b3a30ca4deb5117979fb7'
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      hash, success: true, timestamp: Date.UTC(2026, 8, 20) / 1000,
+      operations: [{ type: 'transfer', to: wallet, from: '0x70af4652641f9c7d9ad18168894e87f8bad997b6', value: '40000000000000000000', tokenInfo: { symbol: 'USDT', decimals: 18 } }],
+    }))
+    const result = await resolveTransaction({
+      txInput: `https://bscscan.com/tx/${hash}`,
+      roomName: 'Nexa', operationType: 'Deposit',
+      knownWallets: [{ address: wallet, roomName: 'Nexa' }],
+    })
+    expect(result.status).toBe('resolved')
+    expect(result.amount).toBe('40')
+    expect(result.currency).toBe('USDT')
+    expect(result.transactionTimestamp).toBe(new Date(Date.UTC(2026, 8, 20)).toISOString())
+  })
+
+  it('reports Etherscan proxy errors instead of saying a deposit is not found', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'transactioner-api-keys-'))
+    const apiKeysPath = path.join(tempDir, 'api-keys.env')
+    writeFileSync(apiKeysPath, 'ETHERSCAN_API_KEY=test-key\n')
+    process.env.TRANSACTIONER_API_KEYS_PATH = apiKeysPath
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      status: '0', message: 'NOTOK', result: 'Max rate limit reached',
+    }))
+    try {
+      const result = await resolveTransaction({
+        txInput: `https://etherscan.io/tx/0x${'4'.repeat(64)}`,
+        roomName: 'Nexa', operationType: 'Deposit',
+      })
+      expect(result.status).toBe('error')
+      expect(result.error).toContain('Max rate limit reached')
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a missing Etherscan key as configuration error', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'transactioner-api-keys-'))
+    const apiKeysPath = path.join(tempDir, 'api-keys.env')
+    writeFileSync(apiKeysPath, '')
+    process.env.TRANSACTIONER_API_KEYS_PATH = apiKeysPath
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+    try {
+      const result = await resolveTransaction({
+        txInput: `https://etherscan.io/tx/0x${'9'.repeat(64)}`,
+        roomName: 'Nexa', operationType: 'Deposit',
+      })
+      expect(result.status).toBe('error')
+      expect(result.error).toContain('ETHERSCAN_API_KEY')
+      expect(fetchMock).not.toHaveBeenCalled()
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('never fills an amount for a failed Ethereum receipt', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'transactioner-api-keys-'))
+    const apiKeysPath = path.join(tempDir, 'api-keys.env')
+    writeFileSync(apiKeysPath, 'ETHERSCAN_API_KEY=test-key\n')
+    process.env.TRANSACTIONER_API_KEYS_PATH = apiKeysPath
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      result: { status: '0x0', logs: [] },
+    }))
+    try {
+      const result = await resolveTransaction({
+        txInput: `https://etherscan.io/tx/0x${'8'.repeat(64)}`,
+        roomName: 'Nexa', operationType: 'Deposit',
+      })
+      expect(result.status).toBe('resolved')
+      expect(result.requiresManualAmount).toBe(true)
+      expect(result.amount).toBeUndefined()
+      expect(result.warning).toContain('неуспешна')
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('reports a malformed Blockstream response instead of saying a deposit is not found', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({ error: 'Indexer unavailable' }))
+    const result = await resolveTransaction({
+      txInput: `https://blockstream.info/tx/${'5'.repeat(64)}`,
+      roomName: 'Nexa', operationType: 'Deposit',
+    })
+    expect(result.status).toBe('error')
+  })
+
+  it('does not fill an unconfirmed Bitcoin deposit amount', async () => {
+    const hash = '6'.repeat(64)
+    const wallet = 'bc1qwsv0zew92jkaxetvn2tvp5jrz3pyl5u2phx57t'
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+      txid: hash, status: { confirmed: false },
+      vout: [{ scriptpubkey_address: wallet, value: 100000000 }],
+    }))
+    const result = await resolveTransaction({
+      txInput: `https://blockstream.info/tx/${hash}`,
+      roomName: 'Champion Poker', operationType: 'Deposit',
+      knownWallets: [{ address: wallet, roomName: 'Champion Poker' }],
+    })
+    expect(result.status).toBe('resolved')
+    expect(result.requiresManualAmount).toBe(true)
+    expect(result.amount).toBeUndefined()
+    expect(result.warning).toContain('не подтверждена')
   })
 })

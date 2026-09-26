@@ -1,4 +1,4 @@
-import { loadApiKeys } from './transactionResolver'
+import { formatTokenAmount, loadApiKeys } from './transactionResolver'
 
 export interface SearchRakebackTransactionInput {
   amount: string
@@ -34,7 +34,12 @@ const parseAmountValue = (value: string) => {
 }
 const startOfDateInput = (value: string) => new Date(`${value}T00:00:00.000`).getTime()
 const endOfDateInput = (value: string) => new Date(`${value}T23:59:59.999`).getTime()
-const rawToAmount = (value: string, decimals: number) => Number(value) / (10 ** decimals)
+const timestampMilliseconds = (value: unknown) => {
+  const numeric = Number(value)
+  return Number.isFinite(numeric) && numeric > 0
+    ? (numeric < 1_000_000_000_000 ? numeric * 1000 : numeric)
+    : Number.NaN
+}
 const amountDistance = (actual: number, expected: number | null) => (
   expected === null ? 0 : Math.abs(actual - expected)
 )
@@ -90,14 +95,59 @@ const fetchJson = async <T>(url: string, init?: RequestInit): Promise<T> => {
 }
 
 const extractEvmRows = (data: { status?: string, message?: string, result?: unknown }) => {
-  if (Array.isArray(data.result)) return data.result as Array<Record<string, unknown>>
-  if (typeof data.result === 'string' && data.result.trim()) {
-    throw new Error(`Explorer API: ${data.result}`)
+  if (
+    data?.status === '0' && data.message === 'No transactions found' &&
+    (Array.isArray(data.result) && data.result.length === 0 || data.result === 'No transactions found')
+  ) return []
+  if (data?.status !== '1' || !Array.isArray(data.result)) {
+    const detail = typeof data?.result === 'string' && data.result.trim()
+      ? data.result : data?.message || 'неожиданный формат ответа'
+    throw new Error(`Etherscan API: ${detail}`)
   }
-  if (data.status === '0' && data.message && data.message !== 'No transactions found') {
-    throw new Error(`Explorer API: ${data.message}`)
+  return data.result as Array<Record<string, unknown>>
+}
+
+const extractTronRows = (response: {
+  code?: number
+  message?: string
+  data?: unknown
+  token_transfers?: unknown
+}) => {
+  if (!response || typeof response !== 'object') throw new Error('TronScan API вернул неожиданный формат переводов')
+  if (response.code !== undefined && response.code !== 200) {
+    throw new Error(`TronScan API: ${response.message || `code ${response.code}`}`)
   }
-  return []
+  if ('error' in response && response.error) throw new Error(`TronScan API: ${String(response.error)}`)
+  const rows = response.data ?? response.token_transfers
+  if (!Array.isArray(rows)) throw new Error('TronScan API вернул неожиданный формат переводов')
+  return rows as Array<Record<string, unknown>>
+}
+
+const extractBinplorerRows = (response: {
+  error?: { message?: string } | string
+  operations?: unknown
+}) => {
+  if (response?.error) {
+    const message = typeof response.error === 'string' ? response.error : response.error.message
+    throw new Error(`Binplorer API: ${message || 'ошибка провайдера'}`)
+  }
+  if (!Array.isArray(response?.operations)) throw new Error('Binplorer API вернул неожиданный формат переводов')
+  return response.operations as Array<Record<string, unknown>>
+}
+
+const requireTransferFields = (rows: Array<Record<string, unknown>>, fields: string[], provider: string) => {
+  if (rows.some(row => !row || typeof row !== 'object' || fields.some(field => row[field] === undefined || row[field] === null || row[field] === ''))) {
+    throw new Error(`${provider} API вернул неполные данные перевода`)
+  }
+  return rows
+}
+
+const tokenAmount = (raw: unknown, decimalsValue: unknown, provider: string) => {
+  const decimals = Number(decimalsValue)
+  if (!/^\d+$/.test(String(raw)) || !Number.isInteger(decimals) || decimals < 0 || decimals > 36) {
+    throw new Error(`${provider} API вернул некорректную сумму или точность токена`)
+  }
+  return formatTokenAmount(String(raw), decimals)
 }
 
 export const searchRakebackTransaction = async (
@@ -119,32 +169,65 @@ export const searchRakebackTransaction = async (
     const targetWallet = normalizeAddress(input.wallet)
     const startMs = startOfDateInput(input.periodFrom)
     const endMs = endOfDateInput(input.periodTo)
+    if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs < startMs) {
+      throw new Error('Некорректный период поиска')
+    }
 
     if (config.chain === 'tron') {
-      const url = new URL('https://apilist.tronscanapi.com/api/token_trc20/transfers-with-status')
-      url.searchParams.set('limit', '50')
-      url.searchParams.set('start', '0')
-      url.searchParams.set('trc20Id', config.contract)
-      url.searchParams.set('address', input.wallet.trim())
-      url.searchParams.set('direction', '2')
-      url.searchParams.set('reverse', 'true')
-      url.searchParams.set('start_timestamp', String(startMs))
-      url.searchParams.set('end_timestamp', String(endMs))
-      const data = await fetchJson<{ token_transfers?: Array<Record<string, unknown>> }>(url.toString(), {
-        headers: keys.TRONSCAN_API_KEY ? { 'TRON-PRO-API-KEY': keys.TRONSCAN_API_KEY } : undefined,
-      })
-      const candidates = (data.token_transfers || [])
-        .filter(item => normalizeAddress(String(item.to_address || '')) === targetWallet)
-        .filter(item => affiliateWallets.has(normalizeAddress(String(item.from_address || ''))))
-        .filter(item => item.confirmed !== false && String(item.finalResult || 'SUCCESS') === 'SUCCESS')
+      const allRows: Array<Record<string, unknown>> = []
+      let defaultDecimals: number | string = 6
+      const pageSize = 50
+      for (let page = 0; page < 20; page++) {
+        const url = new URL('https://apilist.tronscanapi.com/api/token_trc20/transfers-with-status')
+        url.searchParams.set('limit', String(pageSize))
+        url.searchParams.set('start', String(page * pageSize))
+        url.searchParams.set('trc20Id', config.contract)
+        url.searchParams.set('address', input.wallet.trim())
+        url.searchParams.set('direction', '2')
+        url.searchParams.set('reverse', 'true')
+        url.searchParams.set('start_timestamp', String(startMs))
+        url.searchParams.set('end_timestamp', String(endMs))
+        const data = await fetchJson<{
+          code?: number
+          message?: string
+          data?: unknown
+          token_transfers?: unknown
+          tokenInfo?: { tokenDecimal?: number | string }
+        }>(url.toString(), {
+          headers: keys.TRONSCAN_API_KEY ? { 'TRON-PRO-API-KEY': keys.TRONSCAN_API_KEY } : undefined,
+        })
+        const rows = extractTronRows(data)
+        defaultDecimals = data.tokenInfo?.tokenDecimal ?? defaultDecimals
+        allRows.push(...rows)
+        if (rows.length < pageSize) break
+        if (page === 19) throw new Error('TronScan вернул слишком много переводов: сузьте период поиска')
+      }
+      const normalizedRows = allRows.map(item => ({
+        ...item,
+        hash: item.hash ?? item.transaction_id,
+        from: item.from ?? item.from_address,
+        to: item.to ?? item.to_address,
+        amount: item.amount ?? item.quant,
+        block_timestamp: item.block_timestamp ?? item.block_ts ?? item.blockTimestamp ?? item.timestamp ?? item.transaction_timestamp,
+      }))
+      const candidates = requireTransferFields(normalizedRows, ['hash', 'from', 'to', 'amount', 'block_timestamp'], 'TronScan')
+        .filter(item => normalizeAddress(String(item.to)) === targetWallet)
+        .filter(item => affiliateWallets.has(normalizeAddress(String(item.from))))
+        .filter(item => item.confirmed !== false && item.confirmed !== 0 && item.confirmed !== '0')
+        .filter(item => String(item.final_result || item.finalResult || 'SUCCESS').toUpperCase() === 'SUCCESS')
+        .filter(item => {
+          const timestamp = timestampMilliseconds(item.block_timestamp)
+          return Number.isFinite(timestamp) && timestamp >= startMs && timestamp <= endMs
+        })
         .map((item) => {
-          const decimals = Number((item.tokenInfo as { tokenDecimal?: number } | undefined)?.tokenDecimal ?? 6)
-          const actualAmount = rawToAmount(String(item.quant || '0'), decimals)
-          const hash = String(item.transaction_id || '')
+          const decimals = item.decimals ?? (item.tokenInfo as { tokenDecimal?: number | string } | undefined)?.tokenDecimal ?? defaultDecimals
+          const amount = tokenAmount(item.amount, decimals, 'TronScan')
+          const actualAmount = Number(amount)
+          const hash = String(item.hash || item.transaction_id || '')
           return {
             hash,
-            amount: String(actualAmount),
-            from: String(item.from_address || ''),
+            amount,
+            from: String(item.from || item.from_address || ''),
             date: firstTransactionDate(item.block_ts, item.block_timestamp, item.blockTimestamp, item.timestamp, item.transaction_timestamp),
             explorerUrl: `${config.explorer}${hash}`,
             actualAmount,
@@ -157,36 +240,81 @@ export const searchRakebackTransaction = async (
         : { success: false, status: 'not_found', candidates: [] }
     }
 
+    if (config.chain === 'bsc') {
+      if (startMs < Date.now() - 30 * 24 * 60 * 60 * 1000) {
+        throw new Error('Бесплатный Binplorer показывает только последние 30 дней: более старый период нельзя проверить автоматически')
+      }
+      const url = new URL(`https://api.binplorer.com/getAddressHistory/${input.wallet.trim()}`)
+      url.searchParams.set('apiKey', 'freekey')
+      url.searchParams.set('limit', '100')
+      url.searchParams.set('token', config.contract)
+      const data = await fetchJson<{ error?: { message?: string } | string, operations?: unknown }>(url.toString())
+      const allRows = extractBinplorerRows(data)
+      if (allRows.length >= 100) throw new Error('Binplorer вернул только первые 100 переводов: сузьте период поиска')
+      const rows = requireTransferFields(
+        allRows.filter(item => item.type === 'transfer'),
+        ['transactionHash', 'timestamp', 'from', 'to', 'value', 'tokenInfo'],
+        'Binplorer'
+      )
+      const candidates = rows
+        .filter(item => normalizeAddress(String((item.tokenInfo as { address?: string }).address || '')) === normalizeAddress(config.contract))
+        .filter(item => normalizeAddress(String(item.to)) === targetWallet)
+        .filter(item => affiliateWallets.has(normalizeAddress(String(item.from))))
+        .filter(item => {
+          const timestamp = timestampMilliseconds(item.timestamp)
+          return timestamp >= startMs && timestamp <= endMs
+        })
+        .map(item => {
+          const amount = tokenAmount(item.value, (item.tokenInfo as { decimals?: string | number }).decimals, 'Binplorer')
+          const hash = String(item.transactionHash)
+          return {
+            hash, amount, from: String(item.from), date: formatTransactionDate(item.timestamp),
+            explorerUrl: `${config.explorer}${hash}`, actualAmount: Number(amount),
+          }
+        })
+        .sort((left, right) => amountDistance(left.actualAmount, expectedAmount) - amountDistance(right.actualAmount))
+      return candidates.length
+        ? { success: true, status: 'found', candidates }
+        : { success: false, status: 'not_found', candidates: [] }
+    }
+
     if (!keys.ETHERSCAN_API_KEY) {
       return { success: false, status: 'not_configured', error: 'Не найден ETHERSCAN_API_KEY в общих ключах приложения.' }
     }
 
-    const url = new URL('https://api.etherscan.io/v2/api')
-    url.searchParams.set('chainid', config.chainId || '1')
-    url.searchParams.set('module', 'account')
-    url.searchParams.set('action', 'tokentx')
-    url.searchParams.set('contractaddress', config.contract)
-    url.searchParams.set('address', input.wallet.trim())
-    url.searchParams.set('page', '1')
-    url.searchParams.set('offset', '100')
-    url.searchParams.set('sort', 'desc')
-    url.searchParams.set('apikey', keys.ETHERSCAN_API_KEY)
-    const data = await fetchJson<{ status?: string, message?: string, result?: unknown }>(url.toString())
-    const rows = extractEvmRows(data)
-    const candidates = rows
+    const rows: Array<Record<string, unknown>> = []
+    const pageSize = 100
+    for (let page = 1; page <= 20; page++) {
+      const url = new URL('https://api.etherscan.io/v2/api')
+      url.searchParams.set('chainid', config.chainId || '1')
+      url.searchParams.set('module', 'account')
+      url.searchParams.set('action', 'tokentx')
+      url.searchParams.set('contractaddress', config.contract)
+      url.searchParams.set('address', input.wallet.trim())
+      url.searchParams.set('page', String(page))
+      url.searchParams.set('offset', String(pageSize))
+      url.searchParams.set('sort', 'desc')
+      url.searchParams.set('apikey', keys.ETHERSCAN_API_KEY)
+      const data = await fetchJson<{ status?: string, message?: string, result?: unknown }>(url.toString())
+      const pageRows = extractEvmRows(data)
+      rows.push(...pageRows)
+      if (pageRows.length < pageSize) break
+      if (page === 20) throw new Error('Etherscan вернул слишком много переводов: сузьте период поиска')
+    }
+    const candidates = requireTransferFields(rows, ['hash', 'from', 'to', 'value', 'tokenDecimal', 'timeStamp'], 'Etherscan')
       .filter(item => normalizeAddress(String(item.to || '')) === targetWallet)
       .filter(item => affiliateWallets.has(normalizeAddress(String(item.from || ''))))
       .filter((item) => {
-        const ts = Number(item.timeStamp) * 1000
+        const ts = timestampMilliseconds(item.timeStamp)
         return ts >= startMs && ts <= endMs
       })
       .map((item) => {
-        const decimals = Number(item.tokenDecimal || 18)
-        const actualAmount = rawToAmount(String(item.value || '0'), decimals)
+        const amount = tokenAmount(item.value, item.tokenDecimal, 'Etherscan')
+        const actualAmount = Number(amount)
         const hash = String(item.hash || '')
         return {
           hash,
-          amount: String(actualAmount),
+          amount,
           from: String(item.from || ''),
           date: formatTransactionDate(item.timeStamp),
           explorerUrl: `${config.explorer}${hash}`,
