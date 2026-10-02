@@ -281,6 +281,16 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     deal: dealRuleIndex.get('tonpoker')!
   },
   {
+    canonicalRoomName: 'CoinPoker',
+    aliases: ['CoinPoker', 'Coin Poker'],
+    templateKeys: ['default'],
+    defaultTemplateKey: 'default',
+    requiredFields: ['roomId', 'email', 'messengerUsername'],
+    sheet2RoomUsernameField: 'roomId',
+    persistPlayerInMainDb: false,
+    deal: dealRuleIndex.get('coinpoker')!
+  },
+  {
     canonicalRoomName: 'PartyPoker',
     aliases: ['PartyPoker', 'Partypoker'],
     templateKeys: ['partypoker'],

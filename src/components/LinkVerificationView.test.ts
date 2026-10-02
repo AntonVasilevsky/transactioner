@@ -66,6 +66,22 @@ describe('LinkVerificationView helpers', () => {
     expect(result).toBe('hero-nick / 1483304 / hero@example.com')
   })
 
+  it('puts CoinPoker id and email on one request line', () => {
+    const rule = resolveLinkVerificationRoomRule('CoinPoker')
+    const playerData = composePlayerDataByRule(
+      rule.requiredFields,
+      buildLinkVerificationFieldValues({ username: '', roomId: 'Crack4', email: 'crack4@example.com' })
+    )
+    const text = buildLinkVerificationRequestText(LINK_VERIFICATION_TEMPLATES.default.body, {
+      room_name: 'CoinPoker',
+      player_data: playerData,
+      messenger: 'WA',
+      messenger_username: '+591 71160533'
+    })
+
+    expect(text).toBe('Проверка привязки CoinPoker\nCrack4 / crack4@example.com\nWA: +591 71160533\n@kapitonov')
+  })
+
   it('builds request player data from only username, roomId, and email', () => {
     const fields = buildLinkVerificationFieldValues({
       username: 'hero-user',
