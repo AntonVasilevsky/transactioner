@@ -82,7 +82,9 @@ Paths here are PDK defaults; if `pdk.json` `paths` differ, use those.
 | L3 | logic with many edge cases, concurrency, migrations, security | strongest general, high |
 | L4 | architecture, audit, acceptance, cross-cutting review | strongest available, high |
 
-Write it as `"L2 — medium: spec in ADR-0003 is exact, tests decide done"`.
+Write it as `"L2 — medium: spec in ADR-0003 is exact, tests decide done"`. The level
+token `L1`..`L4` must appear verbatim: the Pi adapter's `pdk/auto` model reads it
+to pick the model for the task (docs/PI.md, "Routing").
 In Acceptance, say why that level is enough and when stronger verification is
 needed: a cheaper level is never assumed to be as good — below L3 on anything
 risky, add "independent pdk-review at L3/L4" or tests that assert the behaviour.

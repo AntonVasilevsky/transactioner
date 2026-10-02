@@ -18,7 +18,7 @@ outside the markers or in `pdk/knowledge/rules.md`._
 PDK keeps this project's knowledge, decisions and tasks in Markdown under `pdk/`
 so work survives a change of session, machine, model or agent runtime.
 
-Mode: **assisted** (PDK 0.2.0). `auto`: proceed and report. `assisted`: agree
+Mode: **assisted** (PDK 0.4.0). `auto`: proceed and report. `assisted`: agree
 significant transitions (stack, architecture, task scope) with the human before
 acting; reversible steps need no approval. `manual`: propose, and act only when asked.
 
