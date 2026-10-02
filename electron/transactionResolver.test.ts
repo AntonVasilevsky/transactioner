@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { fetchEtherscanJson } from './etherscanClient'
 import { displayCryptoAmount, formatTokenAmount, parseTransactionInput, resolveTransaction } from './transactionResolver'
 
 const jsonResponse = (data: unknown) => new Response(JSON.stringify(data), {
@@ -179,6 +180,91 @@ describe('transaction resolver helpers', () => {
     } finally {
       rmSync(tempDir, { recursive: true, force: true })
     }
+  })
+
+  it('resolves a batch deposit without exceeding three Etherscan requests per second', async () => {
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'transactioner-api-keys-'))
+    const apiKeysPath = path.join(tempDir, 'api-keys.env')
+    writeFileSync(apiKeysPath, 'ETHERSCAN_API_KEY=test-key\n')
+    process.env.TRANSACTIONER_API_KEYS_PATH = apiKeysPath
+
+    const txHash = '0x28eee899fee665731ec4aa4d92248549c3d867ff883e321439989981a009ee12'
+    const championWallet = '0x563715a0773d8bc54f0014d19bfb586f353a80f6'
+    const otherWallet = '0xf530cfc0c2173aa938683ab11c87b7b9ce9a8eae'
+    const sender = '0xa9d1e08c7793af67e9d92fe308d5697fb81d3e43'
+    const blockTimestamp = Math.floor(Date.UTC(2026, 9, 1, 16, 3, 11) / 1000)
+    const requestTimes: number[] = []
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (input) => {
+      const url = new URL(String(input))
+      if (url.hostname === 'api.frankfurter.dev') {
+        return jsonResponse({ date: '2026-10-01', rates: { EUR: 0.88511 } })
+      }
+
+      const now = Date.now()
+      requestTimes.push(now)
+      if (requestTimes.filter(time => now - time < 1000).length > 3) {
+        return new Response('Max rate limit reached', { status: 429 })
+      }
+
+      const action = url.searchParams.get('action')
+      if (action === 'eth_getTransactionReceipt') {
+        return jsonResponse({
+          result: {
+            status: '0x1',
+            logs: [
+              {
+                address: '0xdac17f958d2ee523a2206206994597c13d831ec7',
+                data: `0x${BigInt(1000000).toString(16).padStart(64, '0')}`,
+                topics: [transferTopic, addressTopic(sender), addressTopic(otherWallet)],
+              },
+              {
+                address: '0xdac17f958d2ee523a2206206994597c13d831ec7',
+                data: `0x${BigInt(110048421).toString(16).padStart(64, '0')}`,
+                topics: [transferTopic, addressTopic(sender), addressTopic(championWallet)],
+              },
+            ],
+          },
+        })
+      }
+      if (action === 'eth_getTransactionByHash') {
+        return jsonResponse({ result: { value: '0x0', blockNumber: '0x18e3b68' } })
+      }
+      if (action === 'eth_getBlockByNumber') {
+        return jsonResponse({ result: { timestamp: `0x${blockTimestamp.toString(16)}` } })
+      }
+      if (action === 'eth_call' && url.searchParams.get('data') === '0x313ce567') {
+        return jsonResponse({ result: '0x6' })
+      }
+      return jsonResponse({ result: null })
+    })
+
+    try {
+      const result = await resolveTransaction({
+        txInput: txHash,
+        roomName: 'Champion Poker',
+        operationType: 'Deposit',
+        knownWallets: [{ address: championWallet, roomName: 'Champion Poker', roomKey: 'champion-poker' }],
+      })
+
+      expect(result.status).toBe('resolved')
+      expect(result.amount).toBe('110.048421')
+      expect(result.convertedDisplayAmount).toBe('€97.40')
+      expect(requestTimes).toHaveLength(4)
+      expect(requestTimes[3] - requestTimes[0]).toBeGreaterThanOrEqual(1000)
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true })
+    }
+  })
+
+  it('retries a temporary Etherscan rate-limit response', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(async () => jsonResponse({ status: '0', message: 'NOTOK', result: 'Max rate limit reached' }))
+      .mockImplementationOnce(async () => jsonResponse({ result: { status: '0x1' } }))
+
+    const result = await fetchEtherscanJson<{ result: { status: string } }>('https://api.etherscan.io/v2/api')
+
+    expect(result.result.status).toBe('0x1')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 
   it('falls back to known Ethereum stablecoin decimals when decimals call is empty', async () => {
@@ -591,7 +677,7 @@ describe('transaction resolver helpers', () => {
     const apiKeysPath = path.join(tempDir, 'api-keys.env')
     writeFileSync(apiKeysPath, 'ETHERSCAN_API_KEY=test-key\n')
     process.env.TRANSACTIONER_API_KEYS_PATH = apiKeysPath
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({
       status: '0', message: 'NOTOK', result: 'Max rate limit reached',
     }))
     try {

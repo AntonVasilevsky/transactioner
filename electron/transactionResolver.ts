@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import path from 'node:path'
 import { convertUsdToEur, formatMoneyAmount } from './currency'
+import { fetchEtherscanJson } from './etherscanClient'
 
 export type TransactionNetwork = 'ethereum' | 'bsc' | 'tron' | 'bitcoin'
 
@@ -649,7 +650,7 @@ const fetchEtherscanProxy = async (params: Record<string, string>, apiKey: strin
     ...params,
     apikey: apiKey,
   })
-  const response = await fetchJson<EtherscanProxyResponse>(`https://api.etherscan.io/v2/api?${search.toString()}`)
+  const response = await fetchEtherscanJson<EtherscanProxyResponse>(`https://api.etherscan.io/v2/api?${search.toString()}`)
   if (response?.status === '0') {
     const detail = typeof response.result === 'string' ? response.result : response.message
     throw new Error(`Etherscan API: ${detail || 'ошибка провайдера'}`)

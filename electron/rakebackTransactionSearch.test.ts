@@ -17,6 +17,17 @@ const withApiKeys = () => {
   return tempDir
 }
 
+const localDateInput = (date: Date) => [
+  date.getFullYear(),
+  String(date.getMonth() + 1).padStart(2, '0'),
+  String(date.getDate()).padStart(2, '0'),
+].join('-')
+
+const recentPeriod = () => ({
+  periodFrom: localDateInput(new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)),
+  periodTo: localDateInput(new Date()),
+})
+
 afterEach(() => {
   vi.restoreAllMocks()
   delete process.env.TRANSACTIONER_API_KEYS_PATH
@@ -197,7 +208,7 @@ describe('rakeback transaction search', () => {
   it('reports explorer API errors instead of pretending that no transaction exists', async () => {
     const tempDir = withApiKeys()
 
-    vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => jsonResponse({
       status: '0',
       message: 'NOTOK',
       result: 'Max rate limit reached',
@@ -228,7 +239,7 @@ describe('rakeback transaction search', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(jsonResponse({
       operations: [{
         transactionHash: hash,
-        timestamp: Date.UTC(2026, 8, 12) / 1000,
+        timestamp: Math.floor(Date.now() / 1000),
         from: affiliate,
         to: wallet,
         value: '12500000000000000000',
@@ -239,7 +250,7 @@ describe('rakeback transaction search', () => {
 
     const result = await searchRakebackTransaction({
       amount: '', network: 'USDT BEP20', wallet,
-      periodFrom: '2026-09-01', periodTo: '2026-09-30',
+      ...recentPeriod(),
       affiliateWallets: affiliate,
     })
 
@@ -296,7 +307,7 @@ describe('rakeback transaction search', () => {
     const result = await searchRakebackTransaction({
       amount: '', network: 'USDT BEP20',
       wallet: '0x050ddc980ce87f3df35bdfa6b21635b3b5298883',
-      periodFrom: '2026-09-01', periodTo: '2026-09-30',
+      ...recentPeriod(),
       affiliateWallets: '0x70af4652641f9c7d9ad18168894e87f8bad997b6',
     })
     expect(result.status).toBe('error')

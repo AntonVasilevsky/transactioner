@@ -1,4 +1,5 @@
 import { formatTokenAmount, loadApiKeys } from './transactionResolver'
+import { fetchEtherscanJson } from './etherscanClient'
 
 export interface SearchRakebackTransactionInput {
   amount: string
@@ -295,7 +296,7 @@ export const searchRakebackTransaction = async (
       url.searchParams.set('offset', String(pageSize))
       url.searchParams.set('sort', 'desc')
       url.searchParams.set('apikey', keys.ETHERSCAN_API_KEY)
-      const data = await fetchJson<{ status?: string, message?: string, result?: unknown }>(url.toString())
+      const data = await fetchEtherscanJson<{ status?: string, message?: string, result?: unknown }>(url.toString())
       const pageRows = extractEvmRows(data)
       rows.push(...pageRows)
       if (pageRows.length < pageSize) break
