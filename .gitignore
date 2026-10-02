@@ -37,3 +37,4 @@ build/private/*
 .pdk/local.json
 pdk/.obsidian/
 graphify-out/
+WPD_ROOM_REFERENCE_EXPORT*.json
