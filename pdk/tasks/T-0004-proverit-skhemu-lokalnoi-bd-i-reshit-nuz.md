@@ -11,7 +11,7 @@ scope: [database, architecture, data-model]
 links: [pdk/knowledge/requirements.md, pdk/knowledge/architecture.md, docs/project_specification.md, docs/room_knowledge_plan.md, docs/link_verification_mvp_notes.md, electron/database.ts, electron/database.test.ts, electron/roomKnowledgeSeed.ts, pdk/knowledge/notes/T-0004-schema-audit.md, pdk/knowledge/decisions/ADR-0001-room-key-immutable.md, pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md]
 sessions: []
 commits: []
-revision: 6
+revision: 7
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -32,11 +32,11 @@ updated: 2026-10-02
 
 ## Checkpoint
 
-ADR-0003 принят владельцем 2026-10-02 (кошельки принадлежат руму и типу сделки, метод — только описание) → current, привязан к T-0003. ADR-0001 отклонён/отложен до перехода на Notion; «оставить как есть» относилось только к переименованию румов. ADR-0002 (одноразовые миграции: удалённые методы возвращаются после перезапуска) — draft, ждёт явного да/нет владельца. Аудит: notes/T-0004-schema-audit.md. Production-код и БД не менялись.
+Владелец уточнил требование: удалённые кошельки рума не должны появляться заново. Проверено на временной БД: адрес из room_wallets не возвращается; возвращается депозитный метод на ту же монету+сеть (seed при каждом старте; migrateWalletsToPaymentMethods при каждом старте), а редактор румов строит список кошельков по депозитным методам — отсюда «кошелёк появился снова». Создана T-0011 (proposed, L3) под это требование; реализует ADR-0002 (draft) в модели ADR-0003 (current). ADR-0001 отложен до Notion. Код и БД не менялись.
 
 ## Next step
 
-Получить решение владельца по ADR-0002; при «да» создать задачу реализации (L3) и закрыть T-0004; при «нет» архивировать ADR-0002 и закрыть T-0004. Далее — T-0003.
+Владелец: принять ADR-0002 и активировать T-0011 → закрыть T-0004 (done) и выполнять T-0011 через pdk-deliver.
 
 ## Blockers
 
@@ -50,3 +50,4 @@ ADR-0003 принят владельцем 2026-10-02 (кошельки прин
 - 2026-10-02 checkpoint: Аудит схемы готов: pdk/knowledge/notes/T-0004-schema-audit.md (ER-карта, 8 зон риска, сверка с requirements; риски 1 ...
 - 2026-10-02 checkpoint: Решение владельца 2026-10-02: схему оставляем как есть, глобальная переделка модели данных — при переходе источника и...
 - 2026-10-02 checkpoint: ADR-0003 принят владельцем 2026-10-02 (кошельки принадлежат руму и типу сделки, метод — только описание) → current, п...
+- 2026-10-02 checkpoint: Владелец уточнил требование: удалённые кошельки рума не должны появляться заново. Проверено на временной БД: адрес из...
