@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAllPlayers: () => ipcRenderer.invoke('get-all-players'),
   getRoomRegistrationStats: () => ipcRenderer.invoke('get-room-registration-stats'),
   getPlayerById: (id: number) => ipcRenderer.invoke('get-player-by-id', id),
+  markPlayerUsed: (id: number) => ipcRenderer.invoke('mark-player-used', id),
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   getStorageInfo: () => ipcRenderer.invoke('get-storage-info'),
   getRoomKnowledgeIndex: () => ipcRenderer.invoke('get-room-knowledge-index'),

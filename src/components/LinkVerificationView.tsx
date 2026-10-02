@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { CheckCircle2, Copy, Link2, Search } from 'lucide-react'
+import { CheckCircle2, Copy, Link2 } from 'lucide-react'
 import {
   LINK_VERIFICATION_ROOM_SUGGESTIONS,
   LINK_VERIFICATION_TEMPLATES,
@@ -24,6 +24,11 @@ import {
 } from '../utils/linkVerificationFormatting'
 import { matchesRoomSearch } from '../utils/roomSearch'
 import { getWalletAddressValidationError } from '../utils/walletValidation'
+import { sortRoomProfilesByUsage } from '../utils/roomUsageSort'
+import ComboboxField from './fields/ComboboxField'
+import SelectField from './fields/SelectField'
+import type { FieldOption } from './fields/DropdownPanel'
+import { matchesRoomOption, roomProfileOptions, toFieldOptions } from './fields/fieldOptions'
 
 const formatDate = (date: Date) => {
   const day = String(date.getDate()).padStart(2, '0')
@@ -39,22 +44,8 @@ const linkVerificationLanguageOptions = ['RU', 'ENG', 'ES'] as const
 type LinkVerificationLanguage = typeof linkVerificationLanguageOptions[number]
 type LinkVerificationMode = 'check' | 'response'
 const responseLanguageOptions: RoomLanguage[] = ['RU', 'EN', 'ES']
-const responseRoomPinnedOrder = ['nexa', 'champion-poker', 'redstar', 'shenpoker']
 const initialRoomName = 'Nexa'
 const initialRule = resolveLinkVerificationRoomRule(initialRoomName)
-
-const sortResponseRoomProfiles = (profiles: RoomProfileInfo[]) => [...profiles].sort((left, right) => {
-  const leftPinned = responseRoomPinnedOrder.indexOf(left.room_key)
-  const rightPinned = responseRoomPinnedOrder.indexOf(right.room_key)
-  const leftRank = leftPinned === -1 ? Number.POSITIVE_INFINITY : leftPinned
-  const rightRank = rightPinned === -1 ? Number.POSITIVE_INFINITY : rightPinned
-
-  if (leftRank !== rightRank) return leftRank - rightRank
-  return left.display_name.localeCompare(right.display_name, undefined, { sensitivity: 'base' })
-})
-
-const roomProfileName = (profiles: RoomProfileInfo[], roomKey: string) =>
-  profiles.find((profile) => profile.room_key === roomKey)?.display_name || roomKey
 
 const findDealDefaultForScope = (
   defaults: LinkVerificationDealDefaultsInfo[],
@@ -98,14 +89,10 @@ const initialManager = () => {
 export default function LinkVerificationView() {
   const [mode, setMode] = useState<LinkVerificationMode>('check')
   const [roomName, setRoomName] = useState(initialRoomName)
-  const [roomQuery, setRoomQuery] = useState(initialRoomName)
-  const [isRoomPickerOpen, setIsRoomPickerOpen] = useState(false)
   const [templateKey, setTemplateKey] = useState(initialRule.defaultTemplateKey)
   const [date, setDate] = useState(today())
   const [manager, setManager] = useState(initialManager)
   const [selectedMessenger, setSelectedMessenger] = useState('')
-  const [messengerQuery, setMessengerQuery] = useState('')
-  const [isMessengerPickerOpen, setIsMessengerPickerOpen] = useState(false)
   const [messengerUsername, setMessengerUsername] = useState('')
   const [username, setUsername] = useState('')
   const [roomId, setRoomId] = useState('')
@@ -119,8 +106,6 @@ export default function LinkVerificationView() {
   const [updateChat, setUpdateChat] = useState(false)
   const [sheet2Kind, setSheet2Kind] = useState<'Новый' | 'Старый'>('Новый')
   const [source, setSource] = useState('')
-  const [sourceQuery, setSourceQuery] = useState('')
-  const [isSourcePickerOpen, setIsSourcePickerOpen] = useState(false)
   const [language, setLanguage] = useState<LinkVerificationLanguage>('RU')
   const [country, setCountry] = useState('')
   const [nameNick, setNameNick] = useState('')
@@ -140,16 +125,12 @@ export default function LinkVerificationView() {
   const [dealDefaultsSaveState, setDealDefaultsSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [savedTemplates, setSavedTemplates] = useState<LinkVerificationTemplateInfo[]>([])
   const [responseRoomKey, setResponseRoomKey] = useState('')
-  const [responseRoomQuery, setResponseRoomQuery] = useState('')
-  const [isResponseRoomPickerOpen, setIsResponseRoomPickerOpen] = useState(false)
   const [responseDealType, setResponseDealType] = useState<RoomDealType>('General')
   const [responseLanguage, setResponseLanguage] = useState<RoomLanguage>('EN')
   const [responseTemplates, setResponseTemplates] = useState<LinkVerificationResponseTemplateInfo[]>([])
   const [isResponseTemplatesLoading, setIsResponseTemplatesLoading] = useState(false)
   const [copiedKey, setCopiedKey] = useState('')
   const walletInputRef = useRef<HTMLInputElement | null>(null)
-  const messengerInputWasFocusedOnMouseDown = useRef(false)
-  const sourceInputWasFocusedOnMouseDown = useRef(false)
   const sourceWasSelectedManually = useRef(false)
   const dealFieldsWereEditedManually = useRef(false)
   const dealDefaultsRef = useRef<LinkVerificationDealDefaultsInfo[]>([])
@@ -173,7 +154,7 @@ export default function LinkVerificationView() {
         if (!active) return
         const profiles = index?.profiles || []
         const dealOptions = index?.dealOptions || []
-        const responseProfiles = sortResponseRoomProfiles(profiles)
+        const responseProfiles = sortRoomProfilesByUsage(profiles, stats || [])
         const preferredResponseProfile = responseProfiles.find((profile) => matchesRoomSearch([
           profile.display_name,
           profile.room_key,
@@ -184,7 +165,6 @@ export default function LinkVerificationView() {
         setRoomDealOptions(dealOptions)
         setDealDefaults(defaults || [])
         setResponseRoomKey((current) => current || preferredResponseProfile?.room_key || '')
-        setResponseRoomQuery((current) => current || preferredResponseProfile?.display_name || '')
         setResponseDealType((current) => current === 'General'
           ? preferredResponseDealType(dealOptions, preferredResponseProfile?.room_key || '')
           : current
@@ -312,40 +292,17 @@ export default function LinkVerificationView() {
     }
   }, [activeResponseDealType, mode, responseLanguage, responseRoomKey])
 
-  const filteredMessengerOptions = useMemo(() => {
-    const rawQuery = messengerQuery.trim()
-    const query = rawQuery && rawQuery !== selectedMessenger
-      ? rawQuery.toLowerCase()
-      : ''
-    if (!query) return messengerOptions
-    return messengerOptions.filter((option) => option.toLowerCase().includes(query))
-  }, [messengerQuery, selectedMessenger])
-
   const selectMessenger = (value: string) => {
     const normalizedValue = normalizeMessengerLabel(value)
     setSelectedMessenger(value)
-    setMessengerQuery(value)
     if (!sourceWasSelectedManually.current) {
       setSource(normalizedValue)
-      setSourceQuery(normalizedValue)
     }
-    setIsMessengerPickerOpen(false)
   }
-
-  const filteredSourceOptions = useMemo(() => {
-    const rawQuery = sourceQuery.trim()
-    const query = rawQuery && rawQuery !== source
-      ? rawQuery.toLowerCase()
-      : ''
-    if (!query) return messengerOptions
-    return messengerOptions.filter((option) => option.toLowerCase().includes(query))
-  }, [source, sourceQuery])
 
   const selectSource = (value: string) => {
     sourceWasSelectedManually.current = true
     setSource(value)
-    setSourceQuery(value)
-    setIsSourcePickerOpen(false)
   }
 
   const fieldValues = useMemo(
@@ -482,48 +439,25 @@ export default function LinkVerificationView() {
     return sortLinkVerificationRoomOptions(Array.from(names), roomRegistrationStats)
   }, [roomProfiles, roomRegistrationStats])
 
-  const filteredRoomOptions = useMemo(() => {
-    const rawQuery = roomQuery.trim()
-    const query = rawQuery && rawQuery !== roomName
-      ? rawQuery.toLowerCase()
-      : ''
-    if (!query) return roomOptions
-    return roomOptions.filter((name) => matchesRoomSearch([name], query))
-  }, [roomName, roomOptions, roomQuery])
+  const roomFieldOptions = useMemo(() => toFieldOptions(roomOptions), [roomOptions])
 
-  const responseRoomProfiles = useMemo(
-    () => sortResponseRoomProfiles(roomProfiles.filter((profile) => profile.is_active)),
-    [roomProfiles]
+  const responseRoomOptions = useMemo(
+    () => roomProfileOptions(sortRoomProfilesByUsage(roomProfiles.filter((profile) => profile.is_active), roomRegistrationStats)),
+    [roomProfiles, roomRegistrationStats]
   )
-  const selectedResponseRoomName = roomProfileName(responseRoomProfiles, responseRoomKey)
-  const filteredResponseRoomProfiles = useMemo(() => {
-    const rawQuery = responseRoomQuery.trim()
-    const query = rawQuery && rawQuery !== selectedResponseRoomName
-      ? rawQuery.toLowerCase()
-      : ''
-    if (!query) return responseRoomProfiles
-    return responseRoomProfiles.filter((profile) => matchesRoomSearch([
-      profile.display_name,
-      profile.room_key,
-      profile.network_name,
-    ], query))
-  }, [responseRoomProfiles, responseRoomQuery, selectedResponseRoomName])
 
   const selectRoom = (name: string, preserveData = false) => {
     const nextRule = resolveLinkVerificationRoomRule(name)
     const nextIdentity = resolveIdentityFieldsForRoomChange({ username, roomId, email }, nextRule, preserveData)
     setRoomName(name)
-    setRoomQuery(name)
     setUsername(nextIdentity.username)
     setRoomId(nextIdentity.roomId)
     setEmail(nextIdentity.email)
     if (!preserveData) {
       setSelectedMessenger('')
-      setMessengerQuery('')
       setMessengerUsername('')
       if (!sourceWasSelectedManually.current) {
         setSource('')
-        setSourceQuery('')
       }
       setIsSheet2NickManual(false)
       setSheet2NickManual('')
@@ -537,14 +471,11 @@ export default function LinkVerificationView() {
     setDealDefaultsSaveState('idle')
     setDealText(savedDefault?.deal_text ?? nextRule.deal.dealText ?? '')
     setDealSchema(savedDefault?.directus_deal_schema ?? nextRule.deal.directusDealSchema ?? '')
-    setIsRoomPickerOpen(false)
   }
 
-  const selectResponseRoom = (profile: RoomProfileInfo) => {
-    setResponseRoomKey(profile.room_key)
-    setResponseRoomQuery(profile.display_name)
-    setResponseDealType(preferredResponseDealType(roomDealOptions, profile.room_key))
-    setIsResponseRoomPickerOpen(false)
+  const selectResponseRoom = (roomKey: string) => {
+    setResponseRoomKey(roomKey)
+    setResponseDealType(preferredResponseDealType(roomDealOptions, roomKey))
   }
 
   const copy = async (key: string, value: string, htmlValue?: string) => {
@@ -589,82 +520,29 @@ export default function LinkVerificationView() {
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="relative text-sm text-slate-400">
+            <div className="text-sm text-slate-400">
               <label className="mb-1 block">Рум</label>
-              <div className="relative">
-                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  type="text"
-                  value={roomQuery}
-                  onChange={(event) => {
-                    setRoomQuery(event.target.value)
-                    setIsRoomPickerOpen(true)
-                  }}
-                  onFocus={(event) => {
-                    event.target.select()
-                    setIsRoomPickerOpen(true)
-                  }}
-                  onClick={(event) => {
-                    event.currentTarget.select()
-                    setIsRoomPickerOpen(true)
-                  }}
-                  onBlur={() => {
-                    window.setTimeout(() => {
-                      setIsRoomPickerOpen(false)
-                      setRoomQuery(roomName)
-                    }, 120)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && filteredRoomOptions[0]) {
-                      event.preventDefault()
-                      selectRoom(filteredRoomOptions[0], event.shiftKey)
-                    }
-                    if (event.key === 'Escape') {
-                      setIsRoomPickerOpen(false)
-                      setRoomQuery(roomName)
-                    }
-                  }}
-                  placeholder="Найти рум"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-9 pr-3 text-slate-100 outline-none focus:border-blue-500"
-                />
-              </div>
-              {isRoomPickerOpen && (
-                <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
-                  {filteredRoomOptions.length ? (
-                    filteredRoomOptions.map((name) => (
-                      <button
-                        key={name}
-                        type="button"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={(event) => selectRoom(name, event.shiftKey)}
-                        className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
-                          name === roomName
-                            ? 'bg-blue-600/20 text-blue-200'
-                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                        }`}
-                      >
-                        {name}
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-3 py-4 text-sm text-slate-500">Румы не найдены</div>
-                  )}
-                </div>
-              )}
+              <ComboboxField
+                value={roomName}
+                options={roomFieldOptions}
+                onSelect={(name, event) => selectRoom(name, event.shiftKey)}
+                matches={matchesRoomOption}
+                placeholder="Найти рум"
+                emptyText="Румы не найдены"
+              />
             </div>
 
-            <label className="text-sm text-slate-400">
+            <div className="text-sm text-slate-400">
               Шаблон
-              <select
+              <SelectField
                 value={selectedTemplate.key}
-                onChange={(event) => setTemplateKey(event.target.value)}
-                className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500"
-              >
-                {templateOptions.map((template) => (
-                  <option key={template.key} value={template.key}>{template.label}</option>
-                ))}
-              </select>
-            </label>
+                options={templateOptions.map((template) => ({ value: template.key, label: template.label }))}
+                onChange={setTemplateKey}
+                className="mt-1"
+                buttonClassName="rounded-lg p-3 focus:border-blue-500"
+                ariaLabel="Шаблон"
+              />
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -683,73 +561,15 @@ export default function LinkVerificationView() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <div className="relative text-sm text-slate-400">
+            <div className="text-sm text-slate-400">
               <label className="mb-1 block">Мессенджер</label>
-              <div className="relative">
-                <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  type="text"
-                  value={messengerQuery}
-                  onChange={(event) => {
-                    setMessengerQuery(event.target.value)
-                    setIsMessengerPickerOpen(true)
-                  }}
-                  onFocus={(event) => {
-                    event.target.select()
-                    setIsMessengerPickerOpen(true)
-                  }}
-                  onMouseDown={(event) => {
-                    messengerInputWasFocusedOnMouseDown.current = document.activeElement === event.currentTarget
-                  }}
-                  onClick={(event) => {
-                    event.currentTarget.select()
-                    setIsMessengerPickerOpen((isOpen) => (
-                      messengerInputWasFocusedOnMouseDown.current ? !isOpen : true
-                    ))
-                  }}
-                  onBlur={() => {
-                    window.setTimeout(() => {
-                      setIsMessengerPickerOpen(false)
-                      setMessengerQuery(selectedMessenger)
-                    }, 120)
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && filteredMessengerOptions[0]) {
-                      event.preventDefault()
-                      selectMessenger(filteredMessengerOptions[0])
-                    }
-                    if (event.key === 'Escape') {
-                      setIsMessengerPickerOpen(false)
-                      setMessengerQuery(selectedMessenger)
-                    }
-                  }}
-                  placeholder="Выбрать мессенджер"
-                  className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-9 pr-3 text-slate-100 outline-none focus:border-blue-500"
-                />
-              </div>
-              {isMessengerPickerOpen && (
-                <div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
-                  {filteredMessengerOptions.length ? (
-                    filteredMessengerOptions.map((option) => (
-                      <button
-                        key={option}
-                        type="button"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => selectMessenger(option)}
-                        className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
-                          option === selectedMessenger
-                            ? 'bg-blue-600/20 text-blue-200'
-                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                        }`}
-                      >
-                        {option}
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-3 py-4 text-sm text-slate-500">Мессенджеры не найдены</div>
-                  )}
-                </div>
-              )}
+              <ComboboxField
+                value={selectedMessenger}
+                options={toFieldOptions(messengerOptions)}
+                onSelect={selectMessenger}
+                placeholder="Выбрать мессенджер"
+                emptyText="Мессенджеры не найдены"
+              />
             </div>
             <label className="text-sm text-slate-400">
               Контакт
@@ -787,14 +607,17 @@ export default function LinkVerificationView() {
                 Менеджер
                 <input value={manager} onChange={(event) => setManager(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
               </label>
-              <label className="text-sm text-slate-400">
+              <div className="text-sm text-slate-400">
                 Статус
-                <select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
-                  {statusOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
+                <SelectField
+                  value={status}
+                  options={toFieldOptions(statusOptions)}
+                  onChange={setStatus}
+                  className="mt-1"
+                  buttonClassName="rounded-lg p-3 focus:border-blue-500"
+                  ariaLabel="Статус"
+                />
+              </div>
               <label className="text-sm text-slate-400">
                 Передано игроку
                 <input value={deliveredToPlayer} onChange={(event) => setDeliveredToPlayer(event.target.value)} placeholder="Да / Нет" className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
@@ -816,91 +639,40 @@ export default function LinkVerificationView() {
           <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
             <h3 className="font-semibold text-slate-200">Таблица 2</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <label className="text-sm text-slate-400">
+              <div className="text-sm text-slate-400">
                 Тип строки
-                <select value={sheet2Kind} onChange={(event) => setSheet2Kind(event.target.value as 'Новый' | 'Старый')} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
-                  <option value="Новый">Новый</option>
-                  <option value="Старый">Старый</option>
-                </select>
-              </label>
-              <label className="relative text-sm text-slate-400">
+                <SelectField
+                  value={sheet2Kind}
+                  options={toFieldOptions(['Новый', 'Старый'])}
+                  onChange={(value) => setSheet2Kind(value as 'Новый' | 'Старый')}
+                  className="mt-1"
+                  buttonClassName="rounded-lg p-3 focus:border-blue-500"
+                  ariaLabel="Тип строки"
+                />
+              </div>
+              <div className="text-sm text-slate-400">
                 <span className="mb-1 block">Источник</span>
-                <div className="relative">
-                  <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-                  <input
-                    type="text"
-                    value={sourceQuery}
-                    onChange={(event) => {
-                      sourceWasSelectedManually.current = true
-                      setSource(event.target.value)
-                      setSourceQuery(event.target.value)
-                      setIsSourcePickerOpen(true)
-                    }}
-                    onFocus={(event) => {
-                      event.target.select()
-                      setIsSourcePickerOpen(true)
-                    }}
-                    onMouseDown={(event) => {
-                      sourceInputWasFocusedOnMouseDown.current = document.activeElement === event.currentTarget
-                    }}
-                    onClick={(event) => {
-                      event.currentTarget.select()
-                      setIsSourcePickerOpen((isOpen) => (
-                        sourceInputWasFocusedOnMouseDown.current ? !isOpen : true
-                      ))
-                    }}
-                    onBlur={() => {
-                      window.setTimeout(() => {
-                        setIsSourcePickerOpen(false)
-                        setSourceQuery(source)
-                      }, 120)
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' && filteredSourceOptions[0]) {
-                        event.preventDefault()
-                        selectSource(filteredSourceOptions[0])
-                      }
-                      if (event.key === 'Escape') {
-                        setIsSourcePickerOpen(false)
-                        setSourceQuery(source)
-                      }
-                    }}
-                    placeholder="Выбрать источник"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-900 py-3 pl-9 pr-3 text-slate-100 outline-none focus:border-blue-500"
-                  />
-                </div>
-                {isSourcePickerOpen && (
-                  <div className="absolute left-0 right-0 top-full z-20 mt-2 max-h-56 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
-                    {filteredSourceOptions.length ? (
-                      filteredSourceOptions.map((option) => (
-                        <button
-                          key={option}
-                          type="button"
-                          onMouseDown={(event) => event.preventDefault()}
-                          onClick={() => selectSource(option)}
-                          className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
-                            option === source
-                              ? 'bg-blue-600/20 text-blue-200'
-                              : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                          }`}
-                        >
-                          {option}
-                        </button>
-                      ))
-                    ) : (
-                      <div className="px-3 py-4 text-sm text-slate-500">Источники не найдены</div>
-                    )}
-                  </div>
-                )}
-              </label>
-              <label className="text-sm text-slate-400">
+                <ComboboxField
+                  value={source}
+                  options={toFieldOptions(messengerOptions)}
+                  onSelect={selectSource}
+                  allowCustomValue
+                  placeholder="Выбрать источник"
+                  emptyText="Источники не найдены"
+                  inputClassName="rounded-lg py-3 focus:border-blue-500"
+                />
+              </div>
+              <div className="text-sm text-slate-400">
                 Язык
-                <select value={language} onChange={(event) => setLanguage(event.target.value as LinkVerificationLanguage)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
-                  {linkVerificationLanguageOptions.map((option) => (
-                    <option key={option} value={option}>{option}</option>
-                  ))}
-                </select>
-              </label>
+                <SelectField
+                  value={language}
+                  options={toFieldOptions(linkVerificationLanguageOptions)}
+                  onChange={(value) => setLanguage(value as LinkVerificationLanguage)}
+                  className="mt-1"
+                  buttonClassName="rounded-lg p-3 focus:border-blue-500"
+                  ariaLabel="Язык"
+                />
+              </div>
               <label className="text-sm text-slate-400">
                 Страна
                 <input value={country} onChange={(event) => setCountry(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
@@ -1026,23 +798,14 @@ export default function LinkVerificationView() {
       </div>
       ) : (
         <ResponseTemplatesPanel
-          roomQuery={responseRoomQuery}
+          roomOptions={responseRoomOptions}
           selectedRoomKey={responseRoomKey}
-          selectedRoomName={selectedResponseRoomName}
-          isRoomPickerOpen={isResponseRoomPickerOpen}
-          filteredRoomProfiles={filteredResponseRoomProfiles}
           dealType={activeResponseDealType}
           dealTypeOptions={responseDealTypeOptions}
           language={responseLanguage}
           templates={responseTemplates}
           loading={isResponseTemplatesLoading}
           copiedKey={copiedKey}
-          onRoomQueryChange={(value) => {
-            setResponseRoomQuery(value)
-            setIsResponseRoomPickerOpen(true)
-          }}
-          onRoomPickerOpenChange={setIsResponseRoomPickerOpen}
-          onRoomQueryReset={() => setResponseRoomQuery(selectedResponseRoomName)}
           onSelectRoom={selectResponseRoom}
           onDealTypeChange={setResponseDealType}
           onLanguageChange={setResponseLanguage}
@@ -1068,122 +831,59 @@ function ModeButton({ active, children, onClick }: { active: boolean, children: 
 }
 
 function ResponseTemplatesPanel({
-  roomQuery,
+  roomOptions,
   selectedRoomKey,
-  selectedRoomName,
-  isRoomPickerOpen,
-  filteredRoomProfiles,
   dealType,
   dealTypeOptions,
   language,
   templates,
   loading,
   copiedKey,
-  onRoomQueryChange,
-  onRoomPickerOpenChange,
-  onRoomQueryReset,
   onSelectRoom,
   onDealTypeChange,
   onLanguageChange,
   onCopy,
 }: {
-  roomQuery: string
+  roomOptions: FieldOption[]
   selectedRoomKey: string
-  selectedRoomName: string
-  isRoomPickerOpen: boolean
-  filteredRoomProfiles: RoomProfileInfo[]
   dealType: RoomDealType
   dealTypeOptions: RoomDealType[]
   language: RoomLanguage
   templates: LinkVerificationResponseTemplateInfo[]
   loading: boolean
   copiedKey: string
-  onRoomQueryChange: (value: string) => void
-  onRoomPickerOpenChange: (value: boolean) => void
-  onRoomQueryReset: () => void
-  onSelectRoom: (profile: RoomProfileInfo) => void
+  onSelectRoom: (roomKey: string) => void
   onDealTypeChange: (value: RoomDealType) => void
   onLanguageChange: (value: RoomLanguage) => void
   onCopy: (key: string, text: string) => void
 }) {
+  const selectedRoomName = roomOptions.find((option) => option.value === selectedRoomKey)?.label || selectedRoomKey
+
   return (
     <div className="space-y-6">
       <section className="rounded-2xl border border-slate-700 bg-slate-800 p-5">
         <div className="flex flex-wrap items-end gap-4">
-          <div className="relative text-sm text-slate-400">
+          <div className="min-w-80 text-sm text-slate-400">
             <label className="mb-1 block">Рум</label>
-            <div className="relative">
-              <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="text"
-                value={roomQuery}
-                onChange={(event) => onRoomQueryChange(event.target.value)}
-                onFocus={(event) => {
-                  event.target.select()
-                  onRoomPickerOpenChange(true)
-                }}
-                onClick={(event) => {
-                  event.currentTarget.select()
-                  onRoomPickerOpenChange(true)
-                }}
-                onBlur={() => {
-                  window.setTimeout(() => {
-                    onRoomPickerOpenChange(false)
-                    onRoomQueryReset()
-                  }, 120)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && filteredRoomProfiles[0]) {
-                    event.preventDefault()
-                    onSelectRoom(filteredRoomProfiles[0])
-                  }
-                  if (event.key === 'Escape') {
-                    onRoomPickerOpenChange(false)
-                    onRoomQueryReset()
-                  }
-                }}
-                placeholder="Найти рум: часть слова, транслит, русская раскладка"
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-9 pr-3 text-slate-100 outline-none focus:border-blue-500"
-              />
-            </div>
-            {isRoomPickerOpen && (
-              <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
-                {filteredRoomProfiles.length ? (
-                  filteredRoomProfiles.map((profile) => (
-                    <button
-                      key={profile.room_key}
-                      type="button"
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={() => onSelectRoom(profile)}
-                      className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
-                        profile.room_key === selectedRoomKey
-                          ? 'bg-blue-600/20 text-blue-200'
-                          : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                      }`}
-                    >
-                      <div className="font-semibold">{profile.display_name}</div>
-                      {profile.network_name && <div className="text-xs text-slate-500">{profile.network_name}</div>}
-                    </button>
-                  ))
-                ) : (
-                  <div className="px-3 py-4 text-sm text-slate-500">Румы не найдены</div>
-                )}
-              </div>
-            )}
+            <ComboboxField
+              value={selectedRoomKey}
+              options={roomOptions}
+              onSelect={(roomKey) => onSelectRoom(roomKey)}
+              matches={matchesRoomOption}
+              placeholder="Найти рум: часть слова, транслит, русская раскладка"
+              emptyText="Румы не найдены"
+            />
           </div>
 
           {dealTypeOptions.length > 1 && (
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-400">Тип сделки</label>
-              <select
+              <SelectField
                 value={dealType}
-                onChange={(event) => onDealTypeChange(event.target.value as RoomDealType)}
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-              >
-                {dealTypeOptions.map((option) => (
-                  <option key={option} value={option}>{responseDealTypeLabels[option]}</option>
-                ))}
-              </select>
+                options={dealTypeOptions.map((option) => ({ value: option, label: responseDealTypeLabels[option] }))}
+                onChange={(value) => onDealTypeChange(value as RoomDealType)}
+                ariaLabel="Тип сделки"
+              />
             </div>
           )}
 

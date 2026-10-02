@@ -13,6 +13,8 @@ import {
 } from '../utils/transactionTemplateFormatting'
 import { filterPaymentAccountsForOperation } from '../utils/roomAccountOptions'
 import { getWalletAddressValidationError } from '../utils/walletValidation'
+import SelectField from './fields/SelectField'
+import { CONTACT_METHOD_OPTIONS } from './fields/fieldOptions'
 
 const isRedStarWithdrawal = (targetAccount: Account | null, targetOperationType: OperationType) =>
   targetAccount?.roomName === 'RedStar' && targetOperationType === 'Withdrawal'
@@ -838,19 +840,24 @@ export default function FormView({ player, account: selectedAccount, onAccountSe
               <div className="w-1/3">
                 <label className="block text-sm font-medium text-slate-400 mb-1">Тип связи</label>
                 {playerContacts.length > 1 ? (
-                  <select value={selectedContactIndex} onChange={e => handleContactSelect(Number(e.target.value))} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
-                    {playerContacts.map((contact, index) => (
-                      <option key={index} value={index}>{contact.contactMethod || contact.contact_method}</option>
-                    ))}
-                  </select>
+                  <SelectField
+                    value={String(selectedContactIndex)}
+                    options={playerContacts.map((contact, index) => ({
+                      value: String(index),
+                      label: contact.contactMethod || contact.contact_method || '',
+                    }))}
+                    onChange={value => handleContactSelect(Number(value))}
+                    buttonClassName="rounded-lg p-3 focus:border-blue-500"
+                    ariaLabel="Тип связи"
+                  />
                 ) : (
-                  <select value={contactMethod} onChange={e => setContactMethod(e.target.value as ContactMethod)} className="w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500">
-                    <option value="TG">TG</option>
-                    <option value="WA">WA</option>
-                    <option value="Discord">Discord</option>
-                    <option value="Teams">Teams</option>
-                    <option value="Email">Email</option>
-                  </select>
+                  <SelectField
+                    value={contactMethod}
+                    options={CONTACT_METHOD_OPTIONS}
+                    onChange={value => setContactMethod(value as ContactMethod)}
+                    buttonClassName="rounded-lg p-3 focus:border-blue-500"
+                    ariaLabel="Тип связи"
+                  />
                 )}
               </div>
               <div className="min-w-0 flex-1">

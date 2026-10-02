@@ -369,6 +369,7 @@ interface Window {
     getAllPlayers: () => Promise<Player[]>;
     getRoomRegistrationStats: () => Promise<RoomRegistrationStat[]>;
     getPlayerById: (id: number) => Promise<PlayerPayload | null>;
+    markPlayerUsed: (id: number) => Promise<void>;
     getAppInfo: () => Promise<AppInfo>;
     getStorageInfo: () => Promise<StorageInfo>;
     getRoomKnowledgeIndex: () => Promise<RoomKnowledgeIndex>;

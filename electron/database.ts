@@ -388,10 +388,13 @@ export class TransactionerDatabase {
 
     if (!players.length) return null
 
-    const now = Date.now()
-    players.forEach((player) => this.db.prepare('UPDATE players SET last_used_at = ? WHERE id = ?').run(now, player.id))
     const result = players.map((player) => this.getPlayerPayload(player))
     return result.length === 1 ? result[0] : result
+  }
+
+  /** Records that the operator opened the player; drives the recent players list. */
+  markPlayerUsed(id: number) {
+    this.db.prepare('UPDATE players SET last_used_at = ? WHERE id = ?').run(Date.now(), id)
   }
 
   getAllPlayers() {

@@ -429,6 +429,21 @@ describe('TransactionerDatabase', () => {
     expect(db.searchPlayer('wpd')).not.toBeNull()
   })
 
+  it('orders recent players by opening, not by searching', () => {
+    const first = db.savePlayer(basePlayer())
+    const second = db.savePlayer(basePlayer({
+      messenger_username: '@test2',
+      contacts: [{ contactMethod: 'TG', contactValue: '@test2' }],
+    }))
+
+    db.markPlayerUsed(second.id!)
+    db.searchPlayer('test')
+
+    const players = db.getAllPlayers() as Array<{ id: number; last_used_at: number }>
+    expect(players[0].id).toBe(second.id)
+    expect(players.find((player) => player.id === first.id)?.last_used_at || 0).toBe(0)
+  })
+
   it('prefers an exact saved chat name over unrelated fuzzy room matches', () => {
     const target = db.savePlayer(basePlayer({
       messenger_username: 'T H',

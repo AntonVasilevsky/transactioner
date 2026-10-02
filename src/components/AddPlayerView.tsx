@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Plus, Star, Trash2, Save, Loader2 } from 'lucide-react'
 import { inferContactMethod } from '../utils/contactNormalization'
-import { legacyPaymentRoomNames, roomNameOptionsFromKnowledge } from '../utils/roomAccountOptions'
+import { roomNameOptionsFromKnowledge } from '../utils/roomAccountOptions'
+import { sortRoomNamesByUsage } from '../utils/roomUsageSort'
+import { useRoomUsageStats } from '../hooks/useRoomUsageStats'
 import { getWalletAddressValidationError } from '../utils/walletValidation'
 import RoomNamePicker from './RoomNamePicker'
+import SelectField from './fields/SelectField'
+import { CONTACT_METHOD_OPTIONS } from './fields/fieldOptions'
 
 type AccountFormField = 'roomName' | 'roomUsername' | 'roomPlayerId' | 'email'
 type ContactFormField = 'contactMethod' | 'contactValue'
@@ -28,15 +32,18 @@ export default function AddPlayerView({
   }])
   const [defaultWallet, setDefaultWallet] = useState('')
   const [defaultWalletNetwork, setDefaultWalletNetwork] = useState('')
+  // New rows mount with focus so the page scrolls to them.
+  const [newRowFocus, setNewRowFocus] = useState<{ kind: 'account' | 'contact'; index: number } | null>(null)
   const [accounts, setAccounts] = useState<AccountForm[]>([])
   const [roomKnowledgeIndex, setRoomKnowledgeIndex] = useState<RoomKnowledgeIndex | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const defaultWalletInputRef = useRef<HTMLInputElement | null>(null)
   const defaultWalletError = getWalletAddressValidationError(defaultWallet)
+  const roomUsageStats = useRoomUsageStats()
   const roomOptions = useMemo(
-    () => roomNameOptionsFromKnowledge(roomKnowledgeIndex, accounts.map(account => account.roomName)),
-    [accounts, roomKnowledgeIndex]
+    () => sortRoomNamesByUsage(roomNameOptionsFromKnowledge(roomKnowledgeIndex, accounts.map(account => account.roomName)), roomUsageStats),
+    [accounts, roomKnowledgeIndex, roomUsageStats]
   )
 
   useEffect(() => {
@@ -54,7 +61,8 @@ export default function AddPlayerView({
   }, [])
 
   const handleAddAccount = () => {
-    setAccounts([...accounts, { roomName: roomOptions[0] || legacyPaymentRoomNames[0], roomUsername: '', roomPlayerId: '', email: '' }])
+    setNewRowFocus({ kind: 'account', index: accounts.length })
+    setAccounts([...accounts, { roomName: '', roomUsername: '', roomPlayerId: '', email: '' }])
   }
 
   const handleUpdateAccount = (index: number, field: AccountFormField, value: string) => {
@@ -68,6 +76,7 @@ export default function AddPlayerView({
   }
 
   const handleAddContact = () => {
+    setNewRowFocus({ kind: 'contact', index: contacts.length })
     setContacts([...contacts, { contactMethod: 'TG', contactValue: '' }])
   }
 
@@ -110,6 +119,10 @@ export default function AddPlayerView({
     }
     if (accounts.length === 0) {
       setError('Добавьте хотя бы один аккаунт в руме')
+      return
+    }
+    if (accounts.some(account => !account.roomName.trim())) {
+      setError('Выберите рум в каждом аккаунте')
       return
     }
     if (defaultWalletError) {
@@ -181,21 +194,19 @@ export default function AddPlayerView({
           <div className="space-y-3">
             {contacts.map((contact, index) => (
               <div key={index} className="flex gap-2">
-                <select
+                <SelectField
                   value={contact.contactMethod}
-                  onChange={(e) => handleUpdateContact(index, 'contactMethod', e.target.value)}
-                  className="w-1/4 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
-                >
-                  <option value="TG">TG</option>
-                  <option value="WA">WA</option>
-                  <option value="Discord">Discord</option>
-                  <option value="Teams">Teams</option>
-                  <option value="Email">Email</option>
-                </select>
+                  options={CONTACT_METHOD_OPTIONS}
+                  onChange={value => handleUpdateContact(index, 'contactMethod', value)}
+                  className="w-1/4"
+                  buttonClassName="rounded-xl p-3 transition-all focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                  ariaLabel="Тип контакта"
+                />
                 <input
                   type="text"
                   value={contact.contactValue}
                   onChange={(e) => handleUpdateContact(index, 'contactValue', e.target.value)}
+                  autoFocus={newRowFocus?.kind === 'contact' && newRowFocus.index === index}
                   placeholder={contact.isPrimary ? '@player_tg или номер телефона' : 'Дополнительный контакт'}
                   className="flex-1 bg-slate-900 border border-slate-700 rounded-xl p-3 text-slate-100 placeholder-slate-700 outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 transition-all"
                 />
@@ -290,6 +301,7 @@ export default function AddPlayerView({
                       <RoomNamePicker
                         value={acc.roomName}
                         options={roomOptions}
+                        autoFocus={newRowFocus?.kind === 'account' && newRowFocus.index === index}
                         onChange={(value) => handleUpdateAccount(index, 'roomName', value)}
                         focusBorderClass="focus:border-emerald-500"
                       />

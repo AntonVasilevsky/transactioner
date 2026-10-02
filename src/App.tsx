@@ -125,6 +125,7 @@ function App() {
     const accounts = (playerData.accounts || []).map(normalizeAccount)
     const contacts = (playerData.contacts || playerData.player?.contacts || []).map(normalizeContact)
     const flat = { ...playerData.player, accounts, contacts }
+    if (flat.id) void window.electronAPI.markPlayerUsed(flat.id).catch(() => undefined)
     setSelectedPlayer(flat)
     setSelectedAccount(accounts[0] || null)
     setPlayerWorkspaceTab('accounts')

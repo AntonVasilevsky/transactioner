@@ -1,7 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, Copy, Info, Search, Settings } from 'lucide-react'
+import { ArrowLeft, Check, Copy, Info, Settings } from 'lucide-react'
 import RoomAdminView from './RoomAdminView'
-import { matchesRoomSearch } from '../utils/roomSearch'
+import { sortRoomProfilesByUsage } from '../utils/roomUsageSort'
+import { useRoomUsageStats } from '../hooks/useRoomUsageStats'
+import ComboboxField from './fields/ComboboxField'
+import SelectField from './fields/SelectField'
+import { matchesRoomOption, roomProfileOptions } from './fields/fieldOptions'
 import {
   roomWalletCopyText,
   roomWalletDisplayTitle,
@@ -9,8 +13,6 @@ import {
 } from '../utils/roomWalletFormatting'
 
 type RoomInfoMode = 'wallets' | 'deals'
-const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
-const roomInfoSearchFrequencyKey = 'transactioner.roomInfo.roomSearchFrequency'
 
 const dealTypeLabels: Record<RoomDealType, string> = {
   General: 'Общая',
@@ -24,47 +26,6 @@ const roomName = (profiles: RoomProfileInfo[], roomKey: string) =>
 
 const uniqueDealTypes = (items: Array<{ deal_type: RoomDealType }>) =>
   Array.from(new Set(items.map((item) => item.deal_type))).sort()
-
-const sortRooms = (
-  profiles: RoomProfileInfo[],
-  searchFrequencies: Record<string, number> = {}
-) => {
-  return [...profiles].sort((left, right) => {
-  const leftPinned = pinnedRoomOrder.indexOf(left.room_key)
-  const rightPinned = pinnedRoomOrder.indexOf(right.room_key)
-  const leftRank = leftPinned === -1 ? Number.POSITIVE_INFINITY : leftPinned
-  const rightRank = rightPinned === -1 ? Number.POSITIVE_INFINITY : rightPinned
-
-  if (leftRank !== rightRank) return leftRank - rightRank
-
-  if (leftPinned === -1 && rightPinned === -1) {
-    const countDiff = (searchFrequencies[right.room_key] || 0) - (searchFrequencies[left.room_key] || 0)
-    if (countDiff !== 0) return countDiff
-  }
-
-  return left.display_name.localeCompare(right.display_name, undefined, { sensitivity: 'base' })
-  })
-}
-
-const readRoomInfoSearchFrequencies = () => {
-  if (typeof window === 'undefined') return {} as Record<string, number>
-  try {
-    const parsed = JSON.parse(localStorage.getItem(roomInfoSearchFrequencyKey) || '{}') as Record<string, unknown>
-    const result: Record<string, number> = {}
-    for (const [key, value] of Object.entries(parsed)) {
-      const count = Number(value) || 0
-      if (count > 0) result[key] = count
-    }
-    return result
-  } catch {
-    return {}
-  }
-}
-
-const saveRoomInfoSearchFrequencies = (frequencies: Record<string, number>) => {
-  if (typeof window === 'undefined') return
-  localStorage.setItem(roomInfoSearchFrequencyKey, JSON.stringify(frequencies))
-}
 
 const countryStatusLabels: Record<RoomCountryStatus, string> = {
   Available: 'доступен',
@@ -99,14 +60,12 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
   const [mode, setMode] = useState<RoomInfoMode>('deals')
   const [index, setIndex] = useState<RoomKnowledgeIndex | null>(null)
   const [selectedRoomKey, setSelectedRoomKey] = useState('')
-  const [roomQuery, setRoomQuery] = useState('')
-  const [isRoomPickerOpen, setIsRoomPickerOpen] = useState(false)
   const [selectedDealType, setSelectedDealType] = useState<RoomDealType>('General')
   const [selectedCountryCode, setSelectedCountryCode] = useState('')
   const [language, setLanguage] = useState<RoomLanguage>('RU')
   const [wallets, setWallets] = useState<RoomWalletInfo[]>([])
   const [deals, setDeals] = useState<RoomDealInfo[]>([])
-  const [roomSearchFrequencies, setRoomSearchFrequencies] = useState<Record<string, number>>(() => readRoomInfoSearchFrequencies())
+  const roomUsageStats = useRoomUsageStats()
   const [loading, setLoading] = useState(true)
   const [copied, setCopied] = useState('')
   const [isAdminOpen, setIsAdminOpen] = useState(false)
@@ -114,23 +73,26 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
   const [adminSessionKey, setAdminSessionKey] = useState(0)
   const [refreshToken, setRefreshToken] = useState(0)
   const hasSeenHomeSignal = useRef(false)
-  const roomInputWasFocusedOnMouseDown = useRef(false)
   const selectedRoomKeyRef = useRef('')
+  const roomUsageStatsRef = useRef<RoomRegistrationStat[]>([])
 
   useEffect(() => {
     selectedRoomKeyRef.current = selectedRoomKey
   }, [selectedRoomKey])
 
   useEffect(() => {
+    roomUsageStatsRef.current = roomUsageStats
+  }, [roomUsageStats])
+
+  useEffect(() => {
     let active = true
     window.electronAPI.getRoomKnowledgeIndex()
       .then((result) => {
         if (!active) return
-        const sortedProfiles = sortRooms(result.profiles, roomSearchFrequencies)
+        const sortedProfiles = sortRoomProfilesByUsage(result.profiles, roomUsageStatsRef.current)
         const selectedRoom = sortedProfiles.find((profile) => profile.room_key === selectedRoomKeyRef.current) || sortedProfiles[0]
         setIndex(result)
         setSelectedRoomKey(selectedRoom?.room_key || '')
-        setRoomQuery(selectedRoom?.display_name || '')
       })
       .finally(() => {
         if (active) setLoading(false)
@@ -139,7 +101,7 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     return () => {
       active = false
     }
-  }, [refreshToken, roomSearchFrequencies])
+  }, [refreshToken])
 
   useEffect(() => {
     if (!hasSeenHomeSignal.current) {
@@ -161,18 +123,10 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     return values.length ? values : ['General'] as RoomDealType[]
   }, [index, selectedRoomKey])
 
-  const filteredRoomProfiles = useMemo(() => {
-    const profiles = index?.profiles || []
-    const selectedRoomName = roomName(profiles, selectedRoomKey)
-    const rawQuery = roomQuery.trim()
-    const query = rawQuery && rawQuery !== selectedRoomName
-      ? rawQuery.toLowerCase()
-      : ''
-    const filteredProfiles = query
-      ? profiles.filter((profile) => matchesRoomSearch([profile.display_name, profile.room_key, profile.network_name], query))
-      : profiles
-    return sortRooms(filteredProfiles, roomSearchFrequencies)
-  }, [index, roomQuery, selectedRoomKey, roomSearchFrequencies])
+  const roomOptions = useMemo(
+    () => roomProfileOptions(sortRoomProfilesByUsage(index?.profiles || [], roomUsageStats)),
+    [index, roomUsageStats]
+  )
 
   const roomCountryRows = useMemo(() => (
     (index?.countryOptions || [])
@@ -274,16 +228,9 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     }
   }
 
-  const selectRoom = (profile: RoomProfileInfo) => {
-    setSelectedRoomKey(profile.room_key)
+  const selectRoom = (roomKey: string) => {
+    setSelectedRoomKey(roomKey)
     setSelectedCountryCode('')
-    setRoomQuery(profile.display_name)
-    setIsRoomPickerOpen(false)
-    setRoomSearchFrequencies((current) => {
-      const next = { ...current, [profile.room_key]: (current[profile.room_key] || 0) + 1 }
-      saveRoomInfoSearchFrequencies(next)
-      return next
-    })
   }
 
   if (loading) {
@@ -304,7 +251,6 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
               setIsAdminOpen(false)
               if (adminContext?.roomKey) {
                 setSelectedRoomKey(adminContext.roomKey)
-                setRoomQuery(roomName(index?.profiles || [], adminContext.roomKey))
                 setSelectedCountryCode('')
                 setSelectedDealType(adminContext.dealType)
                 setLanguage(adminContext.language)
@@ -345,105 +291,41 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
             <ModeButton active={mode === 'wallets'} onClick={() => setMode('wallets')}>Кошельки</ModeButton>
           </div>
         </div>
-        <div className="relative min-w-56">
+        <div className="min-w-56">
           <label className="mb-1 block text-sm font-medium text-slate-400">Рум</label>
-          <div className="relative">
-            <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-            <input
-              type="text"
-              value={roomQuery}
-              onChange={(event) => {
-                setRoomQuery(event.target.value)
-                setIsRoomPickerOpen(true)
-              }}
-              onFocus={(event) => {
-                event.target.select()
-                setIsRoomPickerOpen(true)
-              }}
-              onMouseDown={(event) => {
-                roomInputWasFocusedOnMouseDown.current = document.activeElement === event.currentTarget
-              }}
-              onClick={(event) => {
-                event.currentTarget.select()
-                setIsRoomPickerOpen((isOpen) => (
-                  roomInputWasFocusedOnMouseDown.current ? !isOpen : true
-                ))
-              }}
-              onBlur={() => {
-                window.setTimeout(() => {
-                  setIsRoomPickerOpen(false)
-                  setRoomQuery(roomName(index?.profiles || [], selectedRoomKey))
-                }, 120)
-              }}
-              onKeyDown={(event) => {
-                if (event.key === 'Enter' && filteredRoomProfiles[0]) {
-                  event.preventDefault()
-                  selectRoom(filteredRoomProfiles[0])
-                }
-                if (event.key === 'Escape') {
-                  setIsRoomPickerOpen(false)
-                  setRoomQuery(roomName(index?.profiles || [], selectedRoomKey))
-                }
-              }}
-              placeholder="Найти рум"
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-10 pr-3 text-slate-100 outline-none focus:border-blue-500"
-            />
-          </div>
-          {isRoomPickerOpen && (
-            <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
-              {filteredRoomProfiles.length ? (
-                filteredRoomProfiles.map((profile) => (
-                  <button
-                    key={profile.room_key}
-                    type="button"
-                    onMouseDown={(event) => event.preventDefault()}
-                    onClick={() => selectRoom(profile)}
-                    className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
-                      profile.room_key === selectedRoomKey
-                        ? 'bg-blue-600/20 text-blue-200'
-                        : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                    }`}
-                  >
-                    <div className="font-semibold">{profile.display_name}</div>
-                    {profile.network_name && <div className="text-xs text-slate-500">{profile.network_name}</div>}
-                  </button>
-                ))
-              ) : (
-                <div className="px-3 py-4 text-sm text-slate-500">Румы не найдены</div>
-              )}
-            </div>
-          )}
+          <ComboboxField
+            value={selectedRoomKey}
+            options={roomOptions}
+            onSelect={selectRoom}
+            matches={matchesRoomOption}
+            placeholder="Найти рум"
+            emptyText="Румы не найдены"
+          />
         </div>
         {mode === 'deals' && roomCountryOptions.length > 0 && (
           <div className="min-w-56">
             <label className="mb-1 block text-sm font-medium text-slate-400">Страна</label>
-            <select
+            <SelectField
               value={selectedCountryCode}
-              onChange={(event) => setSelectedCountryCode(event.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-            >
-              <option value="">Не выбрана</option>
-              {roomCountryOptions.map((country) => (
-                <option key={`${country.country_code}-${country.status}-${country.deal_type}`} value={country.country_code}>
-                  {country.country_name}
-                </option>
-              ))}
-            </select>
+              options={[
+                { value: '', label: 'Не выбрана' },
+                ...roomCountryOptions.map((country) => ({ value: country.country_code, label: country.country_name })),
+              ]}
+              onChange={setSelectedCountryCode}
+              ariaLabel="Страна"
+            />
           </div>
         )}
         {mode === 'deals' && (
           <div className="min-w-44">
             <label className="mb-1 block text-sm font-medium text-slate-400">Тип сделки</label>
-            <select
+            <SelectField
               value={activeDealType}
               disabled={mode === 'deals' && (dealTypeChoices.length <= 1 || countryBlocksDeals)}
-              onChange={(event) => setSelectedDealType(event.target.value as RoomDealType)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500 disabled:text-slate-500"
-            >
-              {dealTypeChoices.map((type) => (
-                <option key={type} value={type}>{dealTypeLabels[type]}</option>
-              ))}
-            </select>
+              options={dealTypeChoices.map((type) => ({ value: type, label: dealTypeLabels[type] }))}
+              onChange={(value) => setSelectedDealType(value as RoomDealType)}
+              ariaLabel="Тип сделки"
+            />
           </div>
         )}
         <div>

@@ -1,6 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react'
 import { Search, Loader2, UserRound, UserPlus } from 'lucide-react'
 import { toPlayerSearchResults } from '../utils/playerSearchResults'
+import { recentPlayerDescription, sortRecentPlayers } from '../utils/recentPlayers'
+import { DropdownOptionList, DropdownPanel, type FieldOption } from './fields/DropdownPanel'
+import { nextActiveIndex, useDropdownField } from './fields/useDropdownField'
 
 const METHOD_COLORS: Record<string, string> = {
   TG: 'bg-blue-500/20 text-blue-400',
@@ -23,8 +26,74 @@ export default function SearchPlayerView({
   const [results, setResults] = useState<PlayerPayload[]>([])
   const [notFoundQuery, setNotFoundQuery] = useState('')
   const liveSearchRunRef = useRef(0)
+  const inputRef = useRef<HTMLInputElement | null>(null)
+  const [recentPlayers, setRecentPlayers] = useState<Player[]>([])
+  const [recentActiveIndex, setRecentActiveIndex] = useState(-1)
+  const [scrollToRecentActive, setScrollToRecentActive] = useState(false)
+
+  // A click on the empty field shows players, most recently opened first.
+  const recent = useDropdownField({
+    canOpen: () => !query.trim(),
+    onOpen: () => {
+      setRecentActiveIndex(0)
+      setScrollToRecentActive(true)
+      window.electronAPI.getAllPlayers()
+        .then((players) => setRecentPlayers(sortRecentPlayers(players || [])))
+        .catch(() => setRecentPlayers([]))
+    },
+  })
+
+  const recentOptions = useMemo<FieldOption[]>(() => recentPlayers.map((player) => ({
+    value: String(player.id),
+    label: player.messenger_username,
+    description: recentPlayerDescription(player) || undefined,
+    trailing: (
+      <span className={`shrink-0 text-xs font-bold px-2 py-1 rounded-md ${METHOD_COLORS[player.contact_method] || 'bg-slate-700 text-slate-400'}`}>
+        {player.contact_method}
+      </span>
+    ),
+  })), [recentPlayers])
+
+  useEffect(() => {
+    recent.focusWithoutOpening(inputRef.current)
+    // Only on mount: the field is focused for typing, the list waits for a click.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const openRecentPlayer = async (option: FieldOption) => {
+    recent.close()
+    try {
+      const player = await window.electronAPI.getPlayerById(Number(option.value))
+      if (player) onFound(player)
+    } catch (err: unknown) {
+      setError('Ошибка загрузки игрока: ' + (err instanceof Error ? err.message : String(err)))
+    }
+  }
+
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape' && recent.isOpen) {
+      event.preventDefault()
+      recent.dismiss()
+      return
+    }
+    if ((event.key === 'ArrowDown' || event.key === 'ArrowUp') && !query.trim()) {
+      event.preventDefault()
+      if (!recent.isOpen) {
+        recent.open()
+        return
+      }
+      setScrollToRecentActive(true)
+      setRecentActiveIndex((current) => nextActiveIndex(current, event.key === 'ArrowDown' ? 1 : -1, recentOptions.length))
+      return
+    }
+    if (event.key === 'Enter' && recent.isOpen && recentOptions[recentActiveIndex]) {
+      event.preventDefault()
+      void openRecentPlayer(recentOptions[recentActiveIndex])
+    }
+  }
 
   const handleQueryChange = (value: string) => {
+    recent.close()
     liveSearchRunRef.current += 1
     setQuery(value)
     setNotFoundQuery('')
@@ -134,12 +203,17 @@ export default function SearchPlayerView({
             <Search size={24} />
           </div>
           <input
+            ref={inputRef}
             type="text"
             value={query}
             onChange={(e) => handleQueryChange(e.target.value)}
+            onMouseDown={recent.handleMouseDown}
+            onFocus={() => recent.handleFocus()}
+            onClick={() => recent.handleClick()}
+            onBlur={recent.handleBlur}
+            onKeyDown={handleInputKeyDown}
             placeholder="@username, Anton или номер"
             className="flex-1 bg-transparent border-none outline-none text-xl text-slate-100 placeholder-slate-700 py-4 px-2"
-            autoFocus
           />
           <button
             type="submit"
@@ -149,6 +223,23 @@ export default function SearchPlayerView({
             {loading ? <Loader2 className="animate-spin" size={20} /> : 'Поиск'}
           </button>
         </div>
+        {recent.isOpen && (
+          <DropdownPanel panelRef={recent.panelRef}>
+            <div className="px-3 pb-2 pt-1 text-xs text-slate-500">Недавние игроки</div>
+            <DropdownOptionList
+              options={recentOptions}
+              selectedValue=""
+              activeIndex={recentActiveIndex}
+              scrollToActive={scrollToRecentActive}
+              emptyText="Игроков пока нет"
+              onChoose={(option) => void openRecentPlayer(option)}
+              onHover={(index) => {
+                setScrollToRecentActive(false)
+                setRecentActiveIndex(index)
+              }}
+            />
+          </DropdownPanel>
+        )}
       </form>
 
       {error && (

@@ -18,6 +18,7 @@ import {
   saveRakebackExplorerSettings,
   updateRakebackExplorerSettings,
 } from '../utils/rakebackSettings'
+import DateField from './fields/DateField'
 
 interface RakebackViewProps {
   player: Player
@@ -84,11 +85,6 @@ const blockchainLabel = (network: string) => {
   if (normalized.includes('BEP20')) return 'BNB Smart Chain / BEP20'
   if (normalized.includes('BTC')) return 'Bitcoin'
   return ''
-}
-
-const openNativeDatePicker = (input: HTMLInputElement) => {
-  const inputWithPicker = input as HTMLInputElement & { showPicker?: () => void }
-  inputWithPicker.showPicker?.()
 }
 
 export default function RakebackView({
@@ -555,17 +551,17 @@ export default function RakebackView({
 
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-400">Период с</label>
-              <input type="date" value={periodFrom} onClick={(event) => openNativeDatePicker(event.currentTarget)} onFocus={(event) => openNativeDatePicker(event.currentTarget)} onChange={(event) => updateGeneratedField(() => {
-                setPeriodFrom(event.target.value)
+              <DateField value={periodFrom} onChange={(value) => updateGeneratedField(() => {
+                setPeriodFrom(value)
                 resetSearchResults()
-              })} className={inputClass()} />
+              })} inputClassName={inputClass()} />
             </div>
             <div>
               <label className="mb-1 block text-sm font-medium text-slate-400">Период по</label>
-              <input type="date" value={periodTo} onClick={(event) => openNativeDatePicker(event.currentTarget)} onFocus={(event) => openNativeDatePicker(event.currentTarget)} onChange={(event) => updateGeneratedField(() => {
-                setPeriodTo(event.target.value)
+              <DateField value={periodTo} onChange={(value) => updateGeneratedField(() => {
+                setPeriodTo(value)
                 resetSearchResults()
-              })} className={inputClass()} />
+              })} inputClassName={inputClass()} />
             </div>
           </div>
 

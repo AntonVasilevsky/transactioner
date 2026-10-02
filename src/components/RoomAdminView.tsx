@@ -1,6 +1,10 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
-import { ArrowLeft, Eye, EyeOff, GripVertical, Pencil, Plus, RotateCcw, Save, Search, Settings, Trash2 } from 'lucide-react'
-import { matchesRoomSearch } from '../utils/roomSearch'
+import { ArrowLeft, Eye, EyeOff, GripVertical, Pencil, Plus, RotateCcw, Save, Settings, Trash2 } from 'lucide-react'
+import { sortRoomProfilesByUsage } from '../utils/roomUsageSort'
+import { useRoomUsageStats } from '../hooks/useRoomUsageStats'
+import ComboboxField from './fields/ComboboxField'
+import SelectField from './fields/SelectField'
+import { matchesRoomOption, roomProfileOptions } from './fields/fieldOptions'
 import { resolveLinkVerificationRoomRule, type LinkVerificationTemplate } from '../utils/linkVerificationRules'
 import { findWalletForMethod, normalizeAdminToken } from '../utils/roomAdminWalletMatching'
 import { applyLinkVerificationTemplateOverrides } from '../utils/linkVerificationFormatting'
@@ -8,7 +12,6 @@ import { applyLinkVerificationTemplateOverrides } from '../utils/linkVerificatio
 type AdminMode = 'deals' | 'methods' | 'linkVerification'
 type LinkVerificationAdminMode = 'request' | 'response'
 const allDealTypes: RoomDealType[] = ['Agent', 'Direct', 'General']
-const pinnedRoomOrder = ['nexa', 'champion-poker', 'redstar']
 
 const dealTypeLabels: Record<RoomDealType, string> = {
   General: 'Общая',
@@ -28,16 +31,6 @@ const preferredDealTypeForRoom = (index: RoomKnowledgeIndex | null, roomKey: str
 
 const roomName = (profiles: RoomProfileInfo[], roomKey: string) =>
   profiles.find((profile) => profile.room_key === roomKey)?.display_name || roomKey
-
-const sortRooms = (profiles: RoomProfileInfo[]) => [...profiles].sort((left, right) => {
-  const leftPinned = pinnedRoomOrder.indexOf(left.room_key)
-  const rightPinned = pinnedRoomOrder.indexOf(right.room_key)
-  const leftRank = leftPinned === -1 ? Number.POSITIVE_INFINITY : leftPinned
-  const rightRank = rightPinned === -1 ? Number.POSITIVE_INFINITY : rightPinned
-
-  if (leftRank !== rightRank) return leftRank - rightRank
-  return left.display_name.localeCompare(right.display_name, undefined, { sensitivity: 'base' })
-})
 
 const emptyWallet = (roomKey: string, dealType: RoomDealType): SaveRoomWalletInput => ({
   room_key: roomKey,
@@ -229,8 +222,6 @@ export default function RoomAdminView({
   const [mode, setMode] = useState<AdminMode>(initialMode)
   const [index, setIndex] = useState<RoomKnowledgeIndex | null>(null)
   const [roomKey, setRoomKey] = useState('')
-  const [roomQuery, setRoomQuery] = useState('')
-  const [isRoomPickerOpen, setIsRoomPickerOpen] = useState(false)
   const [dealType, setDealType] = useState<RoomDealType>(initialDealType || 'Agent')
   const [language, setLanguage] = useState<RoomLanguage>(initialLanguage)
   const [deals, setDeals] = useState<RoomDealInfo[]>([])
@@ -269,9 +260,16 @@ export default function RoomAdminView({
     onClose({ roomKey, dealType, language })
   }
 
+  const roomUsageStats = useRoomUsageStats()
+  const roomUsageStatsRef = useRef<RoomRegistrationStat[]>([])
+
+  useEffect(() => {
+    roomUsageStatsRef.current = roomUsageStats
+  }, [roomUsageStats])
+
   const loadIndex = async (preferredRoomKey?: string) => {
     const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
-    const sortedProfiles = sortRooms(nextIndex.profiles)
+    const sortedProfiles = sortRoomProfilesByUsage(nextIndex.profiles, roomUsageStatsRef.current)
     const initialContext = initialContextRef.current
     const nextRoomKey = preferredRoomKey || roomKey || initialContext.roomKey || sortedProfiles[0]?.room_key || ''
     const nextDealType = roomKey || preferredRoomKey || nextRoomKey !== initialContext.roomKey || !initialContext.dealType
@@ -280,7 +278,6 @@ export default function RoomAdminView({
     setIndex(nextIndex)
     setRoomKey(nextRoomKey)
     setDealType(nextDealType)
-    setRoomQuery(roomName(nextIndex.profiles, nextRoomKey))
   }
 
   useEffect(() => {
@@ -288,7 +285,7 @@ export default function RoomAdminView({
     window.electronAPI.getRoomKnowledgeAdminIndex()
       .then((nextIndex) => {
         if (!active) return
-        const sortedProfiles = sortRooms(nextIndex.profiles)
+        const sortedProfiles = sortRoomProfilesByUsage(nextIndex.profiles, roomUsageStatsRef.current)
         const initialContext = initialContextRef.current
         const nextRoomKey = initialContext.roomKey || sortedProfiles[0]?.room_key || ''
         const nextDealType = initialContext.dealType && nextRoomKey === initialContext.roomKey
@@ -296,7 +293,6 @@ export default function RoomAdminView({
           : preferredDealTypeForRoom(nextIndex, nextRoomKey)
         setIndex(nextIndex)
         setRoomKey(nextRoomKey)
-        setRoomQuery(roomName(nextIndex.profiles, nextRoomKey))
         setDealType(nextDealType)
       })
       .catch((err) => {
@@ -349,18 +345,15 @@ export default function RoomAdminView({
   const showDealTypeSelector = mode !== 'linkVerification'
     || (linkVerificationAdminMode === 'response' && visibleDealTypes.length > 1)
 
-  const filteredRoomProfiles = useMemo(() => {
-    const profiles = index?.profiles || []
-    const selectedRoomName = roomName(profiles, roomKey)
-    const rawQuery = roomQuery.trim()
-    const query = rawQuery && rawQuery !== selectedRoomName
-      ? rawQuery.toLowerCase()
-      : ''
-    const filteredProfiles = query
-      ? profiles.filter((profile) => matchesRoomSearch([profile.display_name, profile.room_key, profile.network_name], query))
-      : profiles
-    return sortRooms(filteredProfiles)
-  }, [index, roomKey, roomQuery])
+  const roomOptions = useMemo(
+    () => roomProfileOptions(sortRoomProfilesByUsage(index?.profiles || [], roomUsageStats)).map((option) => ({
+      ...option,
+      trailing: index?.profiles.find((profile) => profile.room_key === option.value)?.is_active
+        ? undefined
+        : <EyeOff size={14} className="shrink-0 text-slate-500" />,
+    })),
+    [index, roomUsageStats]
+  )
 
   useEffect(() => {
     if (!roomKey) return
@@ -482,8 +475,6 @@ export default function RoomAdminView({
   const selectRoom = (profile: RoomProfileInfo) => {
     setRoomKey(profile.room_key)
     setDealType(preferredDealTypeForRoom(index, profile.room_key))
-    setRoomQuery(profile.display_name)
-    setIsRoomPickerOpen(false)
     setWallets([])
     setWalletForm(null)
     setPaymentMethodForm(null)
@@ -947,67 +938,18 @@ export default function RoomAdminView({
         <div className="relative min-w-56">
           <label className="mb-1 block text-sm font-medium text-slate-400">Рум</label>
           <div className="flex gap-2">
-            <div className="relative min-w-0 flex-1">
-              <Search size={17} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
-              <input
-                type="text"
-                value={roomQuery}
-                onChange={(event) => {
-                  setRoomQuery(event.target.value)
-                  setIsRoomPickerOpen(true)
-                }}
-                onFocus={(event) => {
-                  event.target.select()
-                  setIsRoomPickerOpen(true)
-                }}
-                onClick={(event) => event.currentTarget.select()}
-                onBlur={() => {
-                  window.setTimeout(() => {
-                    setIsRoomPickerOpen(false)
-                    setRoomQuery(roomName(index?.profiles || [], roomKey))
-                  }, 120)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' && filteredRoomProfiles[0]) {
-                    event.preventDefault()
-                    selectRoom(filteredRoomProfiles[0])
-                  }
-                  if (event.key === 'Escape') {
-                    setIsRoomPickerOpen(false)
-                    setRoomQuery(roomName(index?.profiles || [], roomKey))
-                  }
-                }}
-                placeholder="Найти рум"
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 py-3 pl-10 pr-3 text-slate-100 outline-none focus:border-blue-500"
-              />
-              {isRoomPickerOpen && (
-                <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40">
-                  {filteredRoomProfiles.length ? (
-                    filteredRoomProfiles.map((profile) => (
-                      <button
-                        key={profile.room_key}
-                        type="button"
-                        onMouseDown={(event) => event.preventDefault()}
-                        onClick={() => selectRoom(profile)}
-                        className={`w-full rounded-lg px-3 py-2 text-left transition-colors ${
-                          profile.room_key === roomKey
-                            ? 'bg-blue-600/20 text-blue-200'
-                            : 'text-slate-300 hover:bg-slate-800 hover:text-white'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="font-semibold">{profile.display_name}</span>
-                          {!profile.is_active && <EyeOff size={14} className="shrink-0 text-slate-500" />}
-                        </div>
-                        {profile.network_name && <div className="text-xs text-slate-500">{profile.network_name}</div>}
-                      </button>
-                    ))
-                  ) : (
-                    <div className="px-3 py-4 text-sm text-slate-500">Румы не найдены</div>
-                  )}
-                </div>
-              )}
-            </div>
+            <ComboboxField
+              value={roomKey}
+              options={roomOptions}
+              onSelect={(nextRoomKey) => {
+                const profile = index?.profiles.find((item) => item.room_key === nextRoomKey)
+                if (profile) selectRoom(profile)
+              }}
+              matches={matchesRoomOption}
+              placeholder="Найти рум"
+              emptyText="Румы не найдены"
+              className="min-w-0 flex-1"
+            />
             <button
               type="button"
               onClick={startAddRoom}
@@ -1028,15 +970,12 @@ export default function RoomAdminView({
         {showDealTypeSelector && (
         <div className="min-w-44">
           <label className="mb-1 block text-sm font-medium text-slate-400">Тип сделки</label>
-          <select
+          <SelectField
             value={mode === 'linkVerification' ? activeLinkVerificationDealType : activeDealType}
-            onChange={(event) => setDealType(event.target.value as RoomDealType)}
-            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-          >
-            {visibleDealTypes.map((type) => (
-              <option key={type} value={type}>{dealTypeLabels[type]}</option>
-            ))}
-          </select>
+            options={visibleDealTypes.map((type) => ({ value: type, label: dealTypeLabels[type] }))}
+            onChange={(value) => setDealType(value as RoomDealType)}
+            ariaLabel="Тип сделки"
+          />
         </div>
         )}
         {(mode === 'deals' || mode === 'linkVerification') && (
@@ -1396,14 +1335,12 @@ function PaymentMethodEditor({
         </div>
         <div className="space-y-4">
           <Field label="Операция">
-            <select
+            <SelectField
               value={currentForm.operation_type}
-              onChange={(event) => updateMethodIdentity({ operation_type: event.target.value as RoomOperationType })}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-            >
-              <option value="Deposit">Депозит</option>
-              <option value="Withdrawal">Вывод</option>
-            </select>
+              options={[{ value: 'Deposit', label: 'Депозит' }, { value: 'Withdrawal', label: 'Вывод' }]}
+              onChange={(value) => updateMethodIdentity({ operation_type: value as RoomOperationType })}
+              ariaLabel="Операция"
+            />
           </Field>
           <div className="grid grid-cols-2 gap-3">
             <Field label="Монета">
@@ -1759,15 +1696,12 @@ function LinkVerificationTemplateDraft({
       <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
         <div className="space-y-4">
           <Field label="Шаблон">
-            <select
+            <SelectField
               value={selectedTemplate.key}
-              onChange={(event) => onSelect(event.target.value)}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-            >
-              {templateOptions.map((template) => (
-                <option key={template.key} value={template.key}>{template.label}</option>
-              ))}
-            </select>
+              options={templateOptions.map((template) => ({ value: template.key, label: template.label }))}
+              onChange={onSelect}
+              ariaLabel="Шаблон"
+            />
           </Field>
           <Field label="Название">
             <input
@@ -1777,14 +1711,12 @@ function LinkVerificationTemplateDraft({
             />
           </Field>
           <Field label="Канал">
-            <select
+            <SelectField
               value={draftChannel}
-              onChange={(event) => setDraftChannel(event.target.value as 'messenger' | 'email')}
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
-            >
-              <option value="messenger">Мессенджер</option>
-              <option value="email">Email</option>
-            </select>
+              options={[{ value: 'messenger', label: 'Мессенджер' }, { value: 'email', label: 'Email' }]}
+              onChange={(value) => setDraftChannel(value as 'messenger' | 'email')}
+              ariaLabel="Канал"
+            />
           </Field>
           <div className="rounded-lg border border-slate-700/70 bg-slate-900/50 p-3 text-xs leading-5 text-slate-500">
             Плейсхолдеры: {'<room_name>'}, {'<player_data>'}, {'<username>'}, {'<id>'}, {'<nick>'}, {'<email>'}, {'<messenger>'}, {'<messenger_username>'}.
