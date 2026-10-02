@@ -8,10 +8,10 @@ executed_by: ""
 depends_on: [T-0004]
 aliases: [Improve room available wallets UI]
 scope: [room-knowledge, wallets, ux]
-links: [pdk/knowledge/requirements.md, pdk/knowledge/architecture.md, docs/room_knowledge_plan.md, src/components/RoomAdminView.tsx, src/components/RoomInfoView.tsx, src/utils/roomAdminWalletMatching.ts, src/utils/roomWalletFormatting.ts, electron/database.ts, electron/database.test.ts]
+links: [pdk/knowledge/requirements.md, pdk/knowledge/architecture.md, docs/room_knowledge_plan.md, src/components/RoomAdminView.tsx, src/components/RoomInfoView.tsx, src/utils/roomAdminWalletMatching.ts, src/utils/roomWalletFormatting.ts, electron/database.ts, electron/database.test.ts, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md]
 sessions: []
 commits: []
-revision: 2
+revision: 3
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -46,3 +46,4 @@ updated: 2026-10-02
 
 - 2026-10-02 created
 - 2026-10-02 update: depends_on +T-0004
+- 2026-10-02 update: links +pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md

@@ -1,17 +1,17 @@
 ---
 id: T-0004
 title: "Проверить схему локальной БД и решить, нужны ли улучшения"
-status: proposed
+status: active
 owner: agent
 model: L4 — кросс-доменный аудит модели данных и миграционных рисков
 executed_by: ""
 depends_on: []
 aliases: [Review local database schema and decide improvements]
 scope: [database, architecture, data-model]
-links: [pdk/knowledge/requirements.md, pdk/knowledge/architecture.md, docs/project_specification.md, docs/room_knowledge_plan.md, docs/link_verification_mvp_notes.md, electron/database.ts, electron/database.test.ts, electron/roomKnowledgeSeed.ts]
+links: [pdk/knowledge/requirements.md, pdk/knowledge/architecture.md, docs/project_specification.md, docs/room_knowledge_plan.md, docs/link_verification_mvp_notes.md, electron/database.ts, electron/database.test.ts, electron/roomKnowledgeSeed.ts, pdk/knowledge/notes/T-0004-schema-audit.md, pdk/knowledge/decisions/ADR-0001-room-key-immutable.md, pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md]
 sessions: []
 commits: []
-revision: 1
+revision: 6
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -32,11 +32,11 @@ updated: 2026-10-02
 
 ## Checkpoint
 
-Задача создана по запросу владельца как отдельный design/audit этап. Предварительная гипотеза о переносе доступных кошельков «в сущность рума» не является принятым решением.
+ADR-0003 принят владельцем 2026-10-02 (кошельки принадлежат руму и типу сделки, метод — только описание) → current, привязан к T-0003. ADR-0001 отклонён/отложен до перехода на Notion; «оставить как есть» относилось только к переименованию румов. ADR-0002 (одноразовые миграции: удалённые методы возвращаются после перезапуска) — draft, ждёт явного да/нет владельца. Аудит: notes/T-0004-schema-audit.md. Production-код и БД не менялись.
 
 ## Next step
 
-Запустить pdk-design: построить ER-карту текущей схемы, проверить реальные связи по коду и тестам и сравнить варианты «оставить как есть» и «нормализовать связи».
+Получить решение владельца по ADR-0002; при «да» создать задачу реализации (L3) и закрыть T-0004; при «нет» архивировать ADR-0002 и закрыть T-0004. Далее — T-0003.
 
 ## Blockers
 
@@ -45,3 +45,8 @@ updated: 2026-10-02
 ## Log
 
 - 2026-10-02 created
+- 2026-10-02 update: status proposed -> active
+- 2026-10-02 update: links +pdk/knowledge/notes/T-0004-schema-audit.md +pdk/knowledge/decisions/ADR-0001-room-key-immutable.md +pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md +pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md
+- 2026-10-02 checkpoint: Аудит схемы готов: pdk/knowledge/notes/T-0004-schema-audit.md (ER-карта, 8 зон риска, сверка с requirements; риски 1 ...
+- 2026-10-02 checkpoint: Решение владельца 2026-10-02: схему оставляем как есть, глобальная переделка модели данных — при переходе источника и...
+- 2026-10-02 checkpoint: ADR-0003 принят владельцем 2026-10-02 (кошельки принадлежат руму и типу сделки, метод — только описание) → current, п...
