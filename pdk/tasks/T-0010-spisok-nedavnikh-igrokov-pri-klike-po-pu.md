@@ -10,8 +10,8 @@ aliases: [Recent players dropdown on empty search]
 scope: [players, ui]
 links: [src/components/SearchPlayerView.tsx, src/App.tsx, electron/database.ts, electron/main.ts, electron/preload.ts, src/vite-env.d.ts, src/utils/recentPlayers.ts]
 sessions: []
-commits: []
-revision: 3
+commits: [b2af5b5]
+revision: 4
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -45,3 +45,4 @@ Changed: src/components/SearchPlayerView.tsx, src/App.tsx, electron/{database,ma
 - 2026-10-02 created
 - 2026-10-02 update: executed_by "" -> claude-code/claude-opus-5-5, status proposed -> active, links +src/utils/recentPlayers.ts
 - 2026-10-02 checkpoint: Works: клик по пустому полю «Найти игрока» открывает список игроков (useDropdownField + DropdownPanel), сверху недавн...
+- 2026-10-02 update: commits +b2af5b5

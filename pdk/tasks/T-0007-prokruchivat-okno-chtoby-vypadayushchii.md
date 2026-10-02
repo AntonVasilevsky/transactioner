@@ -10,8 +10,8 @@ aliases: [Scroll dropdown into view near bottom edge]
 scope: [ui]
 links: [src/components/RoomNamePicker.tsx, src/components/LinkVerificationView.tsx, src/components/RoomInfoView.tsx, src/components/RoomAdminView.tsx]
 sessions: []
-commits: []
-revision: 5
+commits: [b2af5b5]
+revision: 6
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -51,3 +51,4 @@ Changed: src/components/fields/useDropdownField.ts (T-0009).
 - 2026-10-02 checkpoint: Works: src/utils/dropdownReveal.ts — ref-callback revealDropdown вызывает scrollIntoView({block:'nearest', behavior:'...
 - 2026-10-02 checkpoint: Works: src/utils/dropdownReveal.ts — revealDropdown (scrollIntoView nearest, smooth) подключён к 7 спискам.
 - 2026-10-02 checkpoint: Works: причина провала найдена — список открывался на нажатии мыши, плавная прокрутка стартовала, а выделение текста ...
+- 2026-10-02 update: commits +b2af5b5

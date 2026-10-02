@@ -10,8 +10,8 @@ aliases: [Picker dropdown reopens on window refocus]
 scope: [link-verification, ui]
 links: [src/components/LinkVerificationView.tsx, src/components/RoomNamePicker.tsx, src/components/RoomInfoView.tsx, src/components/RoomAdminView.tsx]
 sessions: []
-commits: []
-revision: 6
+commits: [b2af5b5]
+revision: 7
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -54,3 +54,4 @@ Changed: src/utils/windowFocusRestore.ts(+test); подключение — че
 - 2026-10-02 checkpoint: Works: общий модуль src/utils/windowFocusRestore.ts — после blur окна первый фокус считается восстановлением и не отк...
 - 2026-10-02 checkpoint: Works: windowFocusRestore подключён в 9 местах; ручная проверка владельца — возврат в окно ок для всех полей «Привязо...
 - 2026-10-02 checkpoint: Works: возврат в окно не открывает списки (проверено владельцем). Новые требования (повторный клик закрывает список/к...
+- 2026-10-02 update: commits +b2af5b5

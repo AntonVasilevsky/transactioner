@@ -10,8 +10,8 @@ aliases: [Focus new room account row after add]
 scope: [ui, players]
 links: [src/components/AddPlayerView.tsx, src/components/EditPlayerView.tsx, src/components/RoomNamePicker.tsx]
 sessions: []
-commits: []
-revision: 5
+commits: [b2af5b5]
+revision: 6
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -53,3 +53,4 @@ Changed: src/components/{AddPlayerView,EditPlayerView,RoomNamePicker}.tsx.
 - 2026-10-02 checkpoint: Works: в AddPlayerView и EditPlayerView состояние newRowFocus помечает новую строку; поле «Покер-рум» (RoomNamePicker...
 - 2026-10-02 checkpoint: Works: «Добавить рум» прокручивает к новому аккаунту и ставит курсор в «Покер-рум»; «Добавить контакт» — курсор в нов...
 - 2026-10-02 checkpoint: Works: «Добавить рум» — новый аккаунт с пустым румом, курсор в поле, окно прокручено, список не открывается сам; спис...
+- 2026-10-02 update: commits +b2af5b5

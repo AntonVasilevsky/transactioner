@@ -10,8 +10,8 @@ aliases: [Unified picker and date field behavior]
 scope: [ui]
 links: [src/components/RoomNamePicker.tsx, src/components/LinkVerificationView.tsx, src/components/RoomInfoView.tsx, src/components/RoomAdminView.tsx, src/components/RakebackView.tsx, src/components/AddPlayerView.tsx, src/components/EditPlayerView.tsx, src/utils/linkVerificationFormatting.ts, src/components/fields/useDropdownField.ts, src/components/fields/ComboboxField.tsx, src/components/fields/SelectField.tsx, src/components/fields/DateField.tsx, src/utils/roomUsageSort.ts]
 sessions: []
-commits: []
-revision: 4
+commits: [b2af5b5]
+revision: 5
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -51,3 +51,4 @@ Pending decisions: убраны закрепление Shenpoker в «Ответ
 - 2026-10-02 update: executed_by "" -> claude-code/claude-opus-5-5, status proposed -> active
 - 2026-10-02 update: links +src/components/fields/useDropdownField.ts +src/components/fields/ComboboxField.tsx +src/components/fields/SelectField.tsx +src/components/fields/DateField.tsx +src/utils/roomUsageSort.ts
 - 2026-10-02 checkpoint: Works: общие поля в src/components/fields: useDropdownField (правила открытия/закрытия: клик открывает, повторный кли...
+- 2026-10-02 update: commits +b2af5b5
