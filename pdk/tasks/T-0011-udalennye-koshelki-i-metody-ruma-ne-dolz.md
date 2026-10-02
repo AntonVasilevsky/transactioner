@@ -1,17 +1,17 @@
 ---
 id: T-0011
 title: Удалённые кошельки и методы рума не должны возвращаться после перезапуска
-status: proposed
+status: active
 owner: agent
 model: "L3 — high: миграции и seed при старте, риск потери локальных данных; поведение определяют тесты на перезапуск"
-executed_by: ""
+executed_by: claude-code/claude-fable-5-1
 depends_on: [T-0004]
 aliases: [deleted room wallets payment methods reappear after restart seed migration]
 scope: [database, rooms, wallets]
 links: [pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, pdk/knowledge/notes/T-0004-schema-audit.md, electron/database.ts, electron/database.test.ts, src/components/RoomAdminView.tsx]
 sessions: []
 commits: []
-revision: 1
+revision: 2
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -43,3 +43,4 @@ updated: 2026-10-02
 ## Log
 
 - 2026-10-02 created
+- 2026-10-02 update: executed_by "" -> claude-code/claude-fable-5-1, status proposed -> active

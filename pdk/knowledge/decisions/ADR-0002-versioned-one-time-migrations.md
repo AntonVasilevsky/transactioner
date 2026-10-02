@@ -1,7 +1,7 @@
 ---
 title: "ADR-0002: Версионированные одноразовые миграции и seed только для новой БД"
 type: canonical
-status: draft
+status: current
 scope: [database, data-model, release]
 updated: 2026-10-02
 supersedes: []
@@ -36,3 +36,4 @@ supersedes: []
 ## Status log
 
 - 2026-10-02 draft — proposed by claude-code/claude-opus-5-5 in task T-0004.
+- 2026-10-02 accepted by owner (Anton Vasilevsky) in task T-0004.
