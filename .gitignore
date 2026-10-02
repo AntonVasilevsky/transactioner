@@ -32,3 +32,8 @@ build/private/*
 .gbrain-source
 .sources/
 .gstack/
+.pdk/cache/
+.pdk/logs/
+.pdk/local.json
+pdk/.obsidian/
+graphify-out/

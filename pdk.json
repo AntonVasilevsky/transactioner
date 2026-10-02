@@ -1,0 +1,26 @@
+{
+  "pdk": {
+    "version": "0.2.0"
+  },
+  "name": "transactioner",
+  "mode": "assisted",
+  "paths": {
+    "vault": "pdk",
+    "knowledge": "pdk/knowledge",
+    "tasks": "pdk/tasks",
+    "skills": ".agents/skills"
+  },
+  "mandatory": [
+    "pdk/knowledge/project.md",
+    "pdk/knowledge/rules.md"
+  ],
+  "taskPrefix": "T",
+  "features": {
+    "backup": "auto",
+    "brake": "auto",
+    "graph": "auto",
+    "reviewOcr": "auto",
+    "ocrFull": "manual",
+    "measure": "auto"
+  }
+}
