@@ -1,7 +1,7 @@
 ---
 id: T-0007
 title: "Прокручивать окно, чтобы выпадающий список был виден целиком"
-status: active
+status: done
 owner: agent
 model: L1 — локальное UI-поведение
 executed_by: claude-code/claude-opus-5-5
@@ -11,7 +11,7 @@ scope: [ui]
 links: [src/components/RoomNamePicker.tsx, src/components/LinkVerificationView.tsx, src/components/RoomInfoView.tsx, src/components/RoomAdminView.tsx]
 sessions: []
 commits: [b2af5b5]
-revision: 6
+revision: 7
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -29,14 +29,13 @@ updated: 2026-10-02
 
 ## Checkpoint
 
-Works: причина провала найдена — список открывался на нажатии мыши, плавная прокрутка стартовала, а выделение текста в обработчике клика её прерывало. Теперь при клике список открывается после выделения, прокрутка — в requestAnimationFrame (useDropdownField.panelRef); src/utils/dropdownReveal.ts удалён.
-Verified: npm run lint — ok; npm test — 22 файла, 188/188; npm run build — ok; pdk check — 0 errors. В приложении не проверялось (нет DOM-тестов).
-Not done: ручная проверка; коммит.
-Changed: src/components/fields/useDropdownField.ts (T-0009).
+Works: общие поля выбора (src/components/fields: useDropdownField, ComboboxField, SelectField, DateField) с едиными правилами — клик открывает, повторный клик и Esc закрывают с прежним значением, Tab открывает, возврат в окно не открывает, список у нижнего края прокручивается в зону видимости; системные <select> заменены; свой календарь в рейкбеке; единая сортировка румов (roomUsageSort); «Добавить рум» — пустой рум, фокус без открытия списка, проверка пустого рума при сохранении.
+Verified: npm run lint, npm test 191/191, npm run build — ok; ручная проверка владельца 2026-10-02 — все 8 пунктов чек-листа ок (вид списков, повторный клик/Esc, клавиатура, нижний край, «Добавить рум», свой рум, календарь, возврат в окно).
+Changed: коммит b2af5b5.
 
 ## Next step
 
-Ждёт ручной проверки T-0009 (список «Покер-рум» у нижнего края при клике мышью); затем коммит и --status done.
+Нет — задача закрыта.
 
 ## Found in manual check
 
@@ -52,3 +51,5 @@ Changed: src/components/fields/useDropdownField.ts (T-0009).
 - 2026-10-02 checkpoint: Works: src/utils/dropdownReveal.ts — revealDropdown (scrollIntoView nearest, smooth) подключён к 7 спискам.
 - 2026-10-02 checkpoint: Works: причина провала найдена — список открывался на нажатии мыши, плавная прокрутка стартовала, а выделение текста ...
 - 2026-10-02 update: commits +b2af5b5
+- 2026-10-02 checkpoint: Works: общие поля выбора (src/components/fields: useDropdownField, ComboboxField, SelectField, DateField) с едиными п...
+- 2026-10-02 update: status active -> done

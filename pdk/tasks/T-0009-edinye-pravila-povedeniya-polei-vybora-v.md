@@ -1,7 +1,7 @@
 ---
 id: T-0009
 title: Единые правила поведения полей выбора во всём приложении
-status: active
+status: done
 owner: agent
 model: L2 — общий компонент выбора и замена в нескольких экранах
 executed_by: claude-code/claude-opus-5-5
@@ -11,7 +11,7 @@ scope: [ui]
 links: [src/components/RoomNamePicker.tsx, src/components/LinkVerificationView.tsx, src/components/RoomInfoView.tsx, src/components/RoomAdminView.tsx, src/components/RakebackView.tsx, src/components/AddPlayerView.tsx, src/components/EditPlayerView.tsx, src/utils/linkVerificationFormatting.ts, src/components/fields/useDropdownField.ts, src/components/fields/ComboboxField.tsx, src/components/fields/SelectField.tsx, src/components/fields/DateField.tsx, src/utils/roomUsageSort.ts]
 sessions: []
 commits: [b2af5b5]
-revision: 5
+revision: 6
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -31,15 +31,13 @@ updated: 2026-10-02
 
 ## Checkpoint
 
-Works: общие поля в src/components/fields: useDropdownField (правила открытия/закрытия: клик открывает, повторный клик и Esc закрывают с прежним значением, Tab открывает, возврат в окно не открывает, прокрутка к списку после клика через rAF), ComboboxField (список с поиском, стрелки/Enter), SelectField (замена всех 15 системных <select>), DateField (свой календарь вместо системного). Все 7 списков с поиском и 15 select переведены; даты рейкбека — DateField. Единая сортировка румов src/utils/roomUsageSort.ts (Nexa, Champion Poker, RedStar → число аккаунтов → алфавит) во всех списках румов; sortLinkVerificationRoomOptions теперь обёртка. Требования REQ-UI-001…005 и архитектура обновлены.
-Verified: npm run lint — ok; npm test — 22 файла, 188/188; npm run build — ok; pdk check — 0 errors. В приложении не проверялось (нет DOM-тестов).
-Not done: ручная проверка владельцем; коммит.
-Changed: src/components/fields/*, src/hooks/useRoomUsageStats.ts, src/utils/{roomUsageSort,calendar}.ts(+tests), src/components/{LinkVerificationView,RoomInfoView,RoomAdminView,FormView,AddPlayerView,EditPlayerView,RakebackView,RoomNamePicker}.tsx, src/utils/linkVerificationFormatting.ts, pdk/knowledge/{requirements,architecture}.md. Удалён несохранённый src/utils/dropdownReveal.ts (заменён хуком).
-Pending decisions: убраны закрепление Shenpoker в «Ответ» и локальный счётчик просмотров в «Информации о руме» — ради единого правила; вернуть, если владелец против.
+Works: общие поля выбора (src/components/fields: useDropdownField, ComboboxField, SelectField, DateField) с едиными правилами — клик открывает, повторный клик и Esc закрывают с прежним значением, Tab открывает, возврат в окно не открывает, список у нижнего края прокручивается в зону видимости; системные <select> заменены; свой календарь в рейкбеке; единая сортировка румов (roomUsageSort); «Добавить рум» — пустой рум, фокус без открытия списка, проверка пустого рума при сохранении.
+Verified: npm run lint, npm test 191/191, npm run build — ok; ручная проверка владельца 2026-10-02 — все 8 пунктов чек-листа ок (вид списков, повторный клик/Esc, клавиатура, нижний край, «Добавить рум», свой рум, календарь, возврат в окно).
+Changed: коммит b2af5b5.
 
 ## Next step
 
-Владельцу пройти чек-лист ручной проверки (в ответе агента 2026-10-02); по итогам — исправить найденное, затем коммит T-0006…T-0009 одним коммитом и --status done для всех четырёх.
+Нет — задача закрыта.
 
 ## Blockers
 
@@ -52,3 +50,5 @@ Pending decisions: убраны закрепление Shenpoker в «Ответ
 - 2026-10-02 update: links +src/components/fields/useDropdownField.ts +src/components/fields/ComboboxField.tsx +src/components/fields/SelectField.tsx +src/components/fields/DateField.tsx +src/utils/roomUsageSort.ts
 - 2026-10-02 checkpoint: Works: общие поля в src/components/fields: useDropdownField (правила открытия/закрытия: клик открывает, повторный кли...
 - 2026-10-02 update: commits +b2af5b5
+- 2026-10-02 checkpoint: Works: общие поля выбора (src/components/fields: useDropdownField, ComboboxField, SelectField, DateField) с едиными п...
+- 2026-10-02 update: status active -> done

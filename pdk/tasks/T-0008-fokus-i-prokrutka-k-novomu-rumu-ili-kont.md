@@ -1,7 +1,7 @@
 ---
 id: T-0008
 title: Фокус и прокрутка к новому руму или контакту в карточке игрока
-status: active
+status: done
 owner: agent
 model: L1 — локальное UI-поведение
 executed_by: claude-code/claude-opus-5-5
@@ -11,7 +11,7 @@ scope: [ui, players]
 links: [src/components/AddPlayerView.tsx, src/components/EditPlayerView.tsx, src/components/RoomNamePicker.tsx]
 sessions: []
 commits: [b2af5b5]
-revision: 6
+revision: 7
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -29,14 +29,13 @@ updated: 2026-10-02
 
 ## Checkpoint
 
-Works: «Добавить рум» — новый аккаунт с пустым румом, курсор в поле, окно прокручено, список не открывается сам; список румов в карточке игрока отсортирован по числу аккаунтов (общее правило T-0009). Сохранение с пустым румом даёт ошибку «Выберите рум в каждом аккаунте». Тип контакта — общий SelectField.
-Verified: npm run lint — ok; npm test — 22 файла, 188/188; npm run build — ok; pdk check — 0 errors. В приложении не проверялось (нет DOM-тестов).
-Not done: ручная проверка; коммит.
-Changed: src/components/{AddPlayerView,EditPlayerView,RoomNamePicker}.tsx.
+Works: общие поля выбора (src/components/fields: useDropdownField, ComboboxField, SelectField, DateField) с едиными правилами — клик открывает, повторный клик и Esc закрывают с прежним значением, Tab открывает, возврат в окно не открывает, список у нижнего края прокручивается в зону видимости; системные <select> заменены; свой календарь в рейкбеке; единая сортировка румов (roomUsageSort); «Добавить рум» — пустой рум, фокус без открытия списка, проверка пустого рума при сохранении.
+Verified: npm run lint, npm test 191/191, npm run build — ok; ручная проверка владельца 2026-10-02 — все 8 пунктов чек-листа ок (вид списков, повторный клик/Esc, клавиатура, нижний край, «Добавить рум», свой рум, календарь, возврат в окно).
+Changed: коммит b2af5b5.
 
 ## Next step
 
-Ждёт ручной проверки T-0009 (пустой рум у нового аккаунта, список не открыт, порядок по частоте, ошибка при пустом руме); затем коммит и --status done.
+Нет — задача закрыта.
 
 ## Found in manual check
 
@@ -54,3 +53,5 @@ Changed: src/components/{AddPlayerView,EditPlayerView,RoomNamePicker}.tsx.
 - 2026-10-02 checkpoint: Works: «Добавить рум» прокручивает к новому аккаунту и ставит курсор в «Покер-рум»; «Добавить контакт» — курсор в нов...
 - 2026-10-02 checkpoint: Works: «Добавить рум» — новый аккаунт с пустым румом, курсор в поле, окно прокручено, список не открывается сам; спис...
 - 2026-10-02 update: commits +b2af5b5
+- 2026-10-02 checkpoint: Works: общие поля выбора (src/components/fields: useDropdownField, ComboboxField, SelectField, DateField) с едиными п...
+- 2026-10-02 update: status active -> done

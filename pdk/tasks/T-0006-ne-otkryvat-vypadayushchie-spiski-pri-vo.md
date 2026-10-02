@@ -1,7 +1,7 @@
 ---
 id: T-0006
 title: Не открывать выпадающие списки при возврате в окно приложения
-status: active
+status: done
 owner: agent
 model: L1 — локальное UI-поведение
 executed_by: claude-code/claude-opus-5-5
@@ -11,7 +11,7 @@ scope: [link-verification, ui]
 links: [src/components/LinkVerificationView.tsx, src/components/RoomNamePicker.tsx, src/components/RoomInfoView.tsx, src/components/RoomAdminView.tsx]
 sessions: []
 commits: [b2af5b5]
-revision: 7
+revision: 8
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -31,14 +31,13 @@ updated: 2026-10-02
 
 ## Checkpoint
 
-Works: возврат в окно не открывает списки (проверено владельцем). Новые требования (повторный клик закрывает список/календарь с прежним значением) реализованы в общем хуке T-0009 для всех полей.
-Verified: npm run lint — ok; npm test — 22 файла, 188/188; npm run build — ok; pdk check — 0 errors. В приложении не проверялось (нет DOM-тестов).
-Not done: ручная проверка повторного клика; коммит.
-Changed: src/utils/windowFocusRestore.ts(+test); подключение — через src/components/fields/useDropdownField.ts (T-0009).
+Works: общие поля выбора (src/components/fields: useDropdownField, ComboboxField, SelectField, DateField) с едиными правилами — клик открывает, повторный клик и Esc закрывают с прежним значением, Tab открывает, возврат в окно не открывает, список у нижнего края прокручивается в зону видимости; системные <select> заменены; свой календарь в рейкбеке; единая сортировка румов (roomUsageSort); «Добавить рум» — пустой рум, фокус без открытия списка, проверка пустого рума при сохранении.
+Verified: npm run lint, npm test 191/191, npm run build — ok; ручная проверка владельца 2026-10-02 — все 8 пунктов чек-листа ок (вид списков, повторный клик/Esc, клавиатура, нижний край, «Добавить рум», свой рум, календарь, возврат в окно).
+Changed: коммит b2af5b5.
 
 ## Next step
 
-Ждёт ручной проверки T-0009 (повторный клик по списку и календарю); затем коммит и --status done.
+Нет — задача закрыта.
 
 ## Found in manual check
 
@@ -55,3 +54,5 @@ Changed: src/utils/windowFocusRestore.ts(+test); подключение — че
 - 2026-10-02 checkpoint: Works: windowFocusRestore подключён в 9 местах; ручная проверка владельца — возврат в окно ок для всех полей «Привязо...
 - 2026-10-02 checkpoint: Works: возврат в окно не открывает списки (проверено владельцем). Новые требования (повторный клик закрывает список/к...
 - 2026-10-02 update: commits +b2af5b5
+- 2026-10-02 checkpoint: Works: общие поля выбора (src/components/fields: useDropdownField, ComboboxField, SelectField, DateField) с едиными п...
+- 2026-10-02 update: status active -> done

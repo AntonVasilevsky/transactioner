@@ -1,7 +1,7 @@
 ---
 id: T-0010
 title: Список недавних игроков при клике по пустому полю поиска
-status: active
+status: done
 owner: agent
 model: L2 — UI + IPC + SQLite
 executed_by: claude-code/claude-opus-5-5
@@ -11,7 +11,7 @@ scope: [players, ui]
 links: [src/components/SearchPlayerView.tsx, src/App.tsx, electron/database.ts, electron/main.ts, electron/preload.ts, src/vite-env.d.ts, src/utils/recentPlayers.ts]
 sessions: []
 commits: [b2af5b5]
-revision: 4
+revision: 5
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -29,14 +29,13 @@ updated: 2026-10-02
 
 ## Checkpoint
 
-Works: клик по пустому полю «Найти игрока» открывает список игроков (useDropdownField + DropdownPanel), сверху недавно открытые; выбор открывает карточку. Новый IPC mark-player-used вызывается в App.handlePlayerFound; searchPlayer больше не обновляет last_used_at.
-Verified: npm run lint — ok; npm test — 23 файла, 191/191 (новые: recentPlayers.test.ts, database.test.ts «orders recent players by opening, not by searching»); npm run build — ok; pdk check — 0 errors.
-Not done: ручная проверка; коммит. У существующих игроков last_used_at уже заполнен прежней логикой (последний поиск) — порядок станет точным по мере открытия карточек.
-Changed: src/components/SearchPlayerView.tsx, src/App.tsx, electron/{database,main,preload}.ts, src/vite-env.d.ts, src/components/fields/useDropdownField.ts (canOpen), src/utils/recentPlayers.ts(+test), electron/database.test.ts, pdk/knowledge/requirements.md.
+Works: клик по пустому полю «Найти игрока» открывает список недавних игроков (сверху последние открытые), выбор открывает карточку; last_used_at обновляется при открытии карточки (IPC mark-player-used), поиск порядок не меняет.
+Verified: npm run lint, npm test 191/191, npm run build — ok; ручная проверка владельца 2026-10-02 — все 6 пунктов ок (курсор без открытия, открытие по клику, порядок A/B, повторный клик/Esc, стрелки/Enter, ввод текста скрывает список, возврат в окно не открывает).
+Changed: коммит b2af5b5.
 
 ## Next step
 
-Владельцу перезапустить npm run dev (изменены main/preload) и проверить список недавних игроков; затем коммит вместе с T-0006…T-0009.
+Нет — задача закрыта.
 
 ## Blockers
 
@@ -46,3 +45,5 @@ Changed: src/components/SearchPlayerView.tsx, src/App.tsx, electron/{database,ma
 - 2026-10-02 update: executed_by "" -> claude-code/claude-opus-5-5, status proposed -> active, links +src/utils/recentPlayers.ts
 - 2026-10-02 checkpoint: Works: клик по пустому полю «Найти игрока» открывает список игроков (useDropdownField + DropdownPanel), сверху недавн...
 - 2026-10-02 update: commits +b2af5b5
+- 2026-10-02 checkpoint: Works: клик по пустому полю «Найти игрока» открывает список недавних игроков (сверху последние открытые), выбор откры...
+- 2026-10-02 update: status active -> done
