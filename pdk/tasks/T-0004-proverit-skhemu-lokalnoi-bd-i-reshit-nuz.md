@@ -1,17 +1,17 @@
 ---
 id: T-0004
 title: "Проверить схему локальной БД и решить, нужны ли улучшения"
-status: active
+status: done
 owner: agent
 model: L4 — кросс-доменный аудит модели данных и миграционных рисков
 executed_by: ""
 depends_on: []
 aliases: [Review local database schema and decide improvements]
 scope: [database, architecture, data-model]
-links: [pdk/knowledge/requirements.md, pdk/knowledge/architecture.md, docs/project_specification.md, docs/room_knowledge_plan.md, docs/link_verification_mvp_notes.md, electron/database.ts, electron/database.test.ts, electron/roomKnowledgeSeed.ts, pdk/knowledge/notes/T-0004-schema-audit.md, pdk/knowledge/decisions/ADR-0001-room-key-immutable.md, pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md]
+links: [pdk/knowledge/requirements.md, pdk/knowledge/architecture.md, docs/project_specification.md, docs/room_knowledge_plan.md, docs/link_verification_mvp_notes.md, electron/database.ts, electron/database.test.ts, electron/roomKnowledgeSeed.ts, pdk/knowledge/research/T-0004-schema-audit.md, pdk/knowledge/decisions/ADR-0001-room-key-immutable.md, pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md]
 sessions: []
-commits: []
-revision: 7
+commits: [a2fb46f]
+revision: 8
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -32,11 +32,11 @@ updated: 2026-10-02
 
 ## Checkpoint
 
-Владелец уточнил требование: удалённые кошельки рума не должны появляться заново. Проверено на временной БД: адрес из room_wallets не возвращается; возвращается депозитный метод на ту же монету+сеть (seed при каждом старте; migrateWalletsToPaymentMethods при каждом старте), а редактор румов строит список кошельков по депозитным методам — отсюда «кошелёк появился снова». Создана T-0011 (proposed, L3) под это требование; реализует ADR-0002 (draft) в модели ADR-0003 (current). ADR-0001 отложен до Notion. Код и БД не менялись.
+Итог: аудит схемы (research/T-0004-schema-audit.md). Решения владельца 2026-10-02: ADR-0001 отложен до перехода на Notion (archived); ADR-0002 принят (одноразовые миграции, seed только для новой БД, snapshot before-migration) → реализация в T-0011; ADR-0003 принят (кошельки принадлежат руму + типу сделки) → основа T-0003. Production-код и БД в рамках задачи не менялись; pdk check 0 errors.
 
 ## Next step
 
-Владелец: принять ADR-0002 и активировать T-0011 → закрыть T-0004 (done) и выполнять T-0011 через pdk-deliver.
+Нет — задача закрыта. Реализация: T-0011; UI кошельков: T-0003.
 
 ## Blockers
 
@@ -46,8 +46,10 @@ updated: 2026-10-02
 
 - 2026-10-02 created
 - 2026-10-02 update: status proposed -> active
-- 2026-10-02 update: links +pdk/knowledge/notes/T-0004-schema-audit.md +pdk/knowledge/decisions/ADR-0001-room-key-immutable.md +pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md +pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md
-- 2026-10-02 checkpoint: Аудит схемы готов: pdk/knowledge/notes/T-0004-schema-audit.md (ER-карта, 8 зон риска, сверка с requirements; риски 1 ...
+- 2026-10-02 update: links +pdk/knowledge/research/T-0004-schema-audit.md +pdk/knowledge/decisions/ADR-0001-room-key-immutable.md +pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md +pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md
+- 2026-10-02 checkpoint: Аудит схемы готов: pdk/knowledge/research/T-0004-schema-audit.md (ER-карта, 8 зон риска, сверка с requirements; риски 1 ...
 - 2026-10-02 checkpoint: Решение владельца 2026-10-02: схему оставляем как есть, глобальная переделка модели данных — при переходе источника и...
 - 2026-10-02 checkpoint: ADR-0003 принят владельцем 2026-10-02 (кошельки принадлежат руму и типу сделки, метод — только описание) → current, п...
 - 2026-10-02 checkpoint: Владелец уточнил требование: удалённые кошельки рума не должны появляться заново. Проверено на временной БД: адрес из...
+- 2026-10-02 checkpoint: Итог: аудит схемы (research/T-0004-schema-audit.md). Решения владельца 2026-10-02: ADR-0001 отложен до перехода на Notio...
+- 2026-10-02 update: status active -> done

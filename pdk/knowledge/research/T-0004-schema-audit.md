@@ -1,9 +1,8 @@
 ---
 title: T-0004 — Аудит схемы локальной SQLite-БД
-type: temporary
-status: draft
+type: research
+status: current
 scope: [database, data-model, architecture]
-task: T-0004
 updated: 2026-10-02
 ---
 # Аудит схемы локальной SQLite-БД
