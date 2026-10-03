@@ -80,9 +80,17 @@ const getActiveTransactionWallets = (): KnownTransactionWallet[] => {
   ))
 }
 
+const runMigrationBackup = () => {
+  const result = createDatabaseSnapshotBackup(dbPath, backupDir, 'before-migration')
+  if (!result.created) {
+    throw new Error(`Database backup before migration was not created: ${result.reason || 'unknown reason'}`)
+  }
+  console.info('Migration backup created', result.backupPath)
+}
+
 try {
   runDailyBackup()
-  store = new TransactionerDatabase(dbPath)
+  store = new TransactionerDatabase(dbPath, { beforeMigrate: runMigrationBackup })
 } catch (err) {
   console.error('Database migration failed', err)
   migrationError = err instanceof Error ? err : new Error(String(err))

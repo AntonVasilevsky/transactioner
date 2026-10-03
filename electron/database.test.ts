@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import Database from 'better-sqlite3'
-import { TransactionerDatabase, type SaveLinkVerificationResponseTemplateInput, type SaveLinkVerificationTemplateInput, type SavePlayerInput } from './database'
+import { TransactionerDatabase, type RoomPaymentMethodInfo, type SaveLinkVerificationResponseTemplateInput, type SaveLinkVerificationTemplateInput, type SavePlayerInput } from './database'
+import type { PendingMigrationInfo } from './migrations'
 
 let tempDir = ''
 let dbPath = ''
@@ -1118,6 +1119,191 @@ describe('TransactionerDatabase', () => {
     ])
   })
 
+  it('does not bring back a deleted seed deposit method and its wallet after restart', () => {
+    const isChampionUsdtTrc20Deposit = (method: RoomPaymentMethodInfo) => (
+      method.room_key === 'champion-poker' &&
+      method.deal_type === 'Agent' &&
+      method.operation_type === 'Deposit' &&
+      method.currency === 'USDT' &&
+      method.network === 'TRC20'
+    )
+    const wallet = db.saveRoomWallet({
+      room_key: 'champion-poker',
+      deal_type: 'Agent',
+      currency: 'USDT',
+      network: 'TRC20',
+      wallet_address: 'TChampionTrc20Wallet',
+      is_active: 1,
+      sort_order: 10,
+    })
+    expect(wallet.success).toBe(true)
+    const seededMethods = db.getRoomKnowledgeAdminIndex().paymentMethods.filter(isChampionUsdtTrc20Deposit)
+    expect(seededMethods).toHaveLength(1)
+
+    expect(db.deleteRoomPaymentMethod(seededMethods[0].id).success).toBe(true)
+    expect(db.deleteRoomWallet(Number(wallet.id)).success).toBe(true)
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+
+    expect(db.getRoomKnowledgeAdminIndex().paymentMethods.filter(isChampionUsdtTrc20Deposit)).toHaveLength(0)
+    expect(db.getRoomWallets('champion-poker', 'Agent')).toHaveLength(0)
+  })
+
+  it('does not bring back a deleted seed withdrawal method after restart', () => {
+    const isChampionUsdtTrc20Withdrawal = (method: RoomPaymentMethodInfo) => (
+      method.room_key === 'champion-poker' &&
+      method.operation_type === 'Withdrawal' &&
+      method.method_name === 'USDT TRC20'
+    )
+    const seededMethod = db.getRoomKnowledgeAdminIndex().paymentMethods.find(isChampionUsdtTrc20Withdrawal)
+    expect(seededMethod).toBeDefined()
+
+    expect(db.deleteRoomPaymentMethod(Number(seededMethod?.id)).success).toBe(true)
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+
+    expect(db.getRoomKnowledgeAdminIndex().paymentMethods.some(isChampionUsdtTrc20Withdrawal)).toBe(false)
+  })
+
+  it('does not recreate a deleted deposit method from a remaining wallet after restart', () => {
+    const isNexaLtcDeposit = (method: RoomPaymentMethodInfo) => (
+      method.room_key === 'nexa' &&
+      method.operation_type === 'Deposit' &&
+      method.currency === 'LTC'
+    )
+    const method = db.saveRoomPaymentMethod({
+      room_key: 'nexa',
+      deal_type: 'Agent',
+      operation_type: 'Deposit',
+      method_name: 'LTC',
+      currency: 'LTC',
+      network: 'LTC',
+      is_active: 1,
+      sort_order: 50,
+    })
+    const wallet = db.saveRoomWallet({
+      room_key: 'nexa',
+      deal_type: 'Agent',
+      currency: 'LTC',
+      network: 'LTC',
+      wallet_address: 'ltc1-manual-nexa-wallet',
+      is_active: 1,
+      sort_order: 50,
+    })
+    expect(method.success).toBe(true)
+    expect(wallet.success).toBe(true)
+
+    expect(db.deleteRoomPaymentMethod(Number(method.id)).success).toBe(true)
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+
+    expect(db.getRoomKnowledgeAdminIndex().paymentMethods.filter(isNexaLtcDeposit)).toHaveLength(0)
+    expect(db.getRoomWallets('nexa', 'Agent').map((row) => row.wallet_address)).toEqual(['ltc1-manual-nexa-wallet'])
+
+    expect(db.deleteRoomWallet(Number(wallet.id)).success).toBe(true)
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+
+    expect(db.getRoomKnowledgeAdminIndex().paymentMethods.filter(isNexaLtcDeposit)).toHaveLength(0)
+    expect(db.getRoomWallets('nexa', 'Agent')).toHaveLength(0)
+  })
+
+  it('keeps a single deposit method when only its wallet is deleted', () => {
+    const isRedstarLtcDeposit = (method: RoomPaymentMethodInfo) => (
+      method.room_key === 'redstar' &&
+      method.operation_type === 'Deposit' &&
+      method.currency === 'LTC'
+    )
+    expect(db.saveRoomPaymentMethod({
+      room_key: 'redstar',
+      deal_type: 'General',
+      operation_type: 'Deposit',
+      method_name: 'LTC',
+      currency: 'LTC',
+      network: 'LTC',
+      is_active: 1,
+      sort_order: 50,
+    }).success).toBe(true)
+    const wallet = db.saveRoomWallet({
+      room_key: 'redstar',
+      deal_type: 'General',
+      currency: 'LTC',
+      network: 'LTC',
+      wallet_address: 'ltc1-manual-redstar-wallet',
+      is_active: 1,
+      sort_order: 50,
+    })
+
+    expect(db.deleteRoomWallet(Number(wallet.id)).success).toBe(true)
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+
+    expect(db.getRoomWallets('redstar', 'General')).toHaveLength(0)
+    expect(db.getRoomKnowledgeAdminIndex().paymentMethods.filter(isRedstarLtcDeposit)).toHaveLength(1)
+  })
+
+  it('moves an unversioned database to schema version 1 once, after the backup hook, keeping user data', () => {
+    expect(db.saveRoomWallet({
+      room_key: 'nexa',
+      deal_type: 'Agent',
+      currency: 'USDT',
+      network: 'TRC20',
+      wallet_address: 'TLegacyNexaWallet',
+      is_active: 1,
+      sort_order: 10,
+    }).success).toBe(true)
+    const player = db.savePlayer(basePlayer())
+    expect(player.success).toBe(true)
+    db.close()
+    const raw = new Database(dbPath)
+    expect(raw.pragma('user_version', { simple: true })).toBe(1)
+    raw.pragma('user_version = 0')
+    raw.close()
+
+    const hookCalls: PendingMigrationInfo[] = []
+    db = new TransactionerDatabase(dbPath, { beforeMigrate: (info) => hookCalls.push(info) })
+
+    expect(hookCalls).toEqual([{ fromVersion: 0, toVersion: 1, steps: ['initial-room-knowledge'] }])
+    expect(db.getRoomWallets('nexa', 'Agent').map((row) => row.wallet_address)).toEqual(['TLegacyNexaWallet'])
+    expect(db.getPlayerById(Number(player.id))?.accounts).toHaveLength(1)
+
+    db.close()
+    db = new TransactionerDatabase(dbPath, { beforeMigrate: (info) => hookCalls.push(info) })
+    expect(hookCalls).toHaveLength(1)
+  })
+
+  it('does not call the backup hook for a brand-new database', () => {
+    const hookCalls: PendingMigrationInfo[] = []
+    const fresh = new TransactionerDatabase(path.join(tempDir, 'fresh.db'), {
+      beforeMigrate: (info) => hookCalls.push(info),
+    })
+    fresh.close()
+
+    expect(hookCalls).toHaveLength(0)
+  })
+
+  it('stops before changing an existing database when the backup hook fails', () => {
+    db.close()
+    const raw = new Database(dbPath)
+    raw.prepare("DELETE FROM room_payment_methods WHERE room_key = 'champion-poker'").run()
+    raw.pragma('user_version = 0')
+    raw.close()
+
+    expect(() => new TransactionerDatabase(dbPath, {
+      beforeMigrate: () => {
+        throw new Error('backup failed')
+      },
+    })).toThrow('backup failed')
+
+    const untouched = new Database(dbPath)
+    expect(untouched.pragma('user_version', { simple: true })).toBe(0)
+    expect((
+      untouched.prepare("SELECT COUNT(*) AS count FROM room_payment_methods WHERE room_key = 'champion-poker'").get() as { count: number }
+    ).count).toBe(0)
+    untouched.close()
+    db = new TransactionerDatabase(dbPath)
+  })
+
   it('saves editable room payment method limits and keeps inactive methods visible in admin', () => {
     const created = db.saveRoomPaymentMethod({
       room_key: 'redstar',
@@ -1279,6 +1465,7 @@ describe('TransactionerDatabase', () => {
         room_key, deal_type, currency, network, wallet_address, fee_text, verified_at, is_active, sort_order
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run('test-room', 'Agent', 'BTC', 'BTC', 'bc1agent', 'без комиссии', '2026-02-16', 1, 30)
+    raw.pragma('user_version = 0')
     raw.close()
 
     db = new TransactionerDatabase(dbPath)

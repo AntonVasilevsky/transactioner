@@ -1348,7 +1348,7 @@ function PaymentMethodEditor({
                 value={currentForm.currency || ''}
                 onChange={(event) => updateMethodIdentity({ currency: event.target.value })}
                 placeholder="USDT"
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
               />
             </Field>
             <Field label="Сеть">
@@ -1356,7 +1356,7 @@ function PaymentMethodEditor({
                 value={currentForm.network || ''}
                 onChange={(event) => updateMethodIdentity({ network: event.target.value })}
                 placeholder="TRC20"
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
+                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
               />
             </Field>
           </div>
@@ -1409,7 +1409,7 @@ function PaymentMethodEditor({
               value={currentForm.limits_text || ''}
               onChange={(event) => onChange({ ...currentForm, limits_text: event.target.value })}
               placeholder="min 200 EUR"
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
             />
           </Field>
           <Field label="Комиссия">
@@ -1417,7 +1417,7 @@ function PaymentMethodEditor({
               value={currentForm.fee_text || ''}
               onChange={(event) => onChange({ ...currentForm, fee_text: event.target.value })}
               placeholder="без комиссии"
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 outline-none focus:border-blue-500"
+              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
             />
           </Field>
           <Field label="Комментарий">

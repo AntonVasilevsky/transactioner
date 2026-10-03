@@ -1,4 +1,6 @@
+import { existsSync, statSync } from 'node:fs'
 import Database from 'better-sqlite3'
+import { getPendingMigrations, getSchemaVersion, runMigrations, type MigrationStep, type PendingMigrationInfo } from './migrations'
 import { contactSearchKey, normalizeContactText } from '../src/utils/contactNormalization'
 import { matchesRoomSearch } from '../src/utils/roomSearch'
 import { getWalletAddressValidationError } from '../src/utils/walletValidation'
@@ -328,12 +330,31 @@ interface SearchPlayerRow extends DbPlayer {
   room_summary?: string | null
 }
 
+export interface TransactionerDatabaseOptions {
+  /** Runs before pending migrations touch an existing database; throwing aborts the start. */
+  beforeMigrate?: (info: PendingMigrationInfo) => void
+}
+
 export class TransactionerDatabase {
   private db: Database.Database
 
-  constructor(dbPath: string) {
+  constructor(dbPath: string, options: TransactionerDatabaseOptions = {}) {
+    const isNewDatabase = !existsSync(dbPath) || statSync(dbPath).size === 0
     this.db = new Database(dbPath)
-    this.initialize()
+    try {
+      const pending = getPendingMigrations(this.db, this.migrationSteps())
+      if (pending.length > 0 && !isNewDatabase) {
+        options.beforeMigrate?.({
+          fromVersion: getSchemaVersion(this.db),
+          toVersion: pending[pending.length - 1].version,
+          steps: pending.map((step) => step.name),
+        })
+      }
+      this.initialize()
+    } catch (err: unknown) {
+      this.db.close()
+      throw err
+    }
   }
 
   close() {
@@ -1531,11 +1552,28 @@ export class TransactionerDatabase {
     `)
     this.migrateLinkVerificationResponseTemplates()
     this.migrateLinkVerificationDealDefaults()
-    this.seedRoomKnowledge(roomKnowledgeSeed)
-    this.cleanupLegacyCombinedPaymentMethods()
     this.resetRoomWalletsForManualConfiguration()
-    this.migrateWalletsToPaymentMethods()
-    this.cleanupCombinedDepositMethodsBackedByWallets()
+    runMigrations(this.db, this.migrationSteps())
+  }
+
+  /**
+   * One-time steps tracked by PRAGMA user_version (ADR-0002). Reference data for a
+   * release ships as a new numbered step, never by re-running the seed, so rows the
+   * user deleted stay deleted.
+   */
+  private migrationSteps(): MigrationStep[] {
+    return [
+      {
+        version: 1,
+        name: 'initial-room-knowledge',
+        up: () => {
+          this.seedRoomKnowledge(roomKnowledgeSeed)
+          this.cleanupLegacyCombinedPaymentMethods()
+          this.migrateWalletsToPaymentMethods()
+          this.cleanupCombinedDepositMethodsBackedByWallets()
+        },
+      },
+    ]
   }
 
   private resetRoomWalletsForManualConfiguration() {

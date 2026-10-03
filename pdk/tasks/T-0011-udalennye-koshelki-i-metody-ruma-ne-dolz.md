@@ -8,10 +8,10 @@ executed_by: claude-code/claude-fable-5-1
 depends_on: [T-0004]
 aliases: [deleted room wallets payment methods reappear after restart seed migration]
 scope: [database, rooms, wallets]
-links: [pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, pdk/knowledge/research/T-0004-schema-audit.md, electron/database.ts, electron/database.test.ts, src/components/RoomAdminView.tsx]
+links: [pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, pdk/knowledge/research/T-0004-schema-audit.md, electron/database.ts, electron/database.test.ts, src/components/RoomAdminView.tsx, electron/migrations.ts, electron/migrations.test.ts, electron/main.ts]
 sessions: []
 commits: []
-revision: 2
+revision: 4
 created: 2026-10-02
 updated: 2026-10-02
 ---
@@ -32,11 +32,19 @@ updated: 2026-10-02
 
 ## Checkpoint
 
-Задача создана из требования владельца в T-0004. Причина воспроизведена на временной БД (см. Goal). Код не менялся.
+Works: стартовые данные румов и старые миграции (создание Deposit-метода из кошелька, чистка комбинированных методов) выполняются один раз — шаг 1 по PRAGMA user_version (electron/migrations.ts: runMigrations, шаг + версия в одной транзакции). Удалённые кошельки и методы (стартовые и пользовательские) после перезапуска не возвращаются. Перед миграцией существующей БД — snapshot before-migration (main.ts runMigrationBackup); провал snapshot останавливает запуск, БД не меняется; для новой БД snapshot не делается. resetRoomWalletsForManualConfiguration оставлен в базовой части — он уже одноразовый по своему флагу в app_settings.
+Verified: npm run lint — ok; npm test — 24 файла, 200/200 (новые: 7 в database.test.ts, 2 в migrations.test.ts); npm run build — ok; pdk check — 0 errors. Тест 'returns room wallets filtered…' переведён на старую БД (user_version = 0): создание метода из кошелька теперь проверяется как одноразовая миграция, а не при каждом старте.
+Not done: ручная проверка владельца; коммит; независимый pdk-review (L3/L4) до релиза.
+Known: при первом запуске новой версии на существующей БД шаг 1 выполнится последний раз — ранее удалённые стартовые методы вернутся один раз; после повторного удаления больше не возвращаются. Вне scope: migrateLinkVerificationResponseTemplates при каждом старте выставляет is_active = 1 всем шаблонам ответа (выключенный шаблон включается снова) — кандидат в отдельную задачу.
+Changed: electron/migrations.ts(+test), electron/database.ts (конструктор с beforeMigrate, migrationSteps), electron/main.ts, electron/database.test.ts.
 
 ## Next step
 
-Получить от владельца принятие ADR-0002 и активацию задачи; затем pdk-deliver.
+Получить от владельца да на коммит и результат ручной проверки (настройки румов: удалить кошелёк/метод → перезапустить → не появился); затем коммит, pdk-review и --status done.
+
+## Found in manual check
+
+- 2026-10-03 (1) Добавление кошелька/метода: примеры в полях (USDT, TRC20, min 200 EUR, без комиссии) сделать полупрозрачными — исправлено: placeholder-slate-600/60, как в рейкбеке.
 
 ## Blockers
 
@@ -44,3 +52,5 @@ updated: 2026-10-02
 
 - 2026-10-02 created
 - 2026-10-02 update: executed_by "" -> claude-code/claude-fable-5-1, status proposed -> active
+- 2026-10-02 update: links +electron/migrations.ts +electron/migrations.test.ts +electron/main.ts
+- 2026-10-02 checkpoint: Works: стартовые данные румов и старые миграции (создание Deposit-метода из кошелька, чистка комбинированных методов)...
