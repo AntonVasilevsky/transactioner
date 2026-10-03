@@ -6,6 +6,8 @@ export type LinkVerificationFieldKey =
   | 'email'
   | 'nick'
   | 'userId'
+  // Despite the name, this is the first form field (Username), not the messenger contact;
+  // unlike 'username' it does not make a room switch copy Room ID into an empty Username.
   | 'messengerUsername'
 
 export interface LinkVerificationTemplate {
@@ -93,8 +95,8 @@ export const LINK_VERIFICATION_TEMPLATES: Record<string, LinkVerificationTemplat
     label: 'WPTG',
     channel: 'messenger',
     body: `Запрос на подтверждение привязки аккаунта WPTG:
-ID: <id>
 Nick: <nick>
+ID: <id>
 Mail: <email>
 
 Добавить под трекер: 116 прямая касса`
@@ -138,24 +140,24 @@ Mail: <email>
     channel: 'messenger',
     body: `Привет. Проверьте, пожалуйста, привязку:
 Nick: <nick>
-Username: <messenger_username>
-ID: <id>`
+ID: <id>
+Username: <messenger_username>`
   },
   partypoker: {
     key: 'partypoker',
     label: 'PartyPoker',
     channel: 'messenger',
     body: `Проверка привязки аккаунта:
-Mail: <email>
-User ID: <user_id>`
+User ID: <user_id>
+Mail: <email>`
   },
   bwin: {
     key: 'bwin',
     label: 'bwin',
     channel: 'messenger',
     body: `Проверка привязки аккаунта:
-Mail: <email>
-User ID: <user_id>`
+User ID: <user_id>
+Mail: <email>`
   },
   gutspoker: {
     key: 'gutspoker',

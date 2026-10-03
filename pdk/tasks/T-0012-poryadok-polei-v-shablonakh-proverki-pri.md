@@ -1,0 +1,47 @@
+---
+id: T-0012
+title: Порядок полей в шаблонах проверки привязки как в форме
+status: active
+owner: agent
+model: "L2 — medium: порядок полей в шаблонах, без изменения состава полей"
+executed_by: claude-code/claude-opus-5-5
+depends_on: [T-0005]
+aliases: [link verification template field order matches form order]
+scope: [link-verification]
+links: [src/utils/linkVerificationRules.ts, src/utils/linkVerificationFormatting.ts, src/components/LinkVerificationView.test.ts]
+sessions: []
+commits: []
+revision: 3
+created: 2026-10-03
+updated: 2026-10-03
+---
+## Goal
+
+Требование владельца (2026-10-03): поля в шаблоне проверки привязки идут в том же порядке, что и поля формы — Username/Nick/Login/User ID → Room ID → Email → мессенджер-контакт. Правило одно для всех румов; рум может не показывать часть полей, но порядок сохраняется. Username — текст (например, Crack4), Room ID — цифры. Подстановка значений сейчас верна, меняется только порядок. TON Poker — по предложению агента (владельцу не важно). Причина нарушения: `<player_data>` собирался в порядке `requiredFields` правила рума; в T-0005 для CoinPoker задан `roomId, email, messengerUsername`.
+
+## Acceptance
+
+- `<player_data>` всегда в порядке формы, независимо от порядка `requiredFields` в правиле рума.
+- Встроенные шаблоны WPTG, TON, PartyPoker, bwin переставлены в порядок формы; состав полей и текст не меняются.
+- Для всех румов набор подставляемых значений тот же, что до изменения (сравнение старой и новой версии), меняется только порядок.
+- Тесты: порядок для всех правил румов и всех встроенных шаблонов; CoinPoker `Crack4 / 7712345 / email`.
+- `npm run lint`, `npm test`, `npm run build` — ok; `pdk check` — 0 errors.
+
+## Checkpoint
+
+Works: поля в шаблоне проверки привязки идут в порядке формы (Username → Room ID → Email → контакт) для всех румов: <player_data> сортируется по порядку формы (linkVerificationFormatting.ts FORM_FIELD_ORDER), шаблоны WPTG/TON/PartyPoker/bwin переставлены. Порядок изменился у WPTG, TON, CoinPoker, PartyPoker, bwin и румов «по ID» на общем шаблоне (BCPoker, TigerGaming и др.); у Nexa, Champion, RedStar, 888, Guts — без изменений.
+Verified: сравнение старой и новой версии по всем румам — набор значений тот же, меняется только порядок; npm run lint — ok; npm test — 24 файла, 202/202; npm run build — ok; pdk check — 0 errors.
+Not done: переименование messengerUsername → username сознательно не сделано: меняет автозаполнение Username из Room ID при смене рума; оставлен комментарий в типе. Коммит не сделан. Ручная проверка владельца не делалась.
+Changed: src/utils/linkVerificationFormatting.ts, src/utils/linkVerificationRules.ts, src/components/LinkVerificationView.test.ts (не закоммичено).
+
+## Next step
+
+Получить да владельца на коммит; ручная проверка в Привязки → Запрос (CoinPoker, WPTG, PartyPoker); затем --status done
+
+## Blockers
+
+## Log
+
+- 2026-10-03 created
+- 2026-10-03 update: executed_by "" -> claude-code/claude-opus-5-5, status proposed -> active
+- 2026-10-03 checkpoint: Works: поля в шаблоне проверки привязки идут в порядке формы (Username → Room ID → Email → контакт) для всех румов: <...

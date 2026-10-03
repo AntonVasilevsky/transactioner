@@ -98,11 +98,25 @@ export const sortLinkVerificationRoomOptions = (
   stats: RoomRegistrationStatLike[]
 ) => sortRoomNamesByUsage([...CORE_LINK_VERIFICATION_ROOMS, ...roomNames], stats)
 
+/**
+ * Position of each field in the request form: the first form field (Username/Nick/Login/User ID),
+ * then Room ID, then Email. A room rule decides which fields appear, never their order.
+ */
+const FORM_FIELD_ORDER: Record<LinkVerificationFieldKey, number> = {
+  username: 0,
+  nick: 0,
+  userId: 0,
+  messengerUsername: 0,
+  roomId: 1,
+  email: 2
+}
+
 export const composePlayerDataByRule = (
   requiredFields: LinkVerificationFieldKey[],
   fieldValues: Record<LinkVerificationFieldKey, string>
 ) => {
-  return uniqueNonEmpty(requiredFields.map((key) => fieldValues[key] || '')).join(' / ')
+  const orderedFields = [...requiredFields].sort((left, right) => FORM_FIELD_ORDER[left] - FORM_FIELD_ORDER[right])
+  return uniqueNonEmpty(orderedFields.map((key) => fieldValues[key] || '')).join(' / ')
 }
 
 export const composeTypedIdentityData = (values: {

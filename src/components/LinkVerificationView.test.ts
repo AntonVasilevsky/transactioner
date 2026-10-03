@@ -16,7 +16,7 @@ import {
   sortLinkVerificationRoomOptions,
   toDirectusMessenger
 } from '../utils/linkVerificationFormatting'
-import { LINK_VERIFICATION_TEMPLATES, resolveLinkVerificationDealDefaultScope, resolveLinkVerificationRoomRule } from '../utils/linkVerificationRules'
+import { LINK_VERIFICATION_TEMPLATES, linkVerificationRoomRules, resolveLinkVerificationDealDefaultScope, resolveLinkVerificationRoomRule } from '../utils/linkVerificationRules'
 
 describe('LinkVerificationView helpers', () => {
   it('replaces placeholders in request template from form values', () => {
@@ -34,20 +34,43 @@ describe('LinkVerificationView helpers', () => {
     expect(text).not.toContain('<email>')
   })
 
-  it('builds player_data in rule-required order with deduplication', () => {
-    const result = composePlayerDataByRule(
-      ['nick', 'roomId', 'email', 'messengerUsername'],
-      {
-        username: 'hero-user',
-        nick: 'hero-user',
-        roomId: '1483304',
-        email: 'hero@example.com',
-        userId: '',
-        messengerUsername: '@hero'
-      }
-    )
+  it('builds player_data in form order whatever the rule order, with deduplication', () => {
+    const fields = buildLinkVerificationFieldValues({ username: 'hero-user', roomId: '1483304', email: 'hero@example.com' })
 
-    expect(result).toBe('hero-user / 1483304 / hero@example.com / @hero')
+    expect(composePlayerDataByRule(['email', 'roomId', 'nick', 'messengerUsername'], fields))
+      .toBe('hero-user / 1483304 / hero@example.com')
+    expect(composePlayerDataByRule(['roomId', 'email', 'messengerUsername'], fields))
+      .toBe('hero-user / 1483304 / hero@example.com')
+    expect(composePlayerDataByRule(['roomId', 'messengerUsername'], fields))
+      .toBe('hero-user / 1483304')
+  })
+
+  it('keeps form order (username, room id, email) for every room rule', () => {
+    const fields = buildLinkVerificationFieldValues({ username: 'name', roomId: '123', email: 'mail@example.com' })
+    const rooms = [...linkVerificationRoomRules.map((rule) => rule.canonicalRoomName), 'BCPoker', 'Stake']
+
+    for (const room of rooms) {
+      const parts = composePlayerDataByRule(resolveLinkVerificationRoomRule(room).requiredFields, fields).split(' / ')
+      const expected = ['name', '123', 'mail@example.com'].filter((value) => parts.includes(value))
+      expect(parts, room).toEqual(expected)
+    }
+  })
+
+  it('places template fields in form order: username, room id, email, messenger contact', () => {
+    const rank = (placeholder: string): number | null => {
+      if (['<nick>', '<username>', '<login>', '<user_id>'].includes(placeholder)) return 0
+      if (['<id>', '<room_id>'].includes(placeholder)) return 1
+      if (placeholder === '<email>') return 2
+      if (placeholder === '<messenger_username>') return 3
+      return null
+    }
+
+    for (const template of Object.values(LINK_VERIFICATION_TEMPLATES)) {
+      const ranks = (template.body.match(/<[a-z_]+>/g) || [])
+        .map(rank)
+        .filter((value): value is number => value !== null)
+      expect(ranks, template.key).toEqual([...ranks].sort((left, right) => left - right))
+    }
   })
 
   it('does not leak unrelated fields into player_data', () => {
@@ -66,11 +89,11 @@ describe('LinkVerificationView helpers', () => {
     expect(result).toBe('hero-nick / 1483304 / hero@example.com')
   })
 
-  it('puts CoinPoker id and email on one request line', () => {
+  it('puts CoinPoker username, id and email on one request line in form order', () => {
     const rule = resolveLinkVerificationRoomRule('CoinPoker')
     const playerData = composePlayerDataByRule(
       rule.requiredFields,
-      buildLinkVerificationFieldValues({ username: '', roomId: 'Crack4', email: 'crack4@example.com' })
+      buildLinkVerificationFieldValues({ username: 'Crack4', roomId: '7712345', email: 'crack4@example.com' })
     )
     const text = buildLinkVerificationRequestText(LINK_VERIFICATION_TEMPLATES.default.body, {
       room_name: 'CoinPoker',
@@ -79,7 +102,7 @@ describe('LinkVerificationView helpers', () => {
       messenger_username: '+591 71160533'
     })
 
-    expect(text).toBe('Проверка привязки CoinPoker\nCrack4 / crack4@example.com\nWA: +591 71160533\n@kapitonov')
+    expect(text).toBe('Проверка привязки CoinPoker\nCrack4 / 7712345 / crack4@example.com\nWA: +591 71160533\n@kapitonov')
   })
 
   it('builds request player data from only username, roomId, and email', () => {
