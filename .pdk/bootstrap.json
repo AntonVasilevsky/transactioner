@@ -1,5 +1,5 @@
 {
-  "toolkitVersion": "0.4.5",
+  "toolkitVersion": "0.4.7",
   "createdAt": "2026-10-02T00:18:23.057Z",
   "files": {
     ".gitignore": "4b3c0d375d592aab103d4c593f8b06e2a01f80115e4b359a7590b59a553d8311",
@@ -8,8 +8,8 @@
     ".gitignore#.pdk/logs/": "026611a37b288d48ff1a1adedfa6b263a2f67fd1e057acd11569fc5ec7e8564a",
     ".gitignore#graphify-out/": "e356a83e77ba6da5d467f015d93a8761121cab9f30adb20c064acc52259503a3",
     ".gitignore#pdk/.obsidian/": "db3b6231acc60ada1578f9155560271b655c6d8cf733c69e1e06ed37e7d28b28",
-    "AGENTS.md": "b7bea682de0af782115cbd383cff4952f1ba76dbe5a46aba59ac7a067e8377c6",
-    "AGENTS.md#pdk-block": "ffa0dfe00531a2a18db65b11144a1b5c1bed4ad49e920305c480c448af9fe438",
+    "AGENTS.md": "14e0b41d55e70b6ec8b6e17b4f0ebaa73a853e0e75d68fd697690f442bd1606f",
+    "AGENTS.md#pdk-block": "161e6d0a870eed24309dca46b727a1812e6ce397143a5f4756d46495eaa023b4",
     "pdk.json": "1501270cc06298d708744f6caa4a21796efe96e2f8b8d2b609c578ca44161835",
     "pdk/knowledge/archive/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "pdk/knowledge/decisions/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -23,7 +23,7 @@
     ".agents/skills/pdk-bootstrap/SKILL.md": "04eaf8ab86bb21f4b33971993904e7a31db0ef3203e0e193d10770e11343d65b",
     ".agents/skills/pdk-bootstrap/references/checklist.md": "244d0848296d64ff200d4dccbff855b1330928e22bdb5f49e537e0d7a317f68a",
     ".agents/skills/pdk-deliver/SKILL.md": "2d4424538c97d35999a9e1ad0f2e20e9d777467af8bc2e2f7aab8fe9f3e001a7",
-    ".agents/skills/pdk-design/SKILL.md": "6c5b85e41959d8e10e731de528a3513261f4b3082f336810cfdfccdb83347186",
+    ".agents/skills/pdk-design/SKILL.md": "320472c8f527dcb1cf7d5da4c1889c361305951bf00b9b68c2a837c3d68a3ec0",
     ".agents/skills/pdk-design/references/adr.md": "1498892ae3cfa7487c1a7c778e916ed5130362947fbc3a698db9fd720216297f",
     ".agents/skills/pdk-discover/SKILL.md": "82f6aa625a91bcd3767cf95380a699ecde2d36e54f31d02aeb7cee8688c3fa0d",
     ".agents/skills/pdk-discover/references/interview.md": "90240d6d65398301c4bb0ed00b2e9828b637dfffb4624663c167b0faa763d2ae",

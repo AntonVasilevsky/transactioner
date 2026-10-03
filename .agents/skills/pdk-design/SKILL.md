@@ -80,7 +80,22 @@ Paths here are PDK defaults; if `pdk.json` `paths` differ, use those.
 | L1 | narrow edits to an exact spec (config, rename, copy, docs) | small/fast, low |
 | L2 | implementation to a spec, with tests that define done | mid-tier, medium |
 | L3 | logic with many edge cases, concurrency, migrations, security | strongest general, high |
-| L4 | architecture, audit, acceptance, cross-cutting review | strongest available, high |
+| L4 | work where the strongest model is likely to do clearly better (below) | strongest available, high |
+
+L4 costs the scarcest model, so give it only where L3 would likely do worse.
+Decide with one question: **if this goes wrong, will the tests catch it?**
+No → L4 (or L3 plus an independent pdk-review at L4). Yes → L3 or lower.
+
+- L4 is likely better at: reviewing or auditing someone else's code (finding what
+  the author missed); decisions that are expensive to change (architecture, data
+  formats, ADRs); many constraints at once where one wrong step breaks the result;
+  a vague problem that needs judgement, not execution; a mistake that would show up
+  later, with users or in data, not in the tests.
+- L2/L3 does as well at: implementation to an exact spec with tests that decide
+  done, mechanical edits, docs, routine fixes.
+
+This is a heuristic, not a measurement: revise it when trial logs or reviews show
+where a level actually failed or added nothing.
 
 Write it as `"L2 — medium: spec in ADR-0003 is exact, tests decide done"`. The level
 token `L1`..`L4` must appear verbatim: the Pi adapter's `pdk/auto` model reads it
