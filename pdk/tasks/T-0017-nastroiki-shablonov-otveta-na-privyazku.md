@@ -1,7 +1,7 @@
 ---
 id: T-0017
 title: Настройки шаблонов ответа на привязку не должны сбрасываться при запуске
-status: proposed
+status: dropped
 owner: agent
 model: "L2 — medium: перенос повторяющегося шага в одноразовую миграцию по ADR-0002, есть готовый механизм и snapshot"
 executed_by: ""
@@ -9,9 +9,9 @@ depends_on: [T-0011]
 aliases: [link verification response templates reset on every start migrateLinkVerificationResponseTemplates is_active label notes one-time migration]
 scope: [link-verification, database]
 links: [pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, electron/database.ts, electron/database.test.ts, electron/migrations.ts]
-sessions: []
+sessions: [01a10223-e2be-770a-9bc6-2646a7428876]
 commits: []
-revision: 1
+revision: 3
 created: 2026-10-03
 updated: 2026-10-03
 ---
@@ -28,10 +28,18 @@ updated: 2026-10-03
 
 ## Checkpoint
 
+Dropped by owner 2026-10-03 (вариант А). Проверка кода: название, заметки, is_active и порядок шаблона ответа нигде в UI не показываются и не редактируются — редактор (RoomAdminView.tsx:1607) сам всегда сохраняет label «Подтверждение привязки», пустые notes, is_active=1; «Ответ» строит заголовок из имени рума. Поэтому сброс этих полей при запуске (migrateLinkVerificationResponseTemplates) сейчас ни на что не влияет; тексты не затрагиваются.
+Reopen when: понадобятся заметки для оператора рядом с текстом (не копируются игроку) или выключение шаблона без удаления — тогда сделать нормализацию одноразовым шагом миграции (ADR-0002).
+
 ## Next step
+
+Нет — отменено; вернуться при запросе заметок/выключения шаблонов ответа.
 
 ## Blockers
 
 ## Log
 
 - 2026-10-03 created
+- 2026-10-03 update: sessions +01a10223-e2be-770a-9bc6-2646a7428876
+- 2026-10-03 checkpoint: Dropped by owner 2026-10-03 (вариант А). Проверка кода: название, заметки, is_active и порядок шаблона ответа нигде в...
+- 2026-10-03 update: status proposed -> dropped
