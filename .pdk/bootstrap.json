@@ -1,5 +1,5 @@
 {
-  "toolkitVersion": "0.4.2",
+  "toolkitVersion": "0.4.4",
   "createdAt": "2026-10-02T00:18:23.057Z",
   "files": {
     ".gitignore": "4b3c0d375d592aab103d4c593f8b06e2a01f80115e4b359a7590b59a553d8311",
@@ -8,8 +8,8 @@
     ".gitignore#.pdk/logs/": "026611a37b288d48ff1a1adedfa6b263a2f67fd1e057acd11569fc5ec7e8564a",
     ".gitignore#graphify-out/": "e356a83e77ba6da5d467f015d93a8761121cab9f30adb20c064acc52259503a3",
     ".gitignore#pdk/.obsidian/": "db3b6231acc60ada1578f9155560271b655c6d8cf733c69e1e06ed37e7d28b28",
-    "AGENTS.md": "aa9cbbb1be669aefd755c77dbff4f19f03e2b4a6b9c69a74aebfd8b5d694ffaa",
-    "AGENTS.md#pdk-block": "73b055f61d1e1d88c8222b61253243f48e2bae5134950e45ef6bb5c6e385a53b",
+    "AGENTS.md": "a0b8c9b2f425b141ca8d86910c77bb0258bffcccf3cb5f34b3a0837de491242c",
+    "AGENTS.md#pdk-block": "b1d70c7ec8d407472101346f3764e1a7b6722ff49d00754e4fc13158ef8d39b1",
     "pdk.json": "1501270cc06298d708744f6caa4a21796efe96e2f8b8d2b609c578ca44161835",
     "pdk/knowledge/archive/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "pdk/knowledge/decisions/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
