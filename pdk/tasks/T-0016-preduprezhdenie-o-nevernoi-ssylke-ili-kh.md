@@ -10,8 +10,8 @@ aliases: [deposit transaction input warning wallet address link short hash]
 scope: [transactions]
 links: [src/utils/walletValidation.ts, src/components/FormView.tsx]
 sessions: []
-commits: []
-revision: 3
+commits: [806ddbb]
+revision: 4
 created: 2026-10-03
 updated: 2026-10-03
 ---
@@ -30,13 +30,14 @@ updated: 2026-10-03
 ## Checkpoint
 
 Works: под полем «TX ID / Ссылка на транзакцию» в депозите появляется предупреждение, если вставлен адрес кошелька или ссылка на адрес, неполный хеш (N из 64 символов) или случайный текст. Полный хеш — без предупреждения, поиск как раньше. Функция getTransactionInputWarning в src/utils/walletValidation.ts, вывод в FormView.tsx (только когда у поиска нет своего сообщения).
-Verified: npm run lint — ok; npm test — 24 файла, 206/206 (4 новых теста); npm run build — ok.
-Not done: коммит; ручная проверка владельца.
+Verified: npm run lint — ok; npm test — 24 файла, 206/206 (4 новых теста); npm run build — ok; pdk check — 0 errors.
+Not done: ручная проверка владельца; в сборку ещё не вошло (владелец: сборку пока не делать).
+Changed: коммит 806ddbb.
 Context: ложная тревога 2026-10-03 — поиск исправен (проверено на реальных депозитах TRC20/ERC20/BEP20 с копией БД владельца), была вставлена ссылка на адрес.
 
 ## Next step
 
-Да владельца на коммит; ручная проверка: вставить ссылку на адрес, обрезанный хеш, цифры; затем --status done
+Ручная проверка владельца: вставить ссылку на адрес, обрезанный хеш, цифры; затем --status done. В релиз — со следующей сборкой на мак.
 
 ## Blockers
 
@@ -44,4 +45,5 @@ Context: ложная тревога 2026-10-03 — поиск исправен 
 
 - 2026-10-03 created
 - 2026-10-03 update: executed_by "" -> claude-code/claude-opus-5-5, status proposed -> active
+- 2026-10-03 checkpoint: Works: под полем «TX ID / Ссылка на транзакцию» в депозите появляется предупреждение, если вставлен адрес кошелька ил...
 - 2026-10-03 checkpoint: Works: под полем «TX ID / Ссылка на транзакцию» в депозите появляется предупреждение, если вставлен адрес кошелька ил...
