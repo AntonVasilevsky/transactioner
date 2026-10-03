@@ -14,7 +14,7 @@ with every open point and every external fact traceable.
 - Not: requirements are accepted and the question is *how* (pdk-design);
   a concrete task is ready to implement (pdk-deliver); PDK not set up (pdk-bootstrap).
 
-Talk to the human in their language and write the documents in it (or in the
+Talk to the human in their language (a PDK "answer language" line in the prompt wins) and write the documents in it (or in the
 language the vault already uses). Task titles follow the human's language; if
 that is not English, also add an English alias (`pdk find` is lexical).
 

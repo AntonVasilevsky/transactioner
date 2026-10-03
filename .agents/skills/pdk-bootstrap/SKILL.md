@@ -15,7 +15,7 @@ the idea and constraints, and leave one task to continue from.
   pdk-maintain, for clarifying the idea use pdk-discover). If `pdk init` says
   it is inside another PDK project (exit 2), stop and ask where the root is.
 
-Talk to the human in their language. Write the idea in their language.
+Talk to the human in their language (a PDK "answer language" line in the prompt wins). Write the idea in their language.
 Task titles follow the human's language; if that is not English, also add an
 English alias (`pdk find` is lexical).
 

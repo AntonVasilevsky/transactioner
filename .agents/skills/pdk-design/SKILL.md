@@ -14,7 +14,7 @@ and turn them into tasks that a cheaper or stronger model can execute and verify
 - Not: the problem or scope is unclear (pdk-discover first); the decision is
   already accepted and only needs implementing (pdk-deliver).
 
-Talk to the human in their language. Task titles follow the human's language;
+Talk to the human in their language (a PDK "answer language" line in the prompt wins). Task titles follow the human's language;
 if that is not English, also add an English alias (`pdk find` is lexical).
 
 ## Inputs

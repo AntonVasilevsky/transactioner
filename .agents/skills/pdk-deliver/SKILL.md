@@ -14,7 +14,7 @@ The durable result is code plus a checkpoint that a new session can resume from.
   architecture choice that is not yet made (pdk-design); judging a finished
   diff (pdk-review); knowledge clean-up (pdk-maintain).
 
-Talk to the human in their language. Task titles follow the human's language;
+Talk to the human in their language (a PDK "answer language" line in the prompt wins). Task titles follow the human's language;
 if that is not English, also add an English alias (`pdk find` is lexical).
 
 ## Inputs

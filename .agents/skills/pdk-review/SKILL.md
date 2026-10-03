@@ -14,11 +14,14 @@ honestly how much of it was actually reviewed.
 - Not: implementing or fixing (pdk-deliver); reviewing the knowledge base
   (pdk-maintain); reviewing a design before code exists (pdk-design).
 
-Talk to the human in their language. If you create a task for the fixes, its
+Talk to the human in their language (a PDK "answer language" line in the prompt wins). If you create a task for the fixes, its
 title follows the human's language, plus an English alias if that is not English.
 
 Independence: prefer a fresh session or a different model from the implementer.
 Verify claims in the task's Checkpoint; do not take them as evidence.
+In Pi, `/pdk review --agent <task-id>` runs this skill in a separate read-only process
+with another strong model (test mode, only when the human asks). Started that way,
+follow the reviewer instructions in your prompt: they replace step 9's note and checkpoint.
 
 ## Inputs
 

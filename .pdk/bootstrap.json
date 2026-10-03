@@ -1,5 +1,5 @@
 {
-  "toolkitVersion": "0.4.7",
+  "toolkitVersion": "0.4.10",
   "createdAt": "2026-10-02T00:18:23.057Z",
   "files": {
     ".gitignore": "4b3c0d375d592aab103d4c593f8b06e2a01f80115e4b359a7590b59a553d8311",
@@ -8,8 +8,8 @@
     ".gitignore#.pdk/logs/": "026611a37b288d48ff1a1adedfa6b263a2f67fd1e057acd11569fc5ec7e8564a",
     ".gitignore#graphify-out/": "e356a83e77ba6da5d467f015d93a8761121cab9f30adb20c064acc52259503a3",
     ".gitignore#pdk/.obsidian/": "db3b6231acc60ada1578f9155560271b655c6d8cf733c69e1e06ed37e7d28b28",
-    "AGENTS.md": "14e0b41d55e70b6ec8b6e17b4f0ebaa73a853e0e75d68fd697690f442bd1606f",
-    "AGENTS.md#pdk-block": "161e6d0a870eed24309dca46b727a1812e6ce397143a5f4756d46495eaa023b4",
+    "AGENTS.md": "a4bcee128902815e394e09934f509a658f148158c53c33a53af16cf83dfb23a0",
+    "AGENTS.md#pdk-block": "f2c934ff9256dfd656d058131ce9405269c65d148210104a157f05bb79328df8",
     "pdk.json": "1501270cc06298d708744f6caa4a21796efe96e2f8b8d2b609c578ca44161835",
     "pdk/knowledge/archive/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "pdk/knowledge/decisions/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -20,15 +20,15 @@
     "pdk/tasks/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
   },
   "skills": {
-    ".agents/skills/pdk-bootstrap/SKILL.md": "04eaf8ab86bb21f4b33971993904e7a31db0ef3203e0e193d10770e11343d65b",
+    ".agents/skills/pdk-bootstrap/SKILL.md": "4dfe5f6f01f4baf9988138de60fedaf32855b4e52f64d7bb8d7834b5f4eb679d",
     ".agents/skills/pdk-bootstrap/references/checklist.md": "244d0848296d64ff200d4dccbff855b1330928e22bdb5f49e537e0d7a317f68a",
-    ".agents/skills/pdk-deliver/SKILL.md": "2d4424538c97d35999a9e1ad0f2e20e9d777467af8bc2e2f7aab8fe9f3e001a7",
-    ".agents/skills/pdk-design/SKILL.md": "320472c8f527dcb1cf7d5da4c1889c361305951bf00b9b68c2a837c3d68a3ec0",
+    ".agents/skills/pdk-deliver/SKILL.md": "8bb45fd81bd2e31e5390895b5e8ede406ffbf11448dfe2aaae8c7f0e92031da9",
+    ".agents/skills/pdk-design/SKILL.md": "15021a526810734a2ce54219c79ffde10964ed8eecdfed159061dcd5d74047f1",
     ".agents/skills/pdk-design/references/adr.md": "1498892ae3cfa7487c1a7c778e916ed5130362947fbc3a698db9fd720216297f",
-    ".agents/skills/pdk-discover/SKILL.md": "82f6aa625a91bcd3767cf95380a699ecde2d36e54f31d02aeb7cee8688c3fa0d",
+    ".agents/skills/pdk-discover/SKILL.md": "edb37ca8784bcf5a9cf91ed715aa0f24ba7daa0efd1b12834c320b35ea505b9d",
     ".agents/skills/pdk-discover/references/interview.md": "90240d6d65398301c4bb0ed00b2e9828b637dfffb4624663c167b0faa763d2ae",
-    ".agents/skills/pdk-maintain/SKILL.md": "449d0e2e1725a939698eb87e4f85200f0dfd5f3fe308a901f4f19392fca2d1b0",
-    ".agents/skills/pdk-review/SKILL.md": "4aebc007d8bc3bdd8e6b139dc56d4d5328cd7e03a59951fdafbda5cae8b9ff16",
+    ".agents/skills/pdk-maintain/SKILL.md": "196745f46e4b54af6b7be35bea284b93bacc4ed067c907be0d6597bfa8ce0234",
+    ".agents/skills/pdk-review/SKILL.md": "12592d87727523a769f32823b092453d278b77b709c5e4e5db1079eb0eeab3c5",
     ".agents/skills/pdk-review/references/checklist.md": "a6913658425075b13f8680dbd9f8fc3b843aa19b41e3401b55991700ef279c3e"
   }
 }

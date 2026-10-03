@@ -15,7 +15,7 @@ behind the human's back.
 - Not: writing new requirements or decisions (pdk-discover, pdk-design);
   reviewing code changes (pdk-review).
 
-Talk to the human in their language. Aliases you propose follow the human's
+Talk to the human in their language (a PDK "answer language" line in the prompt wins). Aliases you propose follow the human's
 language, plus an English alias when that is not English (`pdk find` is lexical).
 
 ## Inputs
