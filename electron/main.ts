@@ -80,12 +80,22 @@ const getActiveTransactionWallets = (): KnownTransactionWallet[] => {
   ))
 }
 
+/** The backup before a migration failed, so the database was left untouched. */
+class MigrationBackupError extends Error {}
+
 const runMigrationBackup = () => {
-  const result = createDatabaseSnapshotBackup(dbPath, backupDir, 'before-migration')
-  if (!result.created) {
-    throw new Error(`Database backup before migration was not created: ${result.reason || 'unknown reason'}`)
+  let reason = ''
+  try {
+    const result = createDatabaseSnapshotBackup(dbPath, backupDir, 'before-migration')
+    if (result.created) {
+      console.info('Migration backup created', result.backupPath)
+      return
+    }
+    reason = result.reason || 'unknown reason'
+  } catch (err) {
+    reason = err instanceof Error ? err.message : String(err)
   }
-  console.info('Migration backup created', result.backupPath)
+  throw new MigrationBackupError(`Database backup before migration was not created: ${reason}`)
 }
 
 try {
@@ -270,6 +280,15 @@ ipcMain.handle('update-default-wallet-details', (_, id: number, wallet: string, 
 let win: BrowserWindow | null
 
 function createWindow() {
+  if (migrationError instanceof MigrationBackupError) {
+    dialog.showErrorBox(
+      'Transactioner: не удалось создать резервную копию',
+      `Перед обновлением базы данных приложение создаёт резервную копию, но сейчас это не получилось. База данных не изменена, данные в порядке.\n\nПроверьте, что папка для резервных копий существует и доступна для записи и что на диске есть место, затем запустите приложение снова.\n\nПапка резервных копий:\n${backupDir}\n\nПричина: ${migrationError.message}`
+    )
+    app.quit()
+    return
+  }
+
   if (migrationError) {
     dialog.showErrorBox(
       'Transactioner database migration failed',

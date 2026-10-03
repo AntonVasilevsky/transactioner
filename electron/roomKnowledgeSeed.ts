@@ -1,3 +1,7 @@
+// Starting reference data for a NEW database only. Since T-0011 (ADR-0002) the seed runs once,
+// as migration step 1 in TransactionerDatabase.migrationSteps(); existing databases never see
+// later edits to this file. To ship a new room, method or deal to existing users, add a new
+// numbered step that inserts exactly those rows.
 export type RoomDealType = 'General' | 'Direct' | 'Agent'
 export type RoomLanguage = 'RU' | 'EN' | 'ES'
 export type RoomOperationType = 'Deposit' | 'Withdrawal'

@@ -181,7 +181,7 @@ Admin V1:
 * add new wallet rows;
 * create first deal/wallet rows for newly added rooms;
 * create a timestamped database backup before each room edit save;
-* keep seed non-destructive with `ON CONFLICT DO NOTHING`, so app updates can add missing new records without overwriting local edits.
+* seed runs once, only for a new database (T-0011, ADR-0002): records the user deleted never come back. New reference data for existing databases ships as a new numbered migration step in `TransactionerDatabase.migrationSteps()`, not by editing `roomKnowledgeSeed.ts`.
 
 Not in Admin V1:
 * hard delete rows; use inactive rows instead;
