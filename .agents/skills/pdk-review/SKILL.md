@@ -22,8 +22,11 @@ Verify claims in the task's Checkpoint; do not take them as evidence.
 
 ## Inputs
 
-- The diff: task `commits` (`git show <sha>`), a branch (`git diff <base>...HEAD`),
-  or uncommitted work (`git diff`, `git diff --cached`). Unclear range → ask.
+- The diff. "Review T-0011" means **that task's recorded `commits`** plus its Goal and
+  Acceptance (`pdk review-ocr --task T-0011` finds them); a task with no recorded commits →
+  say so and offer the working tree or a commit/range the human names — never guess.
+  Otherwise a commit, a branch (`git diff <base>...HEAD`) or uncommitted work (`git diff`,
+  `git diff --cached`). Unclear range → ask.
 - The task's Goal and Acceptance (`pdk task show <id>`).
 - The governing docs: `pdk resolve --task <id> --paths <changed files, comma
   separated>` (no task → `pdk resolve --paths … --query "<topic>"`). Read
@@ -42,9 +45,11 @@ skip silently, do not mention. `ocrFull` is human-only either way; when it is
 
 ## Steps
 
-0. **Change map + OCR spec (when feature `reviewOcr` is `auto`).** Run `pdk review-ocr --commit <sha>
-   --out .pdk/cache/review-spec.md` (or `--from <base> --to HEAD`; no args =
-   working tree) and read the file. It works without `ocr` too (git fallback,
+0. **Change map + OCR spec (when feature `reviewOcr` is `auto`).** Given a task id run
+   `pdk review-ocr --task <id> --out .pdk/cache/review-spec.md` (its header names the task
+   and commits); given a commit `--commit <sha>`; a range `--from <base> --to HEAD`; no
+   args = working tree. Read the file. Exit 1 with "no recorded commits" / "not in the
+   history" / "not a task and not a commit" → report it to the human, do not guess a range. It works without `ocr` too (git fallback,
    exit 2): the change list plus "Coverage gaps". With `ocr` (exit 0) it also
    groups files and attaches OCR's rule per group: review the listed files
    against that rule AND the PDK checklist. Either way close every item under

@@ -1,5 +1,5 @@
 {
-  "toolkitVersion": "0.4.4",
+  "toolkitVersion": "0.4.5",
   "createdAt": "2026-10-02T00:18:23.057Z",
   "files": {
     ".gitignore": "4b3c0d375d592aab103d4c593f8b06e2a01f80115e4b359a7590b59a553d8311",
@@ -8,8 +8,8 @@
     ".gitignore#.pdk/logs/": "026611a37b288d48ff1a1adedfa6b263a2f67fd1e057acd11569fc5ec7e8564a",
     ".gitignore#graphify-out/": "e356a83e77ba6da5d467f015d93a8761121cab9f30adb20c064acc52259503a3",
     ".gitignore#pdk/.obsidian/": "db3b6231acc60ada1578f9155560271b655c6d8cf733c69e1e06ed37e7d28b28",
-    "AGENTS.md": "a0b8c9b2f425b141ca8d86910c77bb0258bffcccf3cb5f34b3a0837de491242c",
-    "AGENTS.md#pdk-block": "b1d70c7ec8d407472101346f3764e1a7b6722ff49d00754e4fc13158ef8d39b1",
+    "AGENTS.md": "b7bea682de0af782115cbd383cff4952f1ba76dbe5a46aba59ac7a067e8377c6",
+    "AGENTS.md#pdk-block": "ffa0dfe00531a2a18db65b11144a1b5c1bed4ad49e920305c480c448af9fe438",
     "pdk.json": "1501270cc06298d708744f6caa4a21796efe96e2f8b8d2b609c578ca44161835",
     "pdk/knowledge/archive/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "pdk/knowledge/decisions/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -28,7 +28,7 @@
     ".agents/skills/pdk-discover/SKILL.md": "82f6aa625a91bcd3767cf95380a699ecde2d36e54f31d02aeb7cee8688c3fa0d",
     ".agents/skills/pdk-discover/references/interview.md": "90240d6d65398301c4bb0ed00b2e9828b637dfffb4624663c167b0faa763d2ae",
     ".agents/skills/pdk-maintain/SKILL.md": "449d0e2e1725a939698eb87e4f85200f0dfd5f3fe308a901f4f19392fca2d1b0",
-    ".agents/skills/pdk-review/SKILL.md": "4913f0ffa08171eda3fc091cc0ec03c1d9f1c938395a74eea128592f430e7dd2",
+    ".agents/skills/pdk-review/SKILL.md": "4aebc007d8bc3bdd8e6b139dc56d4d5328cd7e03a59951fdafbda5cae8b9ff16",
     ".agents/skills/pdk-review/references/checklist.md": "a6913658425075b13f8680dbd9f8fc3b843aa19b41e3401b55991700ef279c3e"
   }
 }
