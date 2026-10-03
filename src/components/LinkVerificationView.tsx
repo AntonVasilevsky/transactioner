@@ -15,7 +15,7 @@ import {
   buildSheet1Tsv,
   composeTypedIdentityData,
   composePlayerDataByRule,
-  getLinkVerificationUsernameFieldLabel,
+  LINK_VERIFICATION_USERNAME_FIELD_LABEL,
   googleSheetsTsvCell,
   normalizeMessengerLabel,
   resolveIdentityFieldsForRoomChange,
@@ -188,7 +188,6 @@ export default function LinkVerificationView() {
     [rule.canonicalRoomName, rule.templates, savedTemplates]
   )
   const selectedTemplate = templateOptions.find((template) => template.key === templateKey) || templateOptions[0] || LINK_VERIFICATION_TEMPLATES.default
-  const usernameFieldLabel = getLinkVerificationUsernameFieldLabel(rule.canonicalRoomName, selectedTemplate.key)
   const dealDefaultScope = useMemo(
     () => resolveLinkVerificationDealDefaultScope(rule.canonicalRoomName),
     [rule.canonicalRoomName]
@@ -547,7 +546,7 @@ export default function LinkVerificationView() {
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <label className="text-sm text-slate-400">
-              {usernameFieldLabel}
+              {LINK_VERIFICATION_USERNAME_FIELD_LABEL}
               <input value={username} onChange={(event) => setUsername(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
             </label>
             <label className="text-sm text-slate-400">
@@ -579,7 +578,7 @@ export default function LinkVerificationView() {
 
           <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-400">
             <div className="flex items-center gap-2 text-slate-300"><Link2 size={14} /> Правило рума: {rule.canonicalRoomName}</div>
-            <div className="mt-2">Данные для запроса: {usernameFieldLabel}, Room ID, Email</div>
+            <div className="mt-2">Данные для запроса: {LINK_VERIFICATION_USERNAME_FIELD_LABEL}, Room ID, Email</div>
             <div className="mt-1">Автосохранение игрока: нет</div>
             {selectedTemplate.channel === 'email' && selectedTemplate.recipientEmail && (
               <div className="mt-1">Куда отправлять: {selectedTemplate.recipientEmail}{selectedTemplate.ccEmails?.length ? ` | CC: ${selectedTemplate.ccEmails.join(', ')}` : ''}</div>

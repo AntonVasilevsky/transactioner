@@ -205,27 +205,8 @@ export const buildLinkVerificationTemplateValues = (values: {
   }
 }
 
-const normalizeRequestLabelRoom = (value: string) => value
-  .toLowerCase()
-  .replace(/[^a-z0-9]+/g, '')
-
-export const getLinkVerificationUsernameFieldLabel = (roomName: string, templateKey = '') => {
-  const normalizedRoom = normalizeRequestLabelRoom(roomName)
-  if (normalizedRoom === 'redstar') return 'Login'
-  if (templateKey === '888-confirmation') return 'gir1_'
-  if (normalizedRoom === 'partypoker' || normalizedRoom === 'bwin') return 'User ID'
-  if (
-    normalizedRoom === 'nexa' ||
-    normalizedRoom === 'nexapoker' ||
-    normalizedRoom === 'wptg' ||
-    normalizedRoom === 'wptglobal' ||
-    normalizedRoom === 'tonpoker' ||
-    normalizedRoom === 'gutspoker'
-  ) {
-    return 'Nick'
-  }
-  return 'Username'
-}
+/** The first form field has the same label in every room; templates may still call it login or user id. */
+export const LINK_VERIFICATION_USERNAME_FIELD_LABEL = 'Nick'
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 

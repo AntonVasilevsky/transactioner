@@ -8,7 +8,7 @@ import {
   buildSheet1Tsv,
   composePlayerDataByRule,
   composeTypedIdentityData,
-  getLinkVerificationUsernameFieldLabel,
+  LINK_VERIFICATION_USERNAME_FIELD_LABEL,
   googleSheetsTsvCell,
   normalizeMessengerLabel,
   resolveSheet2DirectusMessenger,
@@ -199,11 +199,8 @@ Telegram: @AlexanderChazov
     expect(text).not.toContain('messenger: @AlexanderChazov')
   })
 
-  it('renames the username field for room-specific identity wording', () => {
-    expect(getLinkVerificationUsernameFieldLabel('RedStar')).toBe('Login')
-    expect(getLinkVerificationUsernameFieldLabel('PartyPoker')).toBe('User ID')
-    expect(getLinkVerificationUsernameFieldLabel('Nexa')).toBe('Nick')
-    expect(getLinkVerificationUsernameFieldLabel('Champion Poker')).toBe('Username')
+  it('labels the first form field Nick for every room', () => {
+    expect(LINK_VERIFICATION_USERNAME_FIELD_LABEL).toBe('Nick')
   })
 
   it('selects sheet2 roomUsername from the room-specific verification identifier', () => {
