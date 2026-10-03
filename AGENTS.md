@@ -2,6 +2,7 @@
 
 ## Release workflow
 
+- "Сделай сборку на мак" (a Mac build request) by default means the full flow: bump the version, prepend release notes, run tests and the macOS build (`npm run dist:mac`), then commit and push. Publishing a GitHub Release is not included unless asked.
 - Every workflow that includes both a production/distributable build and a Git push must bump the application version before the build and push.
 - Run `npm run version:bump` exactly once, then verify that `package.json` and `package-lock.json` contain the same version.
 - Prepend the matching user-facing section to `USER_RELEASE_NOTES.txt` before building.
