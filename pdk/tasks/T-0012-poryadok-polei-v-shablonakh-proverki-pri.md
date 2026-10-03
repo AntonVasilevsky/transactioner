@@ -10,8 +10,8 @@ aliases: [link verification template field order matches form order]
 scope: [link-verification]
 links: [src/utils/linkVerificationRules.ts, src/utils/linkVerificationFormatting.ts, src/components/LinkVerificationView.test.ts]
 sessions: []
-commits: []
-revision: 3
+commits: [750bfd5]
+revision: 4
 created: 2026-10-03
 updated: 2026-10-03
 ---
@@ -29,14 +29,14 @@ updated: 2026-10-03
 
 ## Checkpoint
 
-Works: поля в шаблоне проверки привязки идут в порядке формы (Username → Room ID → Email → контакт) для всех румов: <player_data> сортируется по порядку формы (linkVerificationFormatting.ts FORM_FIELD_ORDER), шаблоны WPTG/TON/PartyPoker/bwin переставлены. Порядок изменился у WPTG, TON, CoinPoker, PartyPoker, bwin и румов «по ID» на общем шаблоне (BCPoker, TigerGaming и др.); у Nexa, Champion, RedStar, 888, Guts — без изменений.
-Verified: сравнение старой и новой версии по всем румам — набор значений тот же, меняется только порядок; npm run lint — ok; npm test — 24 файла, 202/202; npm run build — ok; pdk check — 0 errors.
-Not done: переименование messengerUsername → username сознательно не сделано: меняет автозаполнение Username из Room ID при смене рума; оставлен комментарий в типе. Коммит не сделан. Ручная проверка владельца не делалась.
-Changed: src/utils/linkVerificationFormatting.ts, src/utils/linkVerificationRules.ts, src/components/LinkVerificationView.test.ts (не закоммичено).
+Works: поля в шаблоне проверки привязки идут в порядке формы (Username → Room ID → Email → контакт) для всех румов: <player_data> сортируется по порядку формы (FORM_FIELD_ORDER), шаблоны WPTG/TON/PartyPoker/bwin переставлены.
+Verified: сравнение старой и новой версии по всем румам — набор значений тот же, меняется только порядок; npm run lint — ok; npm test — 202/202; npm run build — ok; pdk check — 0 errors. Вошло в сборку 0.1.25.
+Not done: переименование messengerUsername → username сознательно не сделано (меняет автозаполнение Username из Room ID при смене рума); оставлен комментарий. Ручная проверка владельца не подтверждена.
+Changed: коммит 750bfd5.
 
 ## Next step
 
-Получить да владельца на коммит; ручная проверка в Привязки → Запрос (CoinPoker, WPTG, PartyPoker); затем --status done
+Ручная проверка владельца в Привязки → Запрос (CoinPoker, WPTG, PartyPoker); затем --status done
 
 ## Blockers
 
@@ -44,4 +44,5 @@ Changed: src/utils/linkVerificationFormatting.ts, src/utils/linkVerificationRule
 
 - 2026-10-03 created
 - 2026-10-03 update: executed_by "" -> claude-code/claude-opus-5-5, status proposed -> active
+- 2026-10-03 checkpoint: Works: поля в шаблоне проверки привязки идут в порядке формы (Username → Room ID → Email → контакт) для всех румов: <...
 - 2026-10-03 checkpoint: Works: поля в шаблоне проверки привязки идут в порядке формы (Username → Room ID → Email → контакт) для всех румов: <...
