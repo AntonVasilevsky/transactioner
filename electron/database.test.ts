@@ -195,13 +195,73 @@ describe('TransactionerDatabase', () => {
         body: expect.stringContaining('successfully tracked by us'),
       })
     ])
-    expect(db.getLinkVerificationResponseTemplates('shenpoker', 'RU')).toEqual([])
     expect(db.getRoomKnowledgeIndex().linkVerificationResponseOptions).toContainEqual({
       room_key: 'shenpoker',
       deal_type: 'General',
       language: 'EN',
       template_count: 1,
     })
+  })
+
+  it('ships confirmation texts in RU, EN and ES for the directory rooms of a new database', () => {
+    for (const [roomKey, dealType] of [
+      ['champion-poker', 'Agent'],
+      ['champion-poker', 'Direct'],
+      ['nexa', 'Agent'],
+      ['redstar', 'General'],
+    ] as const) {
+      for (const language of ['RU', 'EN', 'ES'] as const) {
+        expect(db.getLinkVerificationResponseTemplates(roomKey, language, dealType), `${roomKey}/${dealType}/${language}`)
+          .toHaveLength(1)
+      }
+    }
+    expect(db.getLinkVerificationResponseTemplates('champion-poker', 'EN', 'Agent')[0].body)
+      .toContain('Deposit/withdrawal - only through us')
+    expect(db.getLinkVerificationResponseTemplates('champion-poker', 'EN', 'Direct')[0].body)
+      .toContain('To make deposits and withdrawals on your own')
+    expect(db.getLinkVerificationResponseTemplates('nexa', 'EN', 'Direct')).toEqual([])
+  })
+
+  it('adds confirmation texts once to an existing database without replacing edited ones', () => {
+    expect(db.saveRoomProfile({ room_key: 'tigergaming', display_name: 'Tigergaming', is_active: 1 }).success).toBe(true)
+    expect(db.saveRoomDeal({
+      room_key: 'tigergaming',
+      deal_type: 'Direct',
+      language: 'RU',
+      short_text: 'Tigergaming',
+      full_text: 'Tigergaming',
+      is_active: 1,
+      sort_order: 0,
+    }).success).toBe(true)
+    const nexaEn = db.getLinkVerificationResponseTemplates('nexa', 'EN', 'Agent')[0]
+    expect(db.saveLinkVerificationResponseTemplate(baseLinkVerificationResponseTemplate({
+      id: nexaEn.id,
+      body: 'Edited by the operator.',
+    })).success).toBe(true)
+    db.close()
+    const raw = new Database(dbPath)
+    raw.prepare("DELETE FROM link_verification_response_templates WHERE room_key = 'redstar' AND language = 'ES'").run()
+    raw.pragma('user_version = 1')
+    raw.close()
+
+    const hookCalls: PendingMigrationInfo[] = []
+    db = new TransactionerDatabase(dbPath, { beforeMigrate: (info) => hookCalls.push(info) })
+
+    expect(hookCalls).toEqual([{ fromVersion: 1, toVersion: 2, steps: ['link-verification-response-templates-2026-10'] }])
+    for (const language of ['RU', 'EN', 'ES'] as const) {
+      expect(db.getLinkVerificationResponseTemplates('tigergaming', language, 'Direct'), language).toHaveLength(1)
+    }
+    expect(db.getLinkVerificationResponseTemplates('tigergaming', 'ES', 'Direct')[0].body).toContain('"NEWTG"')
+    expect(db.getLinkVerificationResponseTemplates('nexa', 'EN', 'Agent')[0].body).toBe('Edited by the operator.')
+    expect(db.getLinkVerificationResponseTemplates('redstar', 'ES', 'General')).toHaveLength(1)
+
+    db.close()
+    const after = new Database(dbPath)
+    after.prepare("DELETE FROM link_verification_response_templates WHERE room_key = 'redstar' AND language = 'ES'").run()
+    after.close()
+    db = new TransactionerDatabase(dbPath, { beforeMigrate: (info) => hookCalls.push(info) })
+    expect(hookCalls).toHaveLength(1)
+    expect(db.getLinkVerificationResponseTemplates('redstar', 'ES', 'General')).toEqual([])
   })
 
   it('saves link-verification response templates only for existing rooms', () => {
@@ -1242,7 +1302,7 @@ describe('TransactionerDatabase', () => {
     expect(db.getRoomKnowledgeAdminIndex().paymentMethods.filter(isRedstarLtcDeposit)).toHaveLength(1)
   })
 
-  it('moves an unversioned database to schema version 1 once, after the backup hook, keeping user data', () => {
+  it('moves an unversioned database to the current schema version once, after the backup hook, keeping user data', () => {
     expect(db.saveRoomWallet({
       room_key: 'nexa',
       deal_type: 'Agent',
@@ -1256,14 +1316,18 @@ describe('TransactionerDatabase', () => {
     expect(player.success).toBe(true)
     db.close()
     const raw = new Database(dbPath)
-    expect(raw.pragma('user_version', { simple: true })).toBe(1)
+    expect(raw.pragma('user_version', { simple: true })).toBe(2)
     raw.pragma('user_version = 0')
     raw.close()
 
     const hookCalls: PendingMigrationInfo[] = []
     db = new TransactionerDatabase(dbPath, { beforeMigrate: (info) => hookCalls.push(info) })
 
-    expect(hookCalls).toEqual([{ fromVersion: 0, toVersion: 1, steps: ['initial-room-knowledge'] }])
+    expect(hookCalls).toEqual([{
+      fromVersion: 0,
+      toVersion: 2,
+      steps: ['initial-room-knowledge', 'link-verification-response-templates-2026-10'],
+    }])
     expect(db.getRoomWallets('nexa', 'Agent').map((row) => row.wallet_address)).toEqual(['TLegacyNexaWallet'])
     expect(db.getPlayerById(Number(player.id))?.accounts).toHaveLength(1)
 

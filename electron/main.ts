@@ -84,7 +84,7 @@ const getActiveTransactionWallets = (): KnownTransactionWallet[] => {
 class MigrationBackupError extends Error {}
 
 const runMigrationBackup = () => {
-  let reason = ''
+  let reason: string
   try {
     const result = createDatabaseSnapshotBackup(dbPath, backupDir, 'before-migration')
     if (result.created) {

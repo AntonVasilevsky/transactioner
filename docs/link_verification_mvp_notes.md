@@ -80,6 +80,17 @@ UNIQUE(room_key, deal_type, language)
 
 Important constraint: a response template cannot be created for an arbitrary room name. It must use an existing `room_profiles.room_key`. The database has insert/update guards, and the admin UI creates templates only from the selected room in the room directory.
 
+### 2026-10-03: Confirmation texts from `binding-confirmation-template.txt` (T-0002)
+
+The owner's confirmation texts for 25 rooms live in `electron/linkVerificationResponseTemplates.ts` and ship once as migration step 2 (`link-verification-response-templates-2026-10`, ADR-0002):
+
+- a text is added only for a room that exists in `room_profiles` and only where room / deal type / language has no template yet, so texts the operator already edited stay;
+- `dealType` is fixed where the source names the cash desk (Champion agent/direct, NEXA agent); otherwise the text is added for every deal type the room has (`General` when it has none);
+- every room has RU, EN and ES; ES and the missing RU/EN of ACR, BCP and BetFair were translated by the agent and need the owner's review;
+- player account ids are placeholders (`BXXXXXX`, `TGXXXXXX`, `SBXXXXXX`); operator-only remarks from the source (short verification note, Champion direct optional line, Shenpoker "recheck the bonus") are not part of the copied text;
+- Juicy Stakes / Everygame and VangPoker are skipped by the owner's decision (not added to the room directory). A room added later does not receive these texts automatically; its template is created in the room admin.
+- The owner's old Shenpoker `General` EN template (invisible because Shenpoker deals are `Direct`) was deleted from the owner's database on 2026-10-03; the new texts live under `Direct`.
+
 Search in the response-template lookup reuses `matchesRoomSearch`, the same helper used by room info/player search, so partial words, transliteration, and wrong RU/EN keyboard layout are handled consistently.
 
 ## 2026-09-03: Autosaved Deal Defaults For Link Verification TSV

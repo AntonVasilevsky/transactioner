@@ -5,6 +5,7 @@ import { contactSearchKey, normalizeContactText } from '../src/utils/contactNorm
 import { matchesRoomSearch } from '../src/utils/roomSearch'
 import { getWalletAddressValidationError } from '../src/utils/walletValidation'
 import { roomKnowledgeSeed, type LinkVerificationResponseOutcome, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
+import { LINK_VERIFICATION_RESPONSE_TEMPLATES_2026_10, type LinkVerificationResponseTemplateSource } from './linkVerificationResponseTemplates'
 
 export type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
 export type RoomDealType = 'General' | 'Direct' | 'Agent'
@@ -1573,7 +1574,36 @@ export class TransactionerDatabase {
           this.cleanupCombinedDepositMethodsBackedByWallets()
         },
       },
+      {
+        version: 2,
+        name: 'link-verification-response-templates-2026-10',
+        up: () => this.addMissingLinkVerificationResponseTemplates(LINK_VERIFICATION_RESPONSE_TEMPLATES_2026_10),
+      },
     ]
+  }
+
+  /** Adds texts only for rooms in the directory and only where no template exists yet. */
+  private addMissingLinkVerificationResponseTemplates(templates: LinkVerificationResponseTemplateSource[]) {
+    const roomExists = this.db.prepare('SELECT 1 FROM room_profiles WHERE room_key = ? COLLATE NOCASE')
+    const roomDealTypes = this.db.prepare('SELECT DISTINCT deal_type FROM room_deals WHERE room_key = ? COLLATE NOCASE')
+    const insert = this.db.prepare(`
+      INSERT INTO link_verification_response_templates (
+        room_key, deal_type, language, template_key, label, outcome, body, notes, sort_order, is_active, updated_at
+      )
+      VALUES (?, ?, ?, ?, 'Подтверждение привязки', 'ok', ?, NULL, 0, 1, ?)
+      ON CONFLICT(room_key, deal_type, language) DO NOTHING
+    `)
+    const updatedAt = new Date().toISOString().slice(0, 10)
+
+    for (const template of templates) {
+      if (!roomExists.get(template.roomKey)) continue
+      const dealTypes = template.dealType
+        ? [template.dealType]
+        : (roomDealTypes.all(template.roomKey) as Array<{ deal_type: string }>).map((row) => row.deal_type)
+      for (const dealType of dealTypes.length ? dealTypes : ['General']) {
+        insert.run(template.roomKey, dealType, template.language, dealType.toLowerCase(), template.body, updatedAt)
+      }
+    }
   }
 
   private resetRoomWalletsForManualConfiguration() {
