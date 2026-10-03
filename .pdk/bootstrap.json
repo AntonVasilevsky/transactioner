@@ -1,5 +1,5 @@
 {
-  "toolkitVersion": "0.4.13",
+  "toolkitVersion": "0.4.14",
   "createdAt": "2026-10-02T00:18:23.057Z",
   "files": {
     ".gitignore": "4b3c0d375d592aab103d4c593f8b06e2a01f80115e4b359a7590b59a553d8311",
@@ -8,8 +8,8 @@
     ".gitignore#.pdk/logs/": "026611a37b288d48ff1a1adedfa6b263a2f67fd1e057acd11569fc5ec7e8564a",
     ".gitignore#graphify-out/": "e356a83e77ba6da5d467f015d93a8761121cab9f30adb20c064acc52259503a3",
     ".gitignore#pdk/.obsidian/": "db3b6231acc60ada1578f9155560271b655c6d8cf733c69e1e06ed37e7d28b28",
-    "AGENTS.md": "c2a23d65afe5902ee4ac9da98e51428c7bbb4f5ca8c9e001c051d72a393603f1",
-    "AGENTS.md#pdk-block": "07e73c182883339ea9f08a0c28b237cbffbd13dae0dc7c15d8a68dfa30c6873c",
+    "AGENTS.md": "412b6c842de3754b644c6ecb388db2f66e3d5553a776157b1fd438ec7c7b3480",
+    "AGENTS.md#pdk-block": "a9e3dbd502d7345cdba487c40a46c2a5d90a3730f92125075a533cb38130782f",
     "pdk.json": "1501270cc06298d708744f6caa4a21796efe96e2f8b8d2b609c578ca44161835",
     "pdk/knowledge/archive/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "pdk/knowledge/decisions/.gitkeep": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -27,7 +27,7 @@
     ".agents/skills/pdk-design/references/adr.md": "1498892ae3cfa7487c1a7c778e916ed5130362947fbc3a698db9fd720216297f",
     ".agents/skills/pdk-discover/SKILL.md": "edb37ca8784bcf5a9cf91ed715aa0f24ba7daa0efd1b12834c320b35ea505b9d",
     ".agents/skills/pdk-discover/references/interview.md": "90240d6d65398301c4bb0ed00b2e9828b637dfffb4624663c167b0faa763d2ae",
-    ".agents/skills/pdk-maintain/SKILL.md": "196745f46e4b54af6b7be35bea284b93bacc4ed067c907be0d6597bfa8ce0234",
+    ".agents/skills/pdk-maintain/SKILL.md": "47cb802c9c8b5f6a7ee11fe2ada3035fdf32d4abf76d7f67ac2fb1a1192394cf",
     ".agents/skills/pdk-review/SKILL.md": "12592d87727523a769f32823b092453d278b77b709c5e4e5db1079eb0eeab3c5",
     ".agents/skills/pdk-review/references/checklist.md": "a6913658425075b13f8680dbd9f8fc3b843aa19b41e3401b55991700ef279c3e"
   }

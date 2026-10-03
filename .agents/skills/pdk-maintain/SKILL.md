@@ -11,7 +11,8 @@ behind the human's back.
 ## When to use / not
 
 - Use: "clean up the docs", "what is stale?", periodic check after a batch of
-  tasks, `pdk check` warnings, a repeated problem that suggests a new rule or skill.
+  tasks, `pdk check` warnings, a repeated problem that suggests a new rule or skill,
+  "review the work logs" / "разбери логи" (section "Work log review" below).
 - Not: writing new requirements or decisions (pdk-discover, pdk-design);
   reviewing code changes (pdk-review).
 
@@ -77,6 +78,22 @@ skip silently, do not mention.
 8. **Checkpoint** the task (pattern: pdk-deliver, "Checkpoint"): applied items,
    declined items (so they are not re-proposed next time), still-open proposals;
    `--next` = the next open proposal or "none".
+
+## Work log review
+
+When the human asks to review the work logs (PDK reminds every few days):
+1. `pdk trial digest` (since the last review; `--days N` if asked). It counts, it does
+   not judge: limits, model switches, brake blocks, tool errors, reviews, tasks closed
+   without a review or a level, and the sessions worth a look.
+2. Read those sessions with `pdk trial show <file>` (and `--json` when a number needs
+   checking). Find causes, not counts: the same failing command again and again, a
+   skill step agents skip, a level that was too low (a review found what tests missed)
+   or too high, a reminder nobody acts on.
+3. Report findings with evidence (file, line, count) and propose each fix as a task
+   (title, Goal, level) for the human to approve; create only the approved ones with
+   `pdk task new`. Change nothing else. A finding about PDK itself goes to its repository.
+4. When the human has seen the report: `pdk trial digest --mark` (the next digest
+   starts there and the reminder stops).
 
 ## Approval points
 
