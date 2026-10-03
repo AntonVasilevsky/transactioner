@@ -12,7 +12,7 @@ import {
   type AmountCurrency
 } from '../utils/transactionTemplateFormatting'
 import { filterPaymentAccountsForOperation } from '../utils/roomAccountOptions'
-import { getWalletAddressValidationError } from '../utils/walletValidation'
+import { getTransactionInputWarning, getWalletAddressValidationError } from '../utils/walletValidation'
 import SelectField from './fields/SelectField'
 import { CONTACT_METHOD_OPTIONS } from './fields/fieldOptions'
 
@@ -541,6 +541,7 @@ export default function FormView({ player, account: selectedAccount, onAccountSe
       ? `Транзакция старше одного дня: ${formattedDate}. Проверьте, что это актуальный депозит.`
       : 'Транзакция старше одного дня. Проверьте, что это актуальный депозит.'
   })()
+  const txInputWarning = operationType === 'Deposit' ? getTransactionInputWarning(txId) : null
   const depositTransactionCopyWarning = (() => {
     if (operationType !== 'Deposit' || !account || !txId.trim() || !hasCompleteTransactionHash(txId)) return ''
     if (txResolveStatus === 'resolved') return ''
@@ -812,6 +813,9 @@ export default function FormView({ player, account: selectedAccount, onAccountSe
                 }`}>
                   {txResolveMessage}
                 </p>
+              )}
+              {!txResolveMessage && txInputWarning && (
+                <p className="mt-2 text-xs text-amber-400">{txInputWarning}</p>
               )}
               {transactionDateWarning && (
                 <p ref={firstVisibleWarningKey.startsWith('date:') ? warningScrollTargetRef : undefined} className="mt-2 text-xs text-amber-300">

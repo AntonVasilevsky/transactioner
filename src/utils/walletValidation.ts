@@ -74,3 +74,29 @@ export const getWalletNetworkValidationWarning = (
 
   return null
 }
+
+const COMPLETE_TRANSACTION_HASH_PATTERN = /(?:0x)?[a-f0-9]{64}/i
+const ADDRESS_URL_PATTERN = /^https?:\/\/\S*(?:\/address\/|\/addr\/|[?&]address=)\S*$/i
+
+/**
+ * Explains why a deposit transaction field will not be looked up. A value with a full
+ * 64-character hash is looked up as usual, so it gets no warning here.
+ */
+export const getTransactionInputWarning = (value: string | null | undefined): string | null => {
+  const input = String(value || '').trim()
+  if (!input || COMPLETE_TRANSACTION_HASH_PATTERN.test(input)) return null
+
+  const lastSegment = input.split(/[/#?&=]/).filter(Boolean).pop() || input
+  if (
+    ADDRESS_URL_PATTERN.test(input) ||
+    [input, lastSegment].some((part) => EVM_WALLET_PATTERN.test(part) || TRON_WALLET_PATTERN.test(part) || BTC_WALLET_PATTERN.test(part))
+  ) {
+    return 'Это адрес кошелька, а не транзакция. Вставьте ссылку на транзакцию (…/tx/…) или её хеш.'
+  }
+
+  const longestHexRun = Math.max(0, ...(input.replace(/0x/gi, ' ').match(/[a-f0-9]+/gi) || []).map((run) => run.length))
+  if (longestHexRun >= 8) {
+    return `Хеш транзакции неполный: ${longestHexRun} из 64 символов. Скопируйте ссылку или хеш целиком.`
+  }
+  return 'Не похоже на ссылку или хеш транзакции: нужен хеш из 64 символов или ссылка на транзакцию.'
+}

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  getTransactionInputWarning,
   getWalletAddressValidationError,
   getWalletNetworkValidationWarning,
   isCryptoWalletNetwork,
@@ -76,5 +77,39 @@ describe('wallet network validation', () => {
       'bc1qwsv0zew92jkaxetvn2tvp5jrz3pyl5u2phx57t',
       'BTC'
     )).toBeNull()
+  })
+})
+
+describe('deposit transaction input warning', () => {
+  const hash = 'a294ecb85e35827f36bb712b4475bc95430daec59ab114e74d608278813e9f53'
+
+  it('stays silent for a full hash or a transaction link, so the lookup runs', () => {
+    expect(getTransactionInputWarning('')).toBeNull()
+    expect(getTransactionInputWarning(hash)).toBeNull()
+    expect(getTransactionInputWarning(`0x${hash}`)).toBeNull()
+    expect(getTransactionInputWarning(`https://etherscan.io/tx/0x${hash}`)).toBeNull()
+    expect(getTransactionInputWarning(`https://tronscan.org/#/transaction/${hash}`)).toBeNull()
+  })
+
+  it('flags wallet addresses and address links', () => {
+    for (const value of [
+      'https://etherscan.io/address/0x563715a0773d8Bc54F0014D19BfB586f353a80f6',
+      'https://tronscan.org/#/address/TQrY8tryqsYVCYS3MFbtffiPp2ccyn4STm',
+      '0x563715a0773d8Bc54F0014D19BfB586f353a80f6',
+      'TQrY8tryqsYVCYS3MFbtffiPp2ccyn4STm',
+      'bc1qar0srrr7xfkvy5l643lydnw9re59gtzzwf5mdq',
+    ]) {
+      expect(getTransactionInputWarning(value), value).toMatch(/адрес кошелька/)
+    }
+  })
+
+  it('reports how many characters a truncated hash has', () => {
+    expect(getTransactionInputWarning(hash.slice(0, 63))).toBe('Хеш транзакции неполный: 63 из 64 символов. Скопируйте ссылку или хеш целиком.')
+    expect(getTransactionInputWarning(`https://etherscan.io/tx/0x${hash.slice(0, 20)}`)).toMatch(/неполный: 20 из 64/)
+  })
+
+  it('flags random text and short numbers', () => {
+    expect(getTransactionInputWarning('12345')).toMatch(/Не похоже на ссылку или хеш/)
+    expect(getTransactionInputWarning('оплата за вчера')).toMatch(/Не похоже на ссылку или хеш/)
   })
 })

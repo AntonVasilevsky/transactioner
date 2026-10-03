@@ -8,6 +8,7 @@ Generated: 2026-10-03
 - **T-0001** Картировать существующие знания в pdk/ — next: Получить явное принятие или правки requirements/architecture; после принятия перевести их в current и отдельно спросить про mandatory. Новые proposed-задачи уточнять и активировать отдельно, начиная с T-0004 перед T-0003.
 - **T-0011** Удалённые кошельки и методы рума не должны возвращаться после перезапуска — next: human: accept review; minor-замечания (release note про однократный возврат, текст ошибки snapshot, доки seed, тест v0) — исправить в T-0011 или вынести в задачу
 - **T-0012** Порядок полей в шаблонах проверки привязки как в форме — next: Ручная проверка владельца в Привязки → Запрос (CoinPoker, WPTG, PartyPoker); затем --status done
+- **T-0016** Предупреждение о неверной ссылке или хеше транзакции в депозите — next: Да владельца на коммит; ручная проверка: вставить ссылку на адрес, обрезанный хеш, цифры; затем --status done
 
 ## Blocked
 
@@ -37,11 +38,4 @@ _none_
 
 ## Check
 
-0 errors, 6 warnings
-
-- warning .agents/skills/pdk-bootstrap/SKILL.md skills.outdated Installed skill is older than the toolkit copy; run `pdk skills sync`
-- warning .agents/skills/pdk-deliver/SKILL.md skills.outdated Installed skill is older than the toolkit copy; run `pdk skills sync`
-- warning .agents/skills/pdk-design/SKILL.md skills.outdated Installed skill is older than the toolkit copy; run `pdk skills sync`
-- warning .agents/skills/pdk-discover/SKILL.md skills.outdated Installed skill is older than the toolkit copy; run `pdk skills sync`
-- warning .agents/skills/pdk-maintain/SKILL.md skills.outdated Installed skill is older than the toolkit copy; run `pdk skills sync`
-- warning .agents/skills/pdk-review/SKILL.md skills.outdated Installed skill is older than the toolkit copy; run `pdk skills sync`
+0 errors, 0 warnings
