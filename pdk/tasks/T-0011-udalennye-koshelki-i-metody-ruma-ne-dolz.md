@@ -1,17 +1,17 @@
 ---
 id: T-0011
 title: Удалённые кошельки и методы рума не должны возвращаться после перезапуска
-status: active
+status: done
 owner: agent
 model: "L3 — high: миграции и seed при старте, риск потери локальных данных; поведение определяют тесты на перезапуск"
 executed_by: claude-code/claude-fable-5-1
 depends_on: [T-0004]
 aliases: [deleted room wallets payment methods reappear after restart seed migration]
 scope: [database, rooms, wallets]
-links: [pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, pdk/knowledge/research/T-0004-schema-audit.md, electron/database.ts, electron/database.test.ts, src/components/RoomAdminView.tsx, electron/migrations.ts, electron/migrations.test.ts, electron/main.ts, pdk/knowledge/notes/T-0011-review-2026-10-03.md]
+links: [pdk/knowledge/decisions/ADR-0002-versioned-one-time-migrations.md, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, pdk/knowledge/research/T-0004-schema-audit.md, electron/database.ts, electron/database.test.ts, src/components/RoomAdminView.tsx, electron/migrations.ts, electron/migrations.test.ts, electron/main.ts, pdk/knowledge/archive/T-0011-review-2026-10-03.md]
 sessions: []
-commits: [7c11b60]
-revision: 7
+commits: [7c11b60, 7aa5625]
+revision: 8
 created: 2026-10-02
 updated: 2026-10-03
 ---
@@ -32,15 +32,14 @@ updated: 2026-10-03
 
 ## Checkpoint
 
-Works: стартовые данные румов и старые миграции выполняются один раз (PRAGMA user_version, electron/migrations.ts); удалённые кошельки и методы после перезапуска не возвращаются; перед миграцией существующей БД — snapshot before-migration, провал snapshot останавливает запуск. Примеры в полях формы кошелька/метода полупрозрачные.
-Verified: npm run lint — ok; npm test — 24 файла, 200/200; npm run build — ok; pdk check — 0 errors. Ручная проверка владельца 2026-10-03: рабочая БД мигрирована (snapshot transactioner-before-migration-2026-10-03-083511.db создан), удалённые кошельки после перезапуска не подтягиваются.
+Works: стартовые данные румов и старые миграции выполняются один раз (PRAGMA user_version, electron/migrations.ts); удалённые кошельки и методы после перезапуска не возвращаются; перед миграцией существующей БД — snapshot before-migration, провал snapshot останавливает запуск без изменений БД и показывает отдельное понятное окно (папка бэкапов, причина). Документация: seed только для новой БД, новые справочные данные — отдельным шагом миграции.
+Verified: npm run lint — ok; npm test — 206/206; npm run build — ok; pdk check — 0 errors. Ручная проверка владельца 2026-10-03 (рабочая БД мигрирована, удалённые кошельки не возвращаются). Независимый pdk-review: 0 blocker, 4 minor — 1 и 2–3 исправлены (0.1.24, 7aa5625), 4 снят владельцем; отчёт в pdk/knowledge/archive/T-0011-review-2026-10-03.md.
 Known: вне scope — migrateLinkVerificationResponseTemplates при каждом старте включает обратно выключенные шаблоны ответа на привязку (кандидат в отдельную задачу).
-Changed: коммит 7c11b60.
-Review 2026-10-03: 0 blocker, 0 major, 4 minor, 1 nit (coverage: full for the change; build not re-run) — pdk/knowledge/notes/T-0011-review-2026-10-03.md
+Changed: коммиты 7c11b60, 7aa5625; в релизе с 0.1.24 (окно ошибки бэкапа — со следующей сборки).
 
 ## Next step
 
-human: accept review; minor-замечания (release note про однократный возврат, текст ошибки snapshot, доки seed, тест v0) — исправить в T-0011 или вынести в задачу
+Нет — закрыто. Окно ошибки бэкапа войдёт в следующую сборку на мак.
 
 ## Found in manual check
 
@@ -55,5 +54,7 @@ human: accept review; minor-замечания (release note про однокр
 - 2026-10-02 update: links +electron/migrations.ts +electron/migrations.test.ts +electron/main.ts
 - 2026-10-02 checkpoint: Works: стартовые данные румов и старые миграции (создание Deposit-метода из кошелька, чистка комбинированных методов)...
 - 2026-10-03 checkpoint: Works: стартовые данные румов и старые миграции выполняются один раз (PRAGMA user_version, electron/migrations.ts); у...
-- 2026-10-03 update: links +pdk/knowledge/notes/T-0011-review-2026-10-03.md
+- 2026-10-03 update: links +pdk/knowledge/archive/T-0011-review-2026-10-03.md
 - 2026-10-03 checkpoint: Works: стартовые данные румов и старые миграции выполняются один раз (PRAGMA user_version, electron/migrations.ts); у...
+- 2026-10-03 checkpoint: Works: стартовые данные румов и старые миграции выполняются один раз (PRAGMA user_version, electron/migrations.ts); у...
+- 2026-10-03 update: status active -> done
