@@ -80,7 +80,7 @@ Paths here are PDK defaults; if `pdk.json` `paths` differ, use those.
 | L1 | narrow edits to an exact spec (config, rename, copy, docs) | small/fast, low |
 | L2 | implementation to a spec, with tests that define done | mid-tier, medium |
 | L3 | logic with many edge cases, concurrency, migrations, security | strongest general, high |
-| L4 | work where the strongest model is likely to do clearly better (below) | strongest available, high |
+| L4 | work where the strongest model is likely to do clearly better (below) | strongest available, xhigh |
 
 L4 costs the scarcest model, so give it only where L3 would likely do worse.
 Decide with one question: **if this goes wrong, will the tests catch it?**
