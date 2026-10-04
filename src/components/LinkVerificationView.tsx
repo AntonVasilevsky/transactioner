@@ -15,6 +15,9 @@ import {
   buildSheet1Tsv,
   composeTypedIdentityData,
   composePlayerDataByRule,
+  describeLinkVerificationPlayerSave,
+  describeLinkVerificationPlayerUndo,
+  planLinkVerificationPlayerSave,
   LINK_VERIFICATION_USERNAME_FIELD_LABEL,
   googleSheetsTsvCell,
   normalizeMessengerLabel,
@@ -23,6 +26,7 @@ import {
   sortLinkVerificationRoomOptions
 } from '../utils/linkVerificationFormatting'
 import { matchesRoomSearch } from '../utils/roomSearch'
+import { MESSENGER_LABELS } from '../utils/messengers'
 import { getWalletAddressValidationError } from '../utils/walletValidation'
 import { sortRoomProfilesByUsage } from '../utils/roomUsageSort'
 import ComboboxField from './fields/ComboboxField'
@@ -38,7 +42,6 @@ const formatDate = (date: Date) => {
 }
 
 const today = () => formatDate(new Date())
-const messengerOptions = ['Telegram', 'WA', 'Discord', 'Teams', 'Email', 'Site', 'Jivo']
 const statusOptions = ['Check', 'Ok', 'Denied', 'Retag']
 const linkVerificationLanguageOptions = ['RU', 'ENG', 'ES'] as const
 type LinkVerificationLanguage = typeof linkVerificationLanguageOptions[number]
@@ -94,6 +97,35 @@ export default function LinkVerificationView() {
   const [manager, setManager] = useState(initialManager)
   const [selectedMessenger, setSelectedMessenger] = useState('')
   const [messengerUsername, setMessengerUsername] = useState('')
+  const [playerSaveNote, setPlayerSaveNote] = useState<{
+    requestText: string
+    tone: 'ok' | 'warning'
+    text: string
+    undo?: { data: LinkVerificationPlayerUndo, input: SaveLinkVerificationPlayerInput }
+  } | null>(null)
+  const [shiftHeld, setShiftHeld] = useState(false)
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => setShiftHeld(event.shiftKey)
+    const onBlur = () => setShiftHeld(false)
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('keyup', onKey)
+    window.addEventListener('blur', onBlur)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('keyup', onKey)
+      window.removeEventListener('blur', onBlur)
+    }
+  }, [])
+
+  // The undo button lives 15 seconds, then only the note stays.
+  useEffect(() => {
+    if (!playerSaveNote?.undo) return
+    const timer = window.setTimeout(() => {
+      setPlayerSaveNote((current) => (current?.undo ? { ...current, undo: undefined } : current))
+    }, 15000)
+    return () => window.clearTimeout(timer)
+  }, [playerSaveNote])
   const [username, setUsername] = useState('')
   const [roomId, setRoomId] = useState('')
   const [email, setEmail] = useState('')
@@ -477,6 +509,69 @@ export default function LinkVerificationView() {
     setResponseDealType(preferredResponseDealType(roomDealOptions, roomKey))
   }
 
+  const copyRequest = async (skipSave: boolean) => {
+    const copiedText = requestText
+    await copy('request', copiedText)
+    const plan = planLinkVerificationPlayerSave({
+      rule,
+      messenger: selectedMessenger,
+      contact: messengerUsername,
+      username,
+      roomId,
+      email,
+    })
+    if (!plan) {
+      setPlayerSaveNote(null)
+      return
+    }
+    if (skipSave) {
+      setPlayerSaveNote({ requestText: copiedText, tone: 'ok', text: 'Скопировано без сохранения игрока.' })
+      return
+    }
+    if (!plan.input) {
+      setPlayerSaveNote({ requestText: copiedText, tone: 'warning', text: `Скопировано. ${plan.skipReason}` })
+      return
+    }
+    const input = plan.input
+    try {
+      const result = await window.electronAPI.saveLinkVerificationPlayer(input)
+      setPlayerSaveNote({
+        requestText: copiedText,
+        tone: result.success && result.status !== 'similar_found' ? 'ok' : 'warning',
+        text: describeLinkVerificationPlayerSave(result, input),
+        undo: result.undo ? { data: result.undo, input } : undefined,
+      })
+    } catch (err: unknown) {
+      setPlayerSaveNote({
+        requestText: copiedText,
+        tone: 'warning',
+        text: `Скопировано. Игрок не сохранён: ${err instanceof Error ? err.message : String(err)}.`,
+      })
+    }
+  }
+
+  const undoPlayerSave = async () => {
+    const undo = playerSaveNote?.undo
+    if (!undo) return
+    setPlayerSaveNote((current) => (current ? { ...current, undo: undefined } : current))
+    try {
+      const result = await window.electronAPI.undoLinkVerificationPlayerSave(undo.data)
+      setPlayerSaveNote((current) => (current ? {
+        ...current,
+        tone: result.success ? 'ok' : 'warning',
+        text: result.success
+          ? describeLinkVerificationPlayerUndo(undo.data, undo.input)
+          : `Не удалось отменить: ${result.error || 'ошибка базы данных'}.`,
+      } : current))
+    } catch (err: unknown) {
+      setPlayerSaveNote((current) => (current ? {
+        ...current,
+        tone: 'warning',
+        text: `Не удалось отменить: ${err instanceof Error ? err.message : String(err)}.`,
+      } : current))
+    }
+  }
+
   const copy = async (key: string, value: string, htmlValue?: string) => {
     if (key === 'sheet2' && walletError) {
       const input = walletInputRef.current
@@ -564,7 +659,7 @@ export default function LinkVerificationView() {
               <label className="mb-1 block">Мессенджер</label>
               <ComboboxField
                 value={selectedMessenger}
-                options={toFieldOptions(messengerOptions)}
+                options={toFieldOptions(MESSENGER_LABELS)}
                 onSelect={selectMessenger}
                 placeholder="Выбрать мессенджер"
                 emptyText="Мессенджеры не найдены"
@@ -579,7 +674,9 @@ export default function LinkVerificationView() {
           <div className="rounded-xl border border-slate-700 bg-slate-900/40 p-3 text-xs text-slate-400">
             <div className="flex items-center gap-2 text-slate-300"><Link2 size={14} /> Правило рума: {rule.canonicalRoomName}</div>
             <div className="mt-2">Данные для запроса: {LINK_VERIFICATION_USERNAME_FIELD_LABEL}, Room ID, Email</div>
-            <div className="mt-1">Автосохранение игрока: нет</div>
+            <div className="mt-1">
+              Автосохранение игрока: {rule.persistPlayerInMainDb ? 'да, при копировании запроса (Shift + клик — без сохранения)' : 'нет'}
+            </div>
             {selectedTemplate.channel === 'email' && selectedTemplate.recipientEmail && (
               <div className="mt-1">Куда отправлять: {selectedTemplate.recipientEmail}{selectedTemplate.ccEmails?.length ? ` | CC: ${selectedTemplate.ccEmails.join(', ')}` : ''}</div>
             )}
@@ -592,7 +689,23 @@ export default function LinkVerificationView() {
             title="Шаблон запроса"
             value={requestText}
             copied={copiedKey === 'request'}
-            onCopy={() => copy('request', requestText)}
+            onCopy={(event) => copyRequest(event.shiftKey)}
+            copyLabel={rule.persistPlayerInMainDb ? (shiftHeld ? 'Копировать' : 'Копировать и сохранить') : undefined}
+            copyTitle={rule.persistPlayerInMainDb ? 'Копирует и сохраняет игрока. Shift + клик — только скопировать.' : undefined}
+            note={playerSaveNote && playerSaveNote.requestText === requestText ? (
+              <p className={`mt-2 flex items-center gap-3 text-xs ${playerSaveNote.tone === 'ok' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                <span>{playerSaveNote.text}</span>
+                {playerSaveNote.undo && (
+                  <button
+                    type="button"
+                    onClick={undoPlayerSave}
+                    className="rounded-md border border-slate-600 px-2 py-0.5 text-slate-300 hover:bg-slate-700"
+                  >
+                    Отмена
+                  </button>
+                )}
+              </p>
+            ) : null}
           />
 
           <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5 space-y-4">
@@ -653,7 +766,7 @@ export default function LinkVerificationView() {
                 <span className="mb-1 block">Источник</span>
                 <ComboboxField
                   value={source}
-                  options={toFieldOptions(messengerOptions)}
+                  options={toFieldOptions(MESSENGER_LABELS)}
                   onSelect={selectSource}
                   allowCustomValue
                   placeholder="Выбрать источник"
@@ -943,13 +1056,19 @@ function OutputCard({
   value,
   copied,
   onCopy,
-  compact = false
+  compact = false,
+  copyLabel = 'Копировать',
+  copyTitle,
+  note
 }: {
   title: string
   value: string
   copied: boolean
-  onCopy: () => void
+  onCopy: (event: React.MouseEvent<HTMLButtonElement>) => void
   compact?: boolean
+  copyLabel?: string
+  copyTitle?: string
+  note?: ReactNode
 }) {
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-2xl p-5">
@@ -957,12 +1076,13 @@ function OutputCard({
         <h3 className="font-semibold text-slate-200">{title}</h3>
         <button
           onClick={onCopy}
+          title={copyTitle}
           className={`inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm transition-colors ${
             copied ? 'bg-emerald-500/20 text-emerald-300' : 'bg-blue-500/20 text-blue-300 hover:bg-blue-500/30'
           }`}
         >
           {copied ? <CheckCircle2 size={16} /> : <Copy size={16} />}
-          {copied ? 'Скопировано' : 'Копировать'}
+          {copied ? 'Скопировано' : copyLabel}
         </button>
       </div>
       <textarea
@@ -972,6 +1092,7 @@ function OutputCard({
           compact ? 'min-h-[92px]' : 'min-h-[180px]'
         }`}
       />
+      {note}
     </div>
   )
 }

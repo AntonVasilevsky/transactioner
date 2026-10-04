@@ -4,10 +4,11 @@ import { getPendingMigrations, getSchemaVersion, runMigrations, type MigrationSt
 import { contactSearchKey, normalizeContactText } from '../src/utils/contactNormalization'
 import { matchesRoomSearch } from '../src/utils/roomSearch'
 import { getWalletAddressValidationError } from '../src/utils/walletValidation'
+import type { ContactMethodKey } from '../src/utils/messengers'
 import { roomKnowledgeSeed, type LinkVerificationResponseOutcome, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
 import { LINK_VERIFICATION_RESPONSE_TEMPLATES_2026_10, type LinkVerificationResponseTemplateSource } from './linkVerificationResponseTemplates'
 
-export type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
+export type ContactMethod = ContactMethodKey
 export type RoomDealType = 'General' | 'Direct' | 'Agent'
 export type RoomLanguage = 'RU' | 'EN' | 'ES'
 export type RoomCountryStatus = 'Available' | 'Unavailable' | 'Check'
@@ -43,6 +44,40 @@ export interface MutationResult {
   success: boolean
   error?: string
 }
+
+export interface SaveLinkVerificationPlayerInput {
+  contact_method: ContactMethod
+  contact_value: string
+  room_name: string
+  room_username?: string | null
+  room_player_id?: string | null
+  email?: string | null
+}
+
+export type SaveLinkVerificationPlayerStatus = 'created' | 'account_added' | 'account_updated' | 'unchanged' | 'similar_found'
+
+export interface LinkVerificationPlayerCandidate {
+  id: number
+  messenger_username: string
+  contacts: string[]
+  rooms: string[]
+}
+
+/** Exactly what the autosave wrote, so the operator can take it back within a few seconds. */
+export type LinkVerificationPlayerUndo =
+  | { kind: 'created', player_id: number }
+  | { kind: 'account_added', player_id: number, account_id: number }
+  | { kind: 'account_updated', player_id: number, account_id: number, previous: { room_username: string | null, room_player_id: string | null, email: string | null } }
+
+export interface SaveLinkVerificationPlayerResult extends MutationResult {
+  status?: SaveLinkVerificationPlayerStatus
+  player_id?: number
+  /** `similar_found`: nothing was saved; the operator decides, as on the search screen. */
+  candidates?: LinkVerificationPlayerCandidate[]
+  undo?: LinkVerificationPlayerUndo
+}
+
+const roomIdentityKey = (value: string) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '')
 
 export interface SavePlayerResult extends MutationResult {
   id?: number
@@ -362,11 +397,15 @@ export class TransactionerDatabase {
     this.db.close()
   }
 
-  searchPlayer(username: string) {
-    const query = String(username || '').trim()
-    if (!query) return null
-    const queryKey = contactSearchKey(query)
-    if (!queryKey) return null
+  /**
+   * The one rule for "is this the same player": exact = the contact text matches a stored
+   * contact (case and spacing aside; @ matters, as the unique index does); similar = what
+   * the player search would show instead. Used by the search screen and the autosave.
+   */
+  private matchPlayersByContact(query: string): { exact: SearchPlayerRow[], similar: SearchPlayerRow[] } {
+    const trimmed = String(query || '').trim()
+    const queryKey = contactSearchKey(trimmed)
+    if (!queryKey) return { exact: [], similar: [] }
 
     const allPlayers = this.db.prepare(`
       SELECT
@@ -391,23 +430,24 @@ export class TransactionerDatabase {
       contactSearchKey(player.messenger_username) === queryKey
       || exactContactPlayerIds.has(player.id)
     )
-    const exactPlayers = allPlayers.filter(isExactPlayer)
-
-    const players = (exactPlayers.length > 0
-      ? exactPlayers
+    const byRecency = (left: SearchPlayerRow, right: SearchPlayerRow) => {
+      if ((right.last_used_at || 0) !== (left.last_used_at || 0)) return (right.last_used_at || 0) - (left.last_used_at || 0)
+      return left.messenger_username.localeCompare(right.messenger_username, undefined, { sensitivity: 'base' })
+    }
+    const exact = allPlayers.filter(isExactPlayer).sort(byRecency)
+    const similar = exact.length > 0
+      ? []
       : allPlayers.filter((player) => matchesRoomSearch([
         player.messenger_username,
         player.contact_summary,
         player.room_summary,
-      ], query)))
-      .sort((left, right) => {
-        const leftExact = isExactPlayer(left) ? 0 : 1
-        const rightExact = isExactPlayer(right) ? 0 : 1
-        if (leftExact !== rightExact) return leftExact - rightExact
-        if ((right.last_used_at || 0) !== (left.last_used_at || 0)) return (right.last_used_at || 0) - (left.last_used_at || 0)
-        return left.messenger_username.localeCompare(right.messenger_username, undefined, { sensitivity: 'base' })
-      })
+      ], trimmed)).sort(byRecency)
+    return { exact, similar }
+  }
 
+  searchPlayer(username: string) {
+    const { exact, similar } = this.matchPlayersByContact(username)
+    const players = exact.length > 0 ? exact : similar
     if (!players.length) return null
 
     const result = players.map((player) => this.getPlayerPayload(player))
@@ -1216,6 +1256,145 @@ export class TransactionerDatabase {
       this.db.prepare('DELETE FROM players WHERE id = ?').run(id)
       return { success: true }
     } catch (err: unknown) {
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /**
+   * Link verification autosave: finds the player by contact and adds the room account,
+   * or fills only its empty Room ID / Email; never removes or overwrites player data.
+   */
+  saveLinkVerificationPlayer(data: SaveLinkVerificationPlayerInput): SaveLinkVerificationPlayerResult {
+    const contactMethod = data.contact_method
+    const contactValue = normalizeContactText(String(data.contact_value || ''))
+    const roomName = String(data.room_name || '').trim()
+    const roomUsername = normalizeContactText(String(data.room_username || ''))
+    const roomPlayerId = normalizeContactText(String(data.room_player_id || ''))
+    const email = normalizeContactText(String(data.email || ''))
+    if (!contactValue) return { success: false, error: 'Не заполнен контакт игрока' }
+    if (!roomName) return { success: false, error: 'Не выбран рум' }
+    if (!roomUsername && !roomPlayerId) return { success: false, error: 'Заполните Nick или Room ID' }
+
+    try {
+      const save = this.db.transaction((): SaveLinkVerificationPlayerResult => {
+        const { exact, similar } = this.matchPlayersByContact(contactValue)
+        if (exact.length === 0 && similar.length > 0) {
+          return {
+            success: true,
+            status: 'similar_found',
+            candidates: similar.slice(0, 5).map((player) => ({
+              id: player.id,
+              messenger_username: player.messenger_username,
+              contacts: String(player.contact_summary || '').split(',').map((item) => item.trim()).filter(Boolean),
+              rooms: (this.db.prepare('SELECT room_name FROM accounts WHERE player_id = ?').all(player.id) as Array<{ room_name: string }>)
+                .map((row) => row.room_name),
+            })),
+          }
+        }
+        const playerId = exact[0]?.id
+
+        if (!playerId) {
+          const created = this.db.prepare(`
+            INSERT INTO players (messenger_username, contact_method) VALUES (?, ?)
+          `).run(contactValue, contactMethod)
+          const newPlayerId = Number(created.lastInsertRowid)
+          this.db.prepare(`
+            INSERT INTO player_contacts (player_id, contact_method, contact_value, is_primary) VALUES (?, ?, ?, 1)
+          `).run(newPlayerId, contactMethod, contactValue)
+          this.db.prepare(`
+            INSERT INTO accounts (player_id, room_name, room_username, room_player_id, email) VALUES (?, ?, ?, ?, ?)
+          `).run(newPlayerId, roomName, roomUsername || null, roomPlayerId || null, email || null)
+          return { success: true, status: 'created', player_id: newPlayerId, undo: { kind: 'created', player_id: newPlayerId } }
+        }
+
+        const sameText = (left?: string | null, right?: string) => Boolean(right) && contactSearchKey(left || '') === contactSearchKey(right || '')
+        const account = (this.db.prepare('SELECT * FROM accounts WHERE player_id = ?').all(playerId) as Array<{
+          id: number
+          room_name: string
+          room_username: string | null
+          room_player_id: string | null
+          email: string | null
+        }>).find((item) => (
+          roomIdentityKey(item.room_name) === roomIdentityKey(roomName) &&
+          (sameText(item.room_username, roomUsername) || sameText(item.room_player_id, roomPlayerId))
+        ))
+
+        if (!account) {
+          const added = this.db.prepare(`
+            INSERT INTO accounts (player_id, room_name, room_username, room_player_id, email) VALUES (?, ?, ?, ?, ?)
+          `).run(playerId, roomName, roomUsername || null, roomPlayerId || null, email || null)
+          return {
+            success: true,
+            status: 'account_added',
+            player_id: playerId,
+            undo: { kind: 'account_added', player_id: playerId, account_id: Number(added.lastInsertRowid) },
+          }
+        }
+
+        const fill = {
+          room_username: !account.room_username?.trim() && roomUsername ? roomUsername : account.room_username,
+          room_player_id: !account.room_player_id?.trim() && roomPlayerId ? roomPlayerId : account.room_player_id,
+          email: !account.email?.trim() && email ? email : account.email,
+        }
+        if (
+          fill.room_username === account.room_username &&
+          fill.room_player_id === account.room_player_id &&
+          fill.email === account.email
+        ) {
+          return { success: true, status: 'unchanged', player_id: playerId }
+        }
+        this.db.prepare(`
+          UPDATE accounts SET room_username = ?, room_player_id = ?, email = ? WHERE id = ?
+        `).run(fill.room_username, fill.room_player_id, fill.email, account.id)
+        return {
+          success: true,
+          status: 'account_updated',
+          player_id: playerId,
+          undo: {
+            kind: 'account_updated',
+            player_id: playerId,
+            account_id: account.id,
+            previous: { room_username: account.room_username, room_player_id: account.room_player_id, email: account.email },
+          },
+        }
+      })
+      return save()
+    } catch (err: unknown) {
+      console.error(err)
+      return { success: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  }
+
+  /** Takes back one autosave. A created player is removed only while nothing else was added to the card. */
+  undoLinkVerificationPlayerSave(undo: LinkVerificationPlayerUndo): MutationResult {
+    try {
+      const run = this.db.transaction((): MutationResult => {
+        if (undo.kind === 'created') {
+          const counts = this.db.prepare(`
+            SELECT
+              (SELECT COUNT(*) FROM accounts WHERE player_id = @id) AS accounts,
+              (SELECT COUNT(*) FROM player_contacts WHERE player_id = @id) AS contacts,
+              (SELECT COUNT(*) FROM players WHERE id = @id) AS players
+          `).get({ id: undo.player_id }) as { accounts: number, contacts: number, players: number }
+          if (!counts.players) return { success: false, error: 'Игрок уже удалён' }
+          if (counts.accounts > 1 || counts.contacts > 1) return { success: false, error: 'В карточку игрока уже добавлены данные, удалите её вручную' }
+          this.db.prepare('DELETE FROM accounts WHERE player_id = ?').run(undo.player_id)
+          this.db.prepare('DELETE FROM player_contacts WHERE player_id = ?').run(undo.player_id)
+          this.db.prepare('DELETE FROM players WHERE id = ?').run(undo.player_id)
+          return { success: true }
+        }
+        if (undo.kind === 'account_added') {
+          const removed = this.db.prepare('DELETE FROM accounts WHERE id = ? AND player_id = ?').run(undo.account_id, undo.player_id)
+          return removed.changes ? { success: true } : { success: false, error: 'Аккаунт уже удалён' }
+        }
+        const restored = this.db.prepare(`
+          UPDATE accounts SET room_username = ?, room_player_id = ?, email = ? WHERE id = ? AND player_id = ?
+        `).run(undo.previous.room_username, undo.previous.room_player_id, undo.previous.email, undo.account_id, undo.player_id)
+        return restored.changes ? { success: true } : { success: false, error: 'Аккаунт не найден' }
+      })
+      return run()
+    } catch (err: unknown) {
+      console.error(err)
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
   }

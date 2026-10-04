@@ -264,6 +264,164 @@ describe('TransactionerDatabase', () => {
     expect(db.getLinkVerificationResponseTemplates('redstar', 'ES', 'General')).toEqual([])
   })
 
+  it('autosaves a link-verification player: creates once, then adds or fills accounts without overwriting', () => {
+    const created = db.saveLinkVerificationPlayer({
+      contact_method: 'TG',
+      contact_value: '@NewHero',
+      room_name: 'Nexa',
+      room_username: 'HeroNick',
+      room_player_id: '123456',
+      email: '',
+    })
+    expect(created).toMatchObject({ success: true, status: 'created', player_id: expect.any(Number), undo: { kind: 'created' } })
+    const playerId = Number(created.player_id)
+    expect(db.getPlayerById(playerId)).toMatchObject({
+      player: expect.objectContaining({ messenger_username: '@NewHero' }),
+      contacts: [expect.objectContaining({ contact_method: 'TG', contact_value: '@NewHero' })],
+      accounts: [expect.objectContaining({ room_name: 'Nexa', room_username: 'HeroNick', room_player_id: '123456', email: null })],
+    })
+
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'TG', contact_value: '@NEWHERO ', room_name: 'Nexa', room_username: 'heronick', email: 'hero@example.com',
+    })).toMatchObject({ success: true, status: 'account_updated', player_id: playerId })
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'TG', contact_value: '@newhero', room_name: 'Nexa', room_player_id: '123456', email: 'other@example.com',
+    })).toEqual({ success: true, status: 'unchanged', player_id: playerId })
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'TG', contact_value: '@newhero', room_name: 'WPT Global', room_username: 'HeroNick', room_player_id: '777',
+    })).toMatchObject({ success: true, status: 'account_added', player_id: playerId })
+
+    const accounts = db.getPlayerById(playerId)?.accounts || []
+    expect(accounts).toHaveLength(2)
+    expect(accounts.find((account) => account.room_name === 'Nexa')).toMatchObject({ email: 'hero@example.com', room_player_id: '123456' })
+    expect(db.getAllPlayers().filter((player) => player.messenger_username.toLowerCase().includes('newhero'))).toHaveLength(1)
+  })
+
+  it('autosave finds an existing player by any contact and keeps the rest of the card', () => {
+    const saved = db.savePlayer(basePlayer({
+      contacts: [
+        { contactMethod: 'TG', contactValue: '@test1', isPrimary: true },
+        { contactMethod: 'WA', contactValue: '+591 7116 0533' },
+      ],
+      default_wallet: 'TWalletAddress1234567890123456789',
+      default_wallet_network: 'TRC20',
+    }))
+    expect(saved.success).toBe(true)
+
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'WA', contact_value: '+591 7116 0533', room_name: 'Champion Poker', room_username: 'ChampNick',
+    })).toMatchObject({ success: true, status: 'account_added', player_id: saved.id })
+
+    const player = db.getPlayerById(Number(saved.id))
+    expect(player?.contacts).toHaveLength(2)
+    expect(player?.player.default_wallet).toBe('TWalletAddress1234567890123456789')
+    expect(player?.accounts.map((account) => account.room_name).sort()).toEqual(['Champion Poker', 'RedStar'])
+  })
+
+  it('autosave follows the player-search identity rule: alexandr and @alexandr are different players', () => {
+    const group = db.savePlayer(basePlayer({
+      messenger_username: 'Alexandr + WPD Support',
+      contacts: [{ contactMethod: 'TG', contactValue: 'Alexandr + WPD Support', isPrimary: true }],
+      accounts: [{ roomName: 'Nexa', roomUsername: 'alexnick', roomPlayerId: '', email: '' }],
+    }))
+    const nick = db.savePlayer(basePlayer({
+      messenger_username: '@alexandr',
+      contacts: [{ contactMethod: 'TG', contactValue: '@alexandr', isPrimary: true }],
+      accounts: [{ roomName: 'RedStar', roomUsername: 'alexred', roomPlayerId: '', email: '' }],
+    }))
+    expect(group.success && nick.success).toBe(true)
+
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'TG', contact_value: '@alexandr', room_name: 'WPT Global', room_username: 'alexwpt',
+    })).toMatchObject({ success: true, status: 'account_added', player_id: nick.id })
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'TG', contact_value: 'alexandr + wpd support', room_name: 'WPT Global', room_username: 'alexwpt',
+    })).toMatchObject({ success: true, status: 'account_added', player_id: group.id })
+    expect(db.getPlayerById(Number(group.id))?.accounts.map((account) => account.room_name).sort()).toEqual(['Nexa', 'WPT Global'])
+    expect(db.getPlayerById(Number(nick.id))?.accounts.map((account) => account.room_name).sort()).toEqual(['RedStar', 'WPT Global'])
+  })
+
+  it('autosave saves nothing when only similar players exist and names them', () => {
+    const group = db.savePlayer(basePlayer({
+      messenger_username: 'Alexandr + WPD Support',
+      contacts: [{ contactMethod: 'TG', contactValue: 'Alexandr + WPD Support', isPrimary: true }],
+      accounts: [{ roomName: 'Nexa', roomUsername: 'alexnick', roomPlayerId: '', email: '' }],
+    }))
+    expect(group.success).toBe(true)
+    const before = db.getAllPlayers().length
+
+    const result = db.saveLinkVerificationPlayer({
+      contact_method: 'TG', contact_value: '@alexandr', room_name: 'WPT Global', room_username: 'alexwpt',
+    })
+    expect(result).toEqual({
+      success: true,
+      status: 'similar_found',
+      candidates: [{ id: group.id, messenger_username: 'Alexandr + WPD Support', contacts: ['Alexandr + WPD Support'], rooms: ['Nexa'] }],
+    })
+    expect(db.getAllPlayers()).toHaveLength(before)
+    expect(db.getPlayerById(Number(group.id))?.accounts).toHaveLength(1)
+
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'TG', contact_value: 'alexandr', room_name: 'WPT Global', room_username: 'alexwpt',
+    }).status).toBe('similar_found')
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'WA', contact_value: '+59171160533', room_name: 'Nexa', room_username: 'x',
+    }).status).toBe('created')
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'WA', contact_value: '+591 7116 0533', room_name: 'Nexa', room_username: 'x',
+    }).status).toBe('similar_found')
+  })
+
+  it('autosave never changes the primary contact or adds a second contact', () => {
+    const saved = db.savePlayer(basePlayer({
+      messenger_username: 'Ivan + WPD Support',
+      contacts: [
+        { contactMethod: 'TG', contactValue: 'Ivan + WPD Support', isPrimary: true },
+        { contactMethod: 'TG', contactValue: '@ivan' },
+      ],
+    }))
+    expect(db.saveLinkVerificationPlayer({
+      contact_method: 'TG', contact_value: '@ivan', room_name: 'Nexa', room_username: 'ivannick',
+    })).toMatchObject({ success: true, status: 'account_added', player_id: saved.id })
+    const player = db.getPlayerById(Number(saved.id))
+    expect(player?.player.messenger_username).toBe('Ivan + WPD Support')
+    expect(player?.contacts.map((contact) => [contact.contact_value, contact.is_primary])).toEqual([
+      ['Ivan + WPD Support', 1],
+      ['@ivan', 0],
+    ])
+  })
+
+  it('undo takes back exactly what the autosave wrote', () => {
+    const created = db.saveLinkVerificationPlayer({ contact_method: 'TG', contact_value: '@undo1', room_name: 'Nexa', room_username: 'u1' })
+    expect(db.undoLinkVerificationPlayerSave(created.undo!)).toEqual({ success: true })
+    expect(db.getPlayerById(Number(created.player_id))).toBeNull()
+    expect(db.searchPlayer('@undo1')).toBeNull()
+
+    const base = db.savePlayer(basePlayer())
+    const added = db.saveLinkVerificationPlayer({ contact_method: 'TG', contact_value: '@test1', room_name: 'Nexa', room_username: 'n1' })
+    expect(added.undo).toMatchObject({ kind: 'account_added', player_id: base.id })
+    expect(db.undoLinkVerificationPlayerSave(added.undo!)).toEqual({ success: true })
+    expect(db.getPlayerById(Number(base.id))?.accounts.map((account) => account.room_name)).toEqual(['RedStar'])
+    expect(db.undoLinkVerificationPlayerSave(added.undo!)).toEqual({ success: false, error: 'Аккаунт уже удалён' })
+
+    const updated = db.saveLinkVerificationPlayer({ contact_method: 'TG', contact_value: '@test1', room_name: 'RedStar', room_username: 'redstar test1', email: 'r@example.com' })
+    expect(updated.undo).toMatchObject({ kind: 'account_updated', previous: { email: null } })
+    expect(db.undoLinkVerificationPlayerSave(updated.undo!)).toEqual({ success: true })
+    expect(db.getPlayerById(Number(base.id))?.accounts[0].email).toBeNull()
+  })
+
+  it('undo of a created player refuses once the card has grown', () => {
+    const created = db.saveLinkVerificationPlayer({ contact_method: 'TG', contact_value: '@undo2', room_name: 'Nexa', room_username: 'u2' })
+    expect(db.saveLinkVerificationPlayer({ contact_method: 'TG', contact_value: '@undo2', room_name: 'RedStar', room_username: 'u2r' }).status).toBe('account_added')
+    expect(db.undoLinkVerificationPlayerSave(created.undo!).success).toBe(false)
+    expect(db.getPlayerById(Number(created.player_id))?.accounts).toHaveLength(2)
+  })
+
+  it('autosave refuses a request without contact or player identity', () => {
+    expect(db.saveLinkVerificationPlayer({ contact_method: 'TG', contact_value: ' ', room_name: 'Nexa', room_username: 'x' }).success).toBe(false)
+    expect(db.saveLinkVerificationPlayer({ contact_method: 'TG', contact_value: '@x', room_name: 'Nexa' }).success).toBe(false)
+  })
+
   it('saves link-verification response templates only for existing rooms', () => {
     expect(db.saveLinkVerificationResponseTemplate(baseLinkVerificationResponseTemplate({
       room_key: 'missing-room',

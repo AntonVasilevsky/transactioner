@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 
+// Same values as ContactMethodKey in src/utils/messengers.ts (the one list of messengers).
 type ContactMethod = 'TG' | 'WA' | 'Discord' | 'Teams' | 'Email'
 type RoomDealType = 'General' | 'Direct' | 'Agent'
 type RoomLanguage = 'RU' | 'EN' | 'ES'
@@ -66,6 +67,36 @@ interface MutationResult {
 
 interface SavePlayerResult extends MutationResult {
   id?: number
+}
+
+interface SaveLinkVerificationPlayerInput {
+  contact_method: ContactMethod
+  contact_value: string
+  room_name: string
+  room_username?: string | null
+  room_player_id?: string | null
+  email?: string | null
+}
+
+type SaveLinkVerificationPlayerStatus = 'created' | 'account_added' | 'account_updated' | 'unchanged' | 'similar_found'
+
+interface LinkVerificationPlayerCandidate {
+  id: number
+  messenger_username: string
+  contacts: string[]
+  rooms: string[]
+}
+
+type LinkVerificationPlayerUndo =
+  | { kind: 'created', player_id: number }
+  | { kind: 'account_added', player_id: number, account_id: number }
+  | { kind: 'account_updated', player_id: number, account_id: number, previous: { room_username: string | null, room_player_id: string | null, email: string | null } }
+
+interface SaveLinkVerificationPlayerResult extends MutationResult {
+  status?: SaveLinkVerificationPlayerStatus
+  player_id?: number
+  candidates?: LinkVerificationPlayerCandidate[]
+  undo?: LinkVerificationPlayerUndo
 }
 
 interface SaveRoomProfileInput {
@@ -366,6 +397,8 @@ interface Window {
   electronAPI: {
     searchPlayer: (username: string) => Promise<PlayerPayload | PlayerPayload[] | null>;
     savePlayer: (data: SavePlayerInput) => Promise<SavePlayerResult>;
+    saveLinkVerificationPlayer: (data: SaveLinkVerificationPlayerInput) => Promise<SaveLinkVerificationPlayerResult>;
+    undoLinkVerificationPlayerSave: (undo: LinkVerificationPlayerUndo) => Promise<MutationResult>;
     getAllPlayers: () => Promise<Player[]>;
     getRoomRegistrationStats: () => Promise<RoomRegistrationStat[]>;
     getPlayerById: (id: number) => Promise<PlayerPayload | null>;

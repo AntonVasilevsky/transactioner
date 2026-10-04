@@ -7,6 +7,9 @@ import {
   buildCenteredGoogleSheetsRowHtml,
   buildSheet1Tsv,
   composePlayerDataByRule,
+  describeLinkVerificationPlayerSave,
+  describeLinkVerificationPlayerUndo,
+  planLinkVerificationPlayerSave,
   composeTypedIdentityData,
   LINK_VERIFICATION_USERNAME_FIELD_LABEL,
   googleSheetsTsvCell,
@@ -421,5 +424,57 @@ Telegram: @AlexanderChazov
     const html = buildCenteredGoogleSheetsRowHtml('Hero & Co\t<Check>\tline 1\nline 2\tFALSE')
 
     expect(html).toBe('<table><tbody><tr valign="middle" style="vertical-align:middle;"><td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">Hero &amp; Co</td><td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">&lt;Check&gt;</td><td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">line 1<br>line 2</td><td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">FALSE</td></tr></tbody></table>')
+  })
+})
+
+describe('link-verification player autosave plan', () => {
+  const values = { messenger: 'Telegram', contact: '@hero', username: 'HeroNick', roomId: '123', email: 'hero@example.com' }
+
+  it('saves only Nexa, RedStar, Champion Poker and WPTG', () => {
+    for (const room of ['Nexa', 'RedStar', 'Champion Poker', 'WPTG', 'WPT Global']) {
+      expect(planLinkVerificationPlayerSave({ rule: resolveLinkVerificationRoomRule(room), ...values })?.input, room).toBeDefined()
+    }
+    for (const room of ['CoinPoker', 'PartyPoker', '888 Poker', 'TON Poker', 'BCPoker', 'Stake']) {
+      expect(planLinkVerificationPlayerSave({ rule: resolveLinkVerificationRoomRule(room), ...values }), room).toBeNull()
+    }
+  })
+
+  it('maps the messenger to the player-card contact type and the WPTG account to WPT Global', () => {
+    expect(planLinkVerificationPlayerSave({ rule: resolveLinkVerificationRoomRule('WPTG'), ...values })?.input).toEqual({
+      contact_method: 'TG',
+      contact_value: '@hero',
+      room_name: 'WPT Global',
+      room_username: 'HeroNick',
+      room_player_id: '123',
+      email: 'hero@example.com',
+    })
+    expect(planLinkVerificationPlayerSave({ rule: resolveLinkVerificationRoomRule('Nexa'), ...values, messenger: 'WA' })?.input?.contact_method).toBe('WA')
+  })
+
+  it('explains why nothing is saved', () => {
+    const nexa = resolveLinkVerificationRoomRule('Nexa')
+    expect(planLinkVerificationPlayerSave({ rule: nexa, ...values, contact: ' ' })?.skipReason).toMatch(/Контакт/)
+    expect(planLinkVerificationPlayerSave({ rule: nexa, ...values, messenger: 'Jivo' })?.skipReason).toMatch(/«Jivo»/)
+    expect(planLinkVerificationPlayerSave({ rule: nexa, ...values, messenger: 'Site' })?.skipReason).toMatch(/«Site»/)
+    expect(planLinkVerificationPlayerSave({ rule: nexa, ...values, messenger: '' })?.skipReason).toMatch(/мессенджер/)
+    expect(planLinkVerificationPlayerSave({ rule: nexa, ...values, username: '', roomId: '' })?.skipReason).toMatch(/Nick или Room ID/)
+  })
+
+  it('describes the save result', () => {
+    const input = { contact_method: 'TG' as const, contact_value: '@hero', room_name: 'Nexa' }
+    expect(describeLinkVerificationPlayerSave({ success: true, status: 'created' }, input)).toBe('Скопировано. Игрок @hero создан с аккаунтом Nexa.')
+    expect(describeLinkVerificationPlayerSave({ success: true, status: 'unchanged' }, input)).toBe('Скопировано. Игрок @hero с аккаунтом Nexa уже есть в базе.')
+    expect(describeLinkVerificationPlayerSave({ success: false, error: 'нет базы' }, input)).toBe('Скопировано. Игрок не сохранён: нет базы.')
+    expect(describeLinkVerificationPlayerSave({
+      success: true,
+      status: 'similar_found',
+      candidates: [{ id: 1, messenger_username: 'Alexandr + WPD Support', contacts: ['Alexandr + WPD Support', '@alex'], rooms: ['Nexa'] }],
+    }, input)).toBe('Скопировано. Игрок не сохранён: похожий игрок уже есть — Alexandr + WPD Support (@alex). Проверьте и сохраните вручную.')
+  })
+
+  it('describes the undo', () => {
+    const input = { contact_method: 'TG' as const, contact_value: '@hero', room_name: 'Nexa' }
+    expect(describeLinkVerificationPlayerUndo({ kind: 'created', player_id: 1 }, input)).toBe('Отменено: игрок @hero удалён.')
+    expect(describeLinkVerificationPlayerUndo({ kind: 'account_added', player_id: 1, account_id: 2 }, input)).toBe('Отменено: аккаунт Nexa у игрока @hero удалён.')
   })
 })

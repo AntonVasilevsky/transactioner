@@ -1,4 +1,5 @@
 import { matchesRoomSearch } from '../../utils/roomSearch'
+import { CONTACT_METHODS } from '../../utils/messengers'
 import type { FieldOption } from './DropdownPanel'
 
 export const toFieldOptions = (values: readonly string[]): FieldOption[] => values.map((value) => ({ value, label: value }))
@@ -13,4 +14,4 @@ export const roomProfileOptions = (profiles: RoomProfileInfo[]): FieldOption[] =
   searchText: [profile.room_key, profile.network_name || ''],
 }))
 
-export const CONTACT_METHOD_OPTIONS = toFieldOptions(['TG', 'WA', 'Discord', 'Teams', 'Email'])
+export const CONTACT_METHOD_OPTIONS = toFieldOptions(CONTACT_METHODS)

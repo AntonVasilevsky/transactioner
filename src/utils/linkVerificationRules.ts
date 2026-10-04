@@ -40,7 +40,10 @@ export interface LinkVerificationRoomRule {
   defaultTemplateKey: string
   requiredFields: LinkVerificationFieldKey[]
   sheet2RoomUsernameField: LinkVerificationFieldKey
+  /** Link verification autosaves the player card when the request is copied (Shift skips it). */
   persistPlayerInMainDb: boolean
+  /** Room name of the saved player account when it differs from canonicalRoomName. */
+  accountRoomName?: string
   deal: DealRule
 }
 
@@ -259,7 +262,8 @@ const ROOM_RULES: LinkVerificationRoomRule[] = [
     defaultTemplateKey: 'wptg',
     requiredFields: ['roomId', 'nick', 'email'],
     sheet2RoomUsernameField: 'roomId',
-    persistPlayerInMainDb: false,
+    persistPlayerInMainDb: true,
+    accountRoomName: 'WPT Global',
     deal: dealRuleIndex.get('wptg')!
   },
   {

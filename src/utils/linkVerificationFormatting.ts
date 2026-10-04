@@ -1,34 +1,13 @@
 import type { LinkVerificationFieldKey, LinkVerificationRoomRule, LinkVerificationTemplate } from './linkVerificationRules'
 import { CORE_ROOM_NAMES, sortRoomNamesByUsage, type RoomRegistrationStatLike } from './roomUsageSort'
 
+import { contactMethodForMessenger, normalizeMessengerLabel, toDirectusMessenger } from './messengers'
+import { contactSearchKey } from './contactNormalization'
+
 export type { RoomRegistrationStatLike } from './roomUsageSort'
+export { normalizeMessengerLabel, toDirectusMessenger } from './messengers'
 
 export const CORE_LINK_VERIFICATION_ROOMS = CORE_ROOM_NAMES
-
-export const normalizeMessengerLabel = (value: string) => {
-  const lowered = value.trim().toLowerCase()
-  if (!lowered) return ''
-  if (lowered === 'tg') return 'Telegram'
-  if (lowered === 'wa') return 'WA'
-  return value.trim() || 'Telegram'
-}
-
-export const toDirectusMessenger = (messenger: string, login: string, userEmail = '') => {
-  const base = messenger.trim().toLowerCase()
-  const username = login.trim()
-  const email = userEmail.trim()
-  if (!base) return ''
-  if (base.includes('email') || base.includes('site')) {
-    return email ? `email: ${email}` : ''
-  }
-  if (!username) return ''
-  const prefix = base.includes('telegram')
-    ? 'telegram'
-    : base === 'wa' || base.includes('whatsapp')
-      ? 'whatsapp'
-      : base || 'messenger'
-  return `${prefix}: ${username}`
-}
 
 export const resolveSheet2DirectusMessenger = (values: {
   source: string
@@ -265,4 +244,75 @@ export const buildCenteredGoogleSheetsRowHtml = (tsv: string) => {
     `<td align="center" valign="middle" style="text-align:center;vertical-align:middle;white-space:pre-wrap;">${escapeHtml(value).replace(/\r\n|\r|\n/g, '<br>')}</td>`
   ))
   return `<table><tbody><tr valign="middle" style="vertical-align:middle;">${cells.join('')}</tr></tbody></table>`
+}
+
+export type LinkVerificationPlayerSavePlan =
+  | { input: SaveLinkVerificationPlayerInput, skipReason?: undefined }
+  | { input?: undefined, skipReason: string }
+
+/** What the request copy saves to the player cards, or why it saves nothing. */
+export const planLinkVerificationPlayerSave = (values: {
+  rule: Pick<LinkVerificationRoomRule, 'canonicalRoomName' | 'persistPlayerInMainDb' | 'accountRoomName'>
+  messenger: string
+  contact: string
+  username: string
+  roomId: string
+  email: string
+}): LinkVerificationPlayerSavePlan | null => {
+  if (!values.rule.persistPlayerInMainDb) return null
+  const contact = values.contact.trim()
+  const username = values.username.trim()
+  const roomId = values.roomId.trim()
+  if (!contact) return { skipReason: 'Игрок не сохранён: заполните «Контакт».' }
+  const contactMethod = contactMethodForMessenger(values.messenger)
+  if (!contactMethod) {
+    const label = normalizeMessengerLabel(values.messenger)
+    return {
+      skipReason: label
+        ? `Игрок не сохранён: в карточке игрока нет контакта типа «${label}».`
+        : 'Игрок не сохранён: выберите мессенджер.'
+    }
+  }
+  if (!username && !roomId) return { skipReason: 'Игрок не сохранён: заполните Nick или Room ID.' }
+  return {
+    input: {
+      contact_method: contactMethod,
+      contact_value: contact,
+      room_name: values.rule.accountRoomName || values.rule.canonicalRoomName,
+      room_username: username || null,
+      room_player_id: roomId || null,
+      email: values.email.trim() || null,
+    }
+  }
+}
+
+export const describeLinkVerificationPlayerSave = (
+  result: SaveLinkVerificationPlayerResult,
+  input: SaveLinkVerificationPlayerInput
+) => {
+  // The template is copied before the save runs, whatever the save says.
+  const copied = 'Скопировано. '
+  if (!result.success) return `${copied}Игрок не сохранён: ${result.error || 'ошибка базы данных'}.`
+  const who = input.contact_value
+  const room = input.room_name
+  if (result.status === 'created') return `${copied}Игрок ${who} создан с аккаунтом ${room}.`
+  if (result.status === 'account_added') return `${copied}Игроку ${who} добавлен аккаунт ${room}.`
+  if (result.status === 'account_updated') return `${copied}В аккаунте ${room} игрока ${who} дополнены пустые поля.`
+  if (result.status === 'similar_found') {
+    const names = (result.candidates || []).map((candidate) => {
+      const others = candidate.contacts.filter((contact) => contactSearchKey(contact) !== contactSearchKey(candidate.messenger_username))
+      return others.length ? `${candidate.messenger_username} (${others.join(', ')})` : candidate.messenger_username
+    })
+    return `${copied}Игрок не сохранён: похожий игрок уже есть — ${names.join('; ')}. Проверьте и сохраните вручную.`
+  }
+  return `${copied}Игрок ${who} с аккаунтом ${room} уже есть в базе.`
+}
+
+export const describeLinkVerificationPlayerUndo = (
+  undo: LinkVerificationPlayerUndo,
+  input: SaveLinkVerificationPlayerInput
+) => {
+  if (undo.kind === 'created') return `Отменено: игрок ${input.contact_value} удалён.`
+  if (undo.kind === 'account_added') return `Отменено: аккаунт ${input.room_name} у игрока ${input.contact_value} удалён.`
+  return `Отменено: поля аккаунта ${input.room_name} возвращены.`
 }

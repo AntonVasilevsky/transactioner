@@ -266,6 +266,16 @@ ipcMain.handle('save-player', (_, data) => {
   if (result.success) runDailyBackup()
   return result
 })
+ipcMain.handle('save-link-verification-player', (_, data) => {
+  const result = store?.saveLinkVerificationPlayer(data) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success && result.status !== 'unchanged' && result.status !== 'similar_found') runDailyBackup()
+  return result
+})
+ipcMain.handle('undo-link-verification-player-save', (_, undo) => {
+  const result = store?.undoLinkVerificationPlayerSave(undo) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
 ipcMain.handle('update-default-wallet', (_, id: number, wallet: string) => {
   const result = store?.updateDefaultWallet(id, wallet) ?? { success: false, error: 'База данных недоступна' }
   if (result.success) runDailyBackup()

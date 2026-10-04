@@ -3,6 +3,8 @@ import { ipcRenderer, contextBridge } from 'electron'
 contextBridge.exposeInMainWorld('electronAPI', {
   searchPlayer: (username: string) => ipcRenderer.invoke('search-player', username),
   savePlayer: (data: SavePlayerInput) => ipcRenderer.invoke('save-player', data),
+  saveLinkVerificationPlayer: (data: SaveLinkVerificationPlayerInput) => ipcRenderer.invoke('save-link-verification-player', data),
+  undoLinkVerificationPlayerSave: (undo: LinkVerificationPlayerUndo) => ipcRenderer.invoke('undo-link-verification-player-save', undo),
   getAllPlayers: () => ipcRenderer.invoke('get-all-players'),
   getRoomRegistrationStats: () => ipcRenderer.invoke('get-room-registration-stats'),
   getPlayerById: (id: number) => ipcRenderer.invoke('get-player-by-id', id),
