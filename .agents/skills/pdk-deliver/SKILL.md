@@ -72,7 +72,13 @@ skip silently, do not mention.
    lives outside the repo (`~/.pdk/backups`); never read, list or touch it.
 5. **Work in small verifiable steps.** Each step ends with something you can
    run or inspect. Stay inside Goal/Acceptance; a needed change of scope is an
-   approval point, not a silent expansion.
+   approval point, not a silent expansion. **Stop on new logic:** work that is not in
+   Acceptance — above all a new rule about data (which records are the same, what is
+   merged, overwritten or charged) — is not a plan item: propose a separate task with
+   its own level (`pdk task new … --model "Ln — …"`, criteria in pdk-design "Model
+   levels") and wait. When the human widens this task instead, ask again whether its
+   level still fits before coding. Every "as X already does" in a plan is checked by
+   reading X first and cited as file:line; an unchecked claim is a guess.
 6. **Test.** Run the project's own test command (README, package/build files,
    CI config). Add tests for new behaviour. Never weaken or delete a test to
    make it pass; if a test is wrong, say why and ask.

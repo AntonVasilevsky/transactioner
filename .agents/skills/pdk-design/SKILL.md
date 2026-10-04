@@ -86,6 +86,10 @@ L4 costs the scarcest model, so give it only where L3 would likely do worse.
 Decide with one question: **if this goes wrong, will the tests catch it?**
 No → L4 (or L3 plus an independent pdk-review at L4). Yes → L3 or lower.
 
+- Always L4 (or L3 plus an independent review at L4): a rule that decides which
+  records are the same or what gets merged, overwritten, deleted or charged (matching,
+  deduplication, identity, money). Tests of such a rule only freeze it — a wrong rule
+  passes its own tests and changes real data.
 - L4 is likely better at: reviewing or auditing someone else's code (finding what
   the author missed); decisions that are expensive to change (architecture, data
   formats, ADRs); many constraints at once where one wrong step breaks the result;
