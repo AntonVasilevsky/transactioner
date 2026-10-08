@@ -59,6 +59,9 @@ const formatLocalTransactionDate = (value: string) => {
   return date.toLocaleString()
 }
 
+/** A prefilled currency sign ("$", "€") is not an amount: the field is empty until it has digits. */
+const isAmountEmpty = (value: string) => !/\d/.test(value)
+
 const getInitialAmount = (targetAccount: Account | null, targetOperationType: OperationType) =>
   shouldUseAmountCurrency(targetAccount)
     ? getInitialAmountCurrency(targetAccount, targetOperationType) === 'EUR' ? '€' : '$'
@@ -470,7 +473,7 @@ export default function FormView({ player, account: selectedAccount, onAccountSe
     const isDeposit = operationType === 'Deposit'
     const roomName = account.roomName
 
-    if (!amount.trim()) missing.push('amount')
+    if (isAmountEmpty(amount)) missing.push('amount')
     if (!account.roomUsername?.trim()) missing.push('roomUsername')
 
     if (isDeposit && !txId.trim()) missing.push('txId')
@@ -503,7 +506,7 @@ export default function FormView({ player, account: selectedAccount, onAccountSe
     : null
 
   const inputClass = (field: string, value?: string) => {
-    const isMissing = missingFields.includes(field) && !String(value || '').trim()
+    const isMissing = missingFields.includes(field) && (field === 'amount' ? isAmountEmpty(String(value || '')) : !String(value || '').trim())
     const isInvalidWallet = field === 'wallet' && Boolean(walletValidationError)
     return `min-w-0 max-w-full w-full bg-slate-900 border rounded-lg p-3 text-slate-100 placeholder-slate-700 outline-none transition-colors ${
       isMissing || isInvalidWallet ? 'border-red-500 focus:border-red-400' : 'border-slate-700 focus:border-blue-500'
@@ -616,6 +619,11 @@ export default function FormView({ player, account: selectedAccount, onAccountSe
     const missing = getMissingFields()
     setMissingFields(missing)
     scrollToFirstMissingField(missing)
+    if (missing.length) {
+      const labels = missing.map((field) => missingLabels[field] || field).join(', ')
+      const proceed = window.confirm(`Не заполнено: ${labels}.\n\nСкопировать шаблон всё равно?`)
+      if (!proceed) return
+    }
 
     if (depositTransactionCopyWarning) {
       const proceed = window.confirm(`${depositTransactionCopyWarning}\n\nВыбранный рум: ${account?.roomName || 'не выбран'}\nСкопировать шаблон всё равно?`)

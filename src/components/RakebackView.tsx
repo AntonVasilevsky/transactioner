@@ -13,10 +13,11 @@ import {
   isCryptoWalletNetwork,
 } from '../utils/walletValidation'
 import {
+  defaultRakebackExplorerSettings,
   loadRakebackExplorerSettings,
+  mergeLegacyRakebackWallets,
+  rakebackSettingsMigratedKey,
   type RakebackExplorerSettings,
-  saveRakebackExplorerSettings,
-  updateRakebackExplorerSettings,
 } from '../utils/rakebackSettings'
 import DateField from './fields/DateField'
 
@@ -111,10 +112,47 @@ export default function RakebackView({
   const [walletSaveState, setWalletSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const [searchState, setSearchState] = useState<RakebackSearchState>('idle')
   const [quickSearchButton, setQuickSearchButton] = useState<QuickSearchButton>(null)
-  const [explorerSettings, setExplorerSettings] = useState(loadRakebackExplorerSettings)
+  const [explorerSettings, setExplorerSettings] = useState<RakebackExplorerSettings>(defaultRakebackExplorerSettings)
+  const [explorerSettingsLoaded, setExplorerSettingsLoaded] = useState(false)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [settingsDraft, setSettingsDraft] = useState<RakebackExplorerSettings>(explorerSettings)
-  const [settingsSaveState, setSettingsSaveState] = useState<'idle' | 'saved'>('idle')
+  const [settingsSaveState, setSettingsSaveState] = useState<'idle' | 'saved' | 'error'>('idle')
+
+  // Sender wallets are one list in the database; a list left in browser storage by an older
+  // version is imported once per app copy (T-0022).
+  useEffect(() => {
+    let active = true
+    const load = async () => {
+      let text = await window.electronAPI.getRakebackSenderWallets()
+      try {
+        if (!localStorage.getItem(rakebackSettingsMigratedKey)) {
+          const merged = mergeLegacyRakebackWallets(text, loadRakebackExplorerSettings(localStorage).affiliateWallets)
+          if (merged.changed) {
+            const result = await window.electronAPI.saveRakebackSenderWallets(merged.text)
+            if (result.success) text = merged.text
+          }
+          localStorage.setItem(rakebackSettingsMigratedKey, new Date().toISOString())
+        }
+      } catch {
+        // Browser storage is optional here: the database list is what the search uses.
+      }
+      if (!active) return
+      setExplorerSettings({ affiliateWallets: text })
+      setSettingsDraft({ affiliateWallets: text })
+      setExplorerSettingsLoaded(true)
+    }
+    load().catch(() => {
+      if (active) setExplorerSettingsLoaded(true)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const storeSenderWallets = async (text: string) => {
+    const result = await window.electronAPI.saveRakebackSenderWallets(text)
+    setSettingsSaveState(result.success ? 'saved' : 'error')
+  }
   const [foundTransactions, setFoundTransactions] = useState<RakebackTransactionCandidate[]>([])
   const [selectedTransactionHashes, setSelectedTransactionHashes] = useState<string[]>([])
   const playerIdentity = String(player.id || player.messenger_username)
@@ -349,9 +387,8 @@ export default function RakebackView({
 
   const saveSettings = () => {
     setExplorerSettings(settingsDraft)
-    saveRakebackExplorerSettings(localStorage, settingsDraft)
     resetSearchResults()
-    setSettingsSaveState('saved')
+    void storeSenderWallets(settingsDraft.affiliateWallets)
   }
 
   if (isSettingsOpen) {
@@ -380,13 +417,11 @@ export default function RakebackView({
           <textarea
             value={settingsDraft.affiliateWallets}
             onChange={(event) => {
-              const next = updateRakebackExplorerSettings(localStorage, settingsDraft, {
-                affiliateWallets: event.target.value,
-              })
+              const next = { ...settingsDraft, affiliateWallets: event.target.value }
               setSettingsDraft(next)
               setExplorerSettings(next)
-              setSettingsSaveState('saved')
               resetSearchResults()
+              void storeSenderWallets(next.affiliateWallets)
             }}
             placeholder={`USDT TRC20 T...\nUSDT ERC20 0x...\nUSDC ERC20 0x...\nUSDT BEP20 0x...`}
             className="min-h-[220px] w-full rounded-xl border border-slate-700 bg-slate-900 p-4 font-mono text-sm text-slate-100 placeholder-slate-600/60 outline-none transition-all focus:border-blue-500"
@@ -406,6 +441,11 @@ export default function RakebackView({
             {settingsSaveState === 'saved' && (
               <span className="rounded-lg bg-emerald-400/10 px-3 py-2 text-sm text-emerald-200">
                 сохранено для всех игроков
+              </span>
+            )}
+            {settingsSaveState === 'error' && (
+              <span className="rounded-lg bg-red-500/10 px-3 py-2 text-sm text-red-300">
+                не удалось сохранить, попробуйте ещё раз
               </span>
             )}
           </div>
@@ -657,7 +697,7 @@ export default function RakebackView({
             </div>
           )}
 
-          {isCrypto && !explorerSettings.affiliateWallets.trim() && (
+          {isCrypto && explorerSettingsLoaded && !explorerSettings.affiliateWallets.trim() && (
             <div className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
               Добавьте кошелек, с которого отправляется рейкбек.
             </div>

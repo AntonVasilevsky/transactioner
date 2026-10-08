@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   getStorageInfo: () => ipcRenderer.invoke('get-storage-info'),
   getRoomKnowledgeIndex: () => ipcRenderer.invoke('get-room-knowledge-index'),
+  getRakebackSenderWallets: () => ipcRenderer.invoke('get-rakeback-sender-wallets'),
+  saveRakebackSenderWallets: (text: string) => ipcRenderer.invoke('save-rakeback-sender-wallets', text),
   getRoomWalletCommentPhrases: () => ipcRenderer.invoke('get-room-wallet-comment-phrases'),
   saveRoomWalletCommentPhrase: (phrase: Record<RoomLanguage, string>) => ipcRenderer.invoke('save-room-wallet-comment-phrase', phrase),
   getRoomKnowledgeAdminIndex: () => ipcRenderer.invoke('get-room-knowledge-admin-index'),

@@ -1571,6 +1571,14 @@ describe('TransactionerDatabase', () => {
     check.close()
   })
 
+  it('keeps the rakeback sender wallets in the database across restarts', () => {
+    expect(db.getRakebackSenderWallets()).toBe('')
+    expect(db.saveRakebackSenderWallets('USDT TRC20\nTH9pR7y4opKeR78jmutCgY4toDVfpFJjgM\n')).toEqual({ success: true })
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+    expect(db.getRakebackSenderWallets()).toBe('USDT TRC20\nTH9pR7y4opKeR78jmutCgY4toDVfpFJjgM\n')
+  })
+
   it('stores operator comment phrases once per RU text and requires all three languages', () => {
     expect(db.getRoomWalletCommentPhrases()).toEqual([])
     expect(db.saveRoomWalletCommentPhrase({ RU: 'только через нас', EN: 'only through us', ES: '' }).success).toBe(false)

@@ -276,6 +276,12 @@ ipcMain.handle('undo-link-verification-player-save', (_, undo) => {
   if (result.success) runDailyBackup()
   return result
 })
+ipcMain.handle('get-rakeback-sender-wallets', () => store?.getRakebackSenderWallets() ?? '')
+ipcMain.handle('save-rakeback-sender-wallets', (_, text: string) => {
+  const result = store?.saveRakebackSenderWallets(text) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
 ipcMain.handle('get-room-wallet-comment-phrases', () => store?.getRoomWalletCommentPhrases() ?? [])
 ipcMain.handle('save-room-wallet-comment-phrase', (_, phrase) => {
   runRoomEditBackup()

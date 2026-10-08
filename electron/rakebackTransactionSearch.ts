@@ -1,5 +1,6 @@
 import { formatTokenAmount, loadApiKeys } from './transactionResolver'
 import { fetchEtherscanJson } from './etherscanClient'
+import { rakebackSenderWalletAddresses } from '../src/utils/rakebackSettings'
 
 export interface SearchRakebackTransactionInput {
   amount: string
@@ -62,10 +63,7 @@ const firstTransactionDate = (...values: unknown[]) => {
   return ''
 }
 
-const parseAffiliateWallets = (value: string) => new Set(
-  (String(value || '').match(/(?:0x[a-f0-9]{40}|T[1-9A-HJ-NP-Za-km-z]{33}|bc1[ac-hj-np-z02-9]{11,87}|[13][a-km-zA-HJ-NP-Z1-9]{25,34})/gi) || [])
-    .map(normalizeAddress)
-)
+const parseAffiliateWallets = rakebackSenderWalletAddresses
 
 const tokenConfig = (network: string) => {
   const normalized = normalizeNetwork(network)

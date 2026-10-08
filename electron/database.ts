@@ -78,6 +78,7 @@ export interface SaveLinkVerificationPlayerResult extends MutationResult {
 }
 
 const roomWalletCommentPhrasesKey = 'room_wallet_comment_phrases'
+const rakebackSenderWalletsKey = 'rakeback_sender_wallets'
 
 /** Operators see a sentence, not "UNIQUE constraint failed: …". */
 const friendlyConstraintError = (err: unknown, duplicateMessage: string) => {
@@ -1420,6 +1421,20 @@ export class TransactionerDatabase {
       console.error(err)
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
+  }
+
+  /** Wallets the rakeback is sent from, one free-text list shared by every player (T-0022). */
+  getRakebackSenderWallets(): string {
+    const row = this.db.prepare('SELECT value FROM app_settings WHERE key = ?').get(rakebackSenderWalletsKey) as { value: string } | undefined
+    return row?.value || ''
+  }
+
+  saveRakebackSenderWallets(text: string): MutationResult {
+    this.db.prepare(`
+      INSERT INTO app_settings (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(rakebackSenderWalletsKey, String(text ?? ''))
+    return { success: true }
   }
 
   /** Player comments for wallets/methods added by the operator with RU / EN / ES text (T-0019). */
