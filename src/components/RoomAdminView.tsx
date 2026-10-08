@@ -1,12 +1,26 @@
 import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from 'react'
-import { ArrowLeft, Eye, EyeOff, GripVertical, Pencil, Plus, RotateCcw, Save, Settings, Trash2 } from 'lucide-react'
+import { ArrowLeft, Eye, EyeOff, GripVertical, Pencil, Plus, RotateCcw, Save, Settings, Trash2, X } from 'lucide-react'
 import { sortRoomProfilesByUsage } from '../utils/roomUsageSort'
 import { useRoomUsageStats } from '../hooks/useRoomUsageStats'
+import { useEscapeBack } from '../hooks/useEscapeBack'
 import ComboboxField from './fields/ComboboxField'
 import SelectField from './fields/SelectField'
 import { matchesRoomOption, roomProfileOptions } from './fields/fieldOptions'
 import { resolveLinkVerificationRoomRule, type LinkVerificationTemplate } from '../utils/linkVerificationRules'
-import { findWalletForMethod, normalizeAdminToken } from '../utils/roomAdminWalletMatching'
+import { findWalletForMethod } from '../utils/roomAdminWalletMatching'
+import {
+  emptyRoomMethodGroupDraft,
+  groupRoomPaymentMethods,
+  newRoomWalletCommentPhrases,
+  planRoomMethodGroupSave,
+  roomMethodGroupKey,
+  roomMethodGroupSummary,
+  roomMethodGroupToDraft,
+  type RoomMethodGroup,
+  type RoomMethodGroupDraft,
+  type RoomMethodOperationDraft,
+} from '../utils/roomMethodGroups'
+import { isTranslatedRoomWalletComment, ROOM_WALLET_COMMENT_PHRASES, type RoomWalletCommentPhrase } from '../utils/roomWalletFormatting'
 import { applyLinkVerificationTemplateOverrides } from '../utils/linkVerificationFormatting'
 
 type AdminMode = 'deals' | 'methods' | 'linkVerification'
@@ -31,50 +45,6 @@ const preferredDealTypeForRoom = (index: RoomKnowledgeIndex | null, roomKey: str
 
 const roomName = (profiles: RoomProfileInfo[], roomKey: string) =>
   profiles.find((profile) => profile.room_key === roomKey)?.display_name || roomKey
-
-const emptyWallet = (roomKey: string, dealType: RoomDealType): SaveRoomWalletInput => ({
-  room_key: roomKey,
-  deal_type: dealType,
-  currency: '',
-  network: '',
-  wallet_address: '',
-  memo_tag: '',
-  fee_text: '',
-  note: '',
-  verified_at: '',
-  sort_order: 0,
-  is_active: 1,
-})
-
-const emptyPaymentMethod = (roomKey: string, dealType: RoomDealType): SaveRoomPaymentMethodInput => ({
-  room_key: roomKey,
-  deal_type: dealType,
-  operation_type: 'Deposit',
-  method_name: '',
-  currency: '',
-  network: '',
-  fee_text: '',
-  limits_text: '',
-  note: '',
-  sort_order: 0,
-  is_active: 1,
-})
-
-const walletFromMethod = (
-  method: Pick<SaveRoomPaymentMethodInput, 'room_key' | 'deal_type' | 'currency' | 'network' | 'sort_order' | 'is_active'>
-): SaveRoomWalletInput => ({
-  room_key: method.room_key,
-  deal_type: method.deal_type,
-  currency: method.currency || '',
-  network: method.network || '',
-  wallet_address: '',
-  memo_tag: '',
-  fee_text: '',
-  note: '',
-  verified_at: '',
-  sort_order: method.sort_order || 0,
-  is_active: 1,
-})
 
 const slugifyRoomKey = (value: string) => value
   .trim()
@@ -115,36 +85,6 @@ const dealToForm = (deal: RoomDealInfo): SaveRoomDealInput => ({
   updated_at: deal.updated_at || '',
 })
 
-const walletToForm = (wallet: RoomWalletInfo): SaveRoomWalletInput => ({
-  id: wallet.id,
-  room_key: wallet.room_key,
-  deal_type: wallet.deal_type,
-  currency: wallet.currency,
-  network: wallet.network,
-  wallet_address: wallet.wallet_address,
-  memo_tag: wallet.memo_tag || '',
-  fee_text: wallet.fee_text || '',
-  note: wallet.note || '',
-  verified_at: wallet.verified_at || '',
-  sort_order: wallet.sort_order || 0,
-  is_active: wallet.is_active,
-})
-
-const paymentMethodToForm = (method: RoomPaymentMethodInfo): SaveRoomPaymentMethodInput => ({
-  id: method.id,
-  room_key: method.room_key,
-  deal_type: method.deal_type,
-  operation_type: method.operation_type,
-  method_name: method.method_name,
-  currency: method.currency || '',
-  network: method.network || '',
-  fee_text: method.fee_text || '',
-  limits_text: method.limits_text || '',
-  note: method.note || '',
-  sort_order: method.sort_order || 0,
-  is_active: method.is_active,
-})
-
 const emptyLinkVerificationResponseTemplate = (
   roomKey: string,
   dealType: RoomDealType,
@@ -179,15 +119,6 @@ const linkVerificationResponseTemplateToForm = (
   updated_at: template.updated_at || '',
 })
 
-const hasPaymentMethodDraftContent = (method: SaveRoomPaymentMethodInput) => [
-  method.method_name,
-  method.currency,
-  method.network,
-  method.fee_text,
-  method.limits_text,
-  method.note,
-].some((value) => String(value || '').trim())
-
 const hasDealDraftContent = (deal: SaveRoomDealInput) => [
   deal.short_text,
   deal.full_text,
@@ -211,12 +142,15 @@ export default function RoomAdminView({
   initialRoomKey = '',
   initialDealType,
   initialLanguage = 'RU',
+  isOpen = true,
   onClose,
 }: {
   initialMode?: AdminMode
   initialRoomKey?: string
   initialDealType?: RoomDealType
   initialLanguage?: RoomLanguage
+  /** The view stays mounted while hidden; Esc goes back only while it is shown. */
+  isOpen?: boolean
   onClose: (context?: { roomKey: string, dealType: RoomDealType, language: RoomLanguage }) => void
 }) {
   const [mode, setMode] = useState<AdminMode>(initialMode)
@@ -238,8 +172,24 @@ export default function RoomAdminView({
     is_active: 1,
   })
   const [dealForm, setDealForm] = useState<SaveRoomDealInput | null>(null)
-  const [walletForm, setWalletForm] = useState<SaveRoomWalletInput | null>(null)
-  const [paymentMethodForm, setPaymentMethodForm] = useState<SaveRoomPaymentMethodInput | null>(null)
+  const [methodDraft, setMethodDraft] = useState<RoomMethodGroupDraft | null>(null)
+  // A draft the operator has not touched follows fresh data (wallets load later, saves reload).
+  const [methodDraftDirty, setMethodDraftDirty] = useState(false)
+  const [commentPhrases, setCommentPhrases] = useState<RoomWalletCommentPhrase[]>([])
+
+  useEffect(() => {
+    let active = true
+    window.electronAPI.getRoomWalletCommentPhrases()
+      .then((phrases) => {
+        if (active) setCommentPhrases(phrases || [])
+      })
+      .catch(() => {
+        if (active) setCommentPhrases([])
+      })
+    return () => {
+      active = false
+    }
+  }, [])
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const pageTopRef = useRef<HTMLDivElement | null>(null)
@@ -259,6 +209,7 @@ export default function RoomAdminView({
   const closeWithCurrentContext = () => {
     onClose({ roomKey, dealType, language })
   }
+  useEscapeBack(closeWithCurrentContext, isOpen)
 
   const roomUsageStats = useRoomUsageStats()
   const roomUsageStatsRef = useRef<RoomRegistrationStat[]>([])
@@ -379,7 +330,6 @@ export default function RoomAdminView({
       .then((result) => {
         if (!active) return
         setWallets(result)
-        setWalletForm(result[0] ? walletToForm(result[0]) : emptyWallet(roomKey, walletDealType))
       })
       .catch((err) => setError(err instanceof Error ? err.message : String(err)))
     return () => {
@@ -398,31 +348,21 @@ export default function RoomAdminView({
       ))
   }, [index, roomKey, activeMethodDealType])
 
+  const methodGroups = useMemo(() => groupRoomPaymentMethods(paymentMethods), [paymentMethods])
+
   useEffect(() => {
     if (mode !== 'methods' || !roomKey) return
+    const draftMatchesRoom = methodDraft && methodDraft.room_key === roomKey && methodDraft.deal_type === activeMethodDealType
+    if (draftMatchesRoom && (methodDraftDirty || !methodDraft.groupKey)) return
+    const group = (draftMatchesRoom && methodGroups.find((item) => item.key === methodDraft.groupKey)) || methodGroups[0]
+    const nextDraft = group
+      ? roomMethodGroupToDraft(group, roomKey, activeMethodDealType, wallets)
+      : emptyRoomMethodGroupDraft(roomKey, activeMethodDealType)
     const frame = window.requestAnimationFrame(() => {
-      const formMatchesRoom = paymentMethodForm &&
-        paymentMethodForm.room_key === roomKey &&
-        paymentMethodForm.deal_type === activeMethodDealType
-      const nextForm = formMatchesRoom
-        ? paymentMethodForm
-        : paymentMethods[0]
-          ? paymentMethodToForm(paymentMethods[0])
-          : emptyPaymentMethod(roomKey, activeMethodDealType)
-      if (!formMatchesRoom) setPaymentMethodForm(nextForm)
-
-      const matchedWallet = findWalletForMethod(wallets, nextForm)
-      const walletMatchesMethod = walletForm &&
-        walletForm.room_key === nextForm.room_key &&
-        walletForm.deal_type === nextForm.deal_type &&
-        normalizeAdminToken(walletForm.currency) === normalizeAdminToken(nextForm.currency) &&
-        normalizeAdminToken(walletForm.network) === normalizeAdminToken(nextForm.network)
-      if (!walletMatchesMethod) {
-        setWalletForm(matchedWallet ? walletToForm(matchedWallet) : walletFromMethod(nextForm))
-      }
+      setMethodDraft((current) => (JSON.stringify(current) === JSON.stringify(nextDraft) ? current : nextDraft))
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [mode, roomKey, activeMethodDealType, paymentMethods, wallets, paymentMethodForm, walletForm])
+  }, [mode, roomKey, activeMethodDealType, methodGroups, wallets, methodDraft, methodDraftDirty])
 
   const selectedRoomName = roomName(index?.profiles || [], roomKey)
   const selectedRoomProfile = index?.profiles.find((profile) => profile.room_key === roomKey)
@@ -476,8 +416,8 @@ export default function RoomAdminView({
     setRoomKey(profile.room_key)
     setDealType(preferredDealTypeForRoom(index, profile.room_key))
     setWallets([])
-    setWalletForm(null)
-    setPaymentMethodForm(null)
+    setMethodDraft(null)
+    setMethodDraftDirty(false)
   }
 
   const saveDeal = async () => {
@@ -561,8 +501,8 @@ export default function RoomAdminView({
     setDealType('Direct')
     setLanguage('RU')
     setDealForm(emptyDeal(normalizedRoomKey, 'Direct', 'RU'))
-    setWalletForm(emptyWallet(normalizedRoomKey, 'Direct'))
-    setPaymentMethodForm(emptyPaymentMethod(normalizedRoomKey, 'Direct'))
+    setMethodDraft(null)
+    setMethodDraftDirty(false)
   }
 
   const updateSelectedRoomActive = async (isActive: boolean) => {
@@ -622,216 +562,172 @@ export default function RoomAdminView({
     showMessage('Вернули дефолтный шаблон')
   }
 
-  const deleteWallet = async (walletId = walletForm?.id) => {
-    if (!walletId) return
-    const targetRoomKey = walletForm?.room_key || roomKey
-    const targetDealType = walletForm?.deal_type || activeMethodDealType
-    const confirmed = window.confirm('Удалить этот кошелек? Это действие нельзя отменить.')
+  const reloadMethodsAndWallets = async (targetRoomKey: string, targetDealType: RoomDealType) => {
+    const [nextIndex, nextWallets] = await Promise.all([
+      window.electronAPI.getRoomKnowledgeAdminIndex(),
+      window.electronAPI.getRoomWallets(targetRoomKey, targetDealType),
+    ])
+    setIndex(nextIndex)
+    setWallets(nextWallets)
+  }
+
+  const editMethodDraft = (draft: RoomMethodGroupDraft) => {
+    setMethodDraft(draft)
+    setMethodDraftDirty(true)
+  }
+
+  const selectMethodGroup = (group: RoomMethodGroup | null) => {
+    setMethodDraft(group
+      ? roomMethodGroupToDraft(group, roomKey, activeMethodDealType, wallets)
+      : emptyRoomMethodGroupDraft(roomKey, activeMethodDealType))
+    setMethodDraftDirty(false)
+  }
+
+  const saveMethodGroup = async () => {
+    if (!methodDraft) return
+    const group = methodGroups.find((item) => item.key === methodDraft.groupKey)
+    const plan = planRoomMethodGroupSave(methodDraft, group)
+    if (plan.error) {
+      setMessage('')
+      setError(plan.error)
+      return
+    }
+    if (plan.confirm && !window.confirm(`${plan.confirm}\n\nПродолжить?`)) return
+
+    const fail = (text: string) => {
+      setMessage('')
+      setError(text)
+    }
+    const phrases = newRoomWalletCommentPhrases(methodDraft, (comment) => isTranslatedRoomWalletComment(comment, commentPhrases))
+    for (const phrase of phrases) {
+      const result = await window.electronAPI.saveRoomWalletCommentPhrase(phrase)
+      if (!result.success) return fail(result.error || 'Не удалось сохранить перевод комментария')
+    }
+    if (phrases.length) setCommentPhrases(await window.electronAPI.getRoomWalletCommentPhrases())
+    for (const id of plan.deletes) {
+      const result = await window.electronAPI.deleteRoomPaymentMethod(id)
+      if (!result.success) return fail(result.error || 'Не удалось удалить операцию метода')
+    }
+    for (const save of plan.saves) {
+      const result = await window.electronAPI.saveRoomPaymentMethod(save)
+      if (!result.success) return fail(result.error || 'Не удалось сохранить метод')
+    }
+    if (plan.walletSave) {
+      const result = await window.electronAPI.saveRoomWallet(plan.walletSave)
+      if (!result.success) return fail(result.error || 'Метод сохранен, но кошелек сохранить не удалось')
+    }
+    if (plan.walletDelete) {
+      const result = await window.electronAPI.deleteRoomWallet(plan.walletDelete)
+      if (!result.success) return fail(result.error || 'Метод сохранен, но кошелек удалить не удалось')
+    }
+
+    await reloadMethodsAndWallets(methodDraft.room_key, methodDraft.deal_type)
+    setMethodDraft({ ...methodDraft, groupKey: roomMethodGroupKey({ currency: methodDraft.currency, network: methodDraft.network, method_name: '' }) })
+    setMethodDraftDirty(false)
+    showMessage(plan.walletSave ? 'Метод и кошелек сохранены' : 'Метод сохранен')
+  }
+
+  const deleteMethodGroup = async (group: RoomMethodGroup) => {
+    const wallet = findWalletForMethod(wallets, { room_key: roomKey, deal_type: activeMethodDealType, currency: group.currency, network: group.network })
+    const confirmed = window.confirm(
+      `Удалить ${group.currency} ${group.network}: депозит и вывод${wallet ? ` и кошелёк ${wallet.wallet_address}` : ''}? Это действие нельзя отменить.`
+    )
     if (!confirmed) return
+    for (const row of [...group.deposit, ...group.withdrawal]) {
+      const result = await window.electronAPI.deleteRoomPaymentMethod(row.id)
+      if (!result.success) {
+        setMessage('')
+        setError(result.error || 'Не удалось удалить метод')
+        return
+      }
+    }
+    if (wallet?.id) {
+      const result = await window.electronAPI.deleteRoomWallet(wallet.id)
+      if (!result.success) {
+        setMessage('')
+        setError(result.error || 'Метод удален, но кошелек удалить не удалось')
+        return
+      }
+    }
+    await reloadMethodsAndWallets(roomKey, activeMethodDealType)
+    if (methodDraft?.groupKey === group.key) {
+      setMethodDraft(null)
+      setMethodDraftDirty(false)
+    }
+    showMessage('Метод удален')
+  }
+
+  const deleteMethodRow = async (row: RoomPaymentMethodInfo) => {
+    const details = [row.fee_text, row.limits_text].filter(Boolean).join(', ')
+    if (!window.confirm(`Удалить лишнюю запись ${row.method_name}${details ? ` (${details})` : ''}?`)) return
+    const result = await window.electronAPI.deleteRoomPaymentMethod(row.id)
+    if (!result.success) {
+      setMessage('')
+      setError(result.error || 'Не удалось удалить запись')
+      return
+    }
+    await reloadMethodsAndWallets(roomKey, activeMethodDealType)
+    showMessage('Запись удалена')
+  }
+
+  const deleteDraftWallet = async () => {
+    const walletId = methodDraft?.wallet.id
+    if (!walletId) return
+    if (!window.confirm('Удалить этот кошелек? Это действие нельзя отменить.')) return
     const result = await window.electronAPI.deleteRoomWallet(walletId)
     if (!result.success) {
       setMessage('')
       setError(result.error || 'Не удалось удалить кошелек')
       return
     }
+    await reloadMethodsAndWallets(roomKey, activeMethodDealType)
+    setMethodDraftDirty(false)
     showMessage('Кошелек удален')
-    await loadIndex()
-    const nextWallets = await window.electronAPI.getRoomWallets(targetRoomKey, targetDealType)
-    setWallets(nextWallets)
-    const preservedCurrent = walletForm?.id && walletForm.id !== walletId
-      ? nextWallets.find((wallet) => wallet.id === walletForm.id)
-      : null
-    setWalletForm(preservedCurrent
-      ? walletToForm(preservedCurrent)
-      : nextWallets[0]
-        ? walletToForm(nextWallets[0])
-        : emptyWallet(targetRoomKey, targetDealType)
-    )
   }
 
-  const savePaymentMethod = async () => {
-    if (!paymentMethodForm) return
-    const previousMethod = paymentMethodForm.id
-      ? index?.paymentMethods.find((method) => method.id === paymentMethodForm.id)
-      : undefined
-    const previousWallet = previousMethod?.operation_type === 'Deposit'
-      ? findWalletForMethod(wallets, previousMethod)
-      : undefined
-    const methodLabel = [paymentMethodForm.currency, paymentMethodForm.network]
-      .map((value) => String(value || '').trim())
-      .filter(Boolean)
-      .join(' ')
-    const methodPayload = {
-      ...paymentMethodForm,
-      method_name: methodLabel || paymentMethodForm.method_name,
-    }
-    const result = await window.electronAPI.saveRoomPaymentMethod(methodPayload)
-    if (!result.success) {
-      setMessage('')
-      setError(result.error || 'Не удалось сохранить метод')
-      return
-    }
-
-    if (methodPayload.operation_type === 'Deposit') {
-      const walletMatchesMethod = walletForm &&
-        walletForm.room_key === methodPayload.room_key &&
-        walletForm.deal_type === methodPayload.deal_type &&
-        normalizeAdminToken(walletForm.currency) === normalizeAdminToken(methodPayload.currency) &&
-        normalizeAdminToken(walletForm.network) === normalizeAdminToken(methodPayload.network)
-      const walletPayload = walletMatchesMethod ? walletForm : walletFromMethod(methodPayload)
-      const walletAddress = String(walletPayload.wallet_address || '').trim()
-      if (walletAddress) {
-        const walletResult = await window.electronAPI.saveRoomWallet({
-          ...walletPayload,
-          room_key: methodPayload.room_key,
-          deal_type: methodPayload.deal_type,
-          currency: methodPayload.currency || '',
-          network: methodPayload.network || '',
-          wallet_address: walletAddress,
-          is_active: walletPayload.is_active ?? 1,
-          sort_order: methodPayload.sort_order,
-        })
-        if (!walletResult.success) {
-          setMessage('')
-          setError(walletResult.error || 'Метод сохранен, но кошелек сохранить не удалось')
-          return
-        }
-      } else if (walletPayload.id) {
-        const deleteResult = await window.electronAPI.deleteRoomWallet(walletPayload.id)
-        if (!deleteResult.success) {
-          setMessage('')
-          setError(deleteResult.error || 'Метод сохранен, но пустой кошелек удалить не удалось')
-          return
-        }
-      }
-    } else if (previousWallet?.id) {
-      const deleteResult = await window.electronAPI.deleteRoomWallet(previousWallet.id)
-      if (!deleteResult.success) {
-        setMessage('')
-        setError(deleteResult.error || 'Метод сохранен, но связанный кошелек удалить не удалось')
-        return
-      }
-    }
-
-    showMessage(methodPayload.operation_type === 'Deposit' ? 'Метод и кошелек сохранены' : 'Метод сохранен')
-    const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
-    const nextWallets = await window.electronAPI.getRoomWallets(methodPayload.room_key, methodPayload.deal_type)
-    const nextMethods = nextIndex.paymentMethods
-      .filter((method) => method.room_key === methodPayload.room_key && method.deal_type === methodPayload.deal_type)
-      .sort((left, right) => (
-        (left.sort_order || 0) - (right.sort_order || 0) ||
-        left.operation_type.localeCompare(right.operation_type) ||
-        left.method_name.localeCompare(right.method_name, undefined, { sensitivity: 'base' })
-      ))
-    setIndex(nextIndex)
-    setWallets(nextWallets)
-    const saved = result.id ? nextMethods.find((method) => method.id === result.id) : nextMethods[0]
-    const savedForm = saved ? paymentMethodToForm(saved) : methodPayload
-    setPaymentMethodForm(savedForm)
-    const savedWallet = findWalletForMethod(nextWallets, savedForm)
-    setWalletForm(savedWallet ? walletToForm(savedWallet) : walletFromMethod(savedForm))
-  }
-
-  const deletePaymentMethod = async (methodId = paymentMethodForm?.id) => {
-    if (!methodId) return
-    const methodToDelete = index?.paymentMethods.find((method) => method.id === methodId)
-    const linkedWallet = methodToDelete?.operation_type === 'Deposit'
-      ? findWalletForMethod(wallets, methodToDelete)
-      : undefined
-    const targetRoomKey = paymentMethodForm?.room_key || roomKey
-    const targetDealType = paymentMethodForm?.deal_type || activeMethodDealType
-    const confirmed = window.confirm('Удалить этот метод? Это действие нельзя отменить.')
-    if (!confirmed) return
-    const result = await window.electronAPI.deleteRoomPaymentMethod(methodId)
-    if (!result.success) {
-      setMessage('')
-      setError(result.error || 'Не удалось удалить метод')
-      return
-    }
-    if (linkedWallet?.id) {
-      const deleteWalletResult = await window.electronAPI.deleteRoomWallet(linkedWallet.id)
-      if (!deleteWalletResult.success) {
-        setMessage('')
-        setError(deleteWalletResult.error || 'Метод удален, но связанный кошелек удалить не удалось')
-        return
-      }
-    }
-    showMessage('Метод удален')
-    const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
-    const nextWallets = await window.electronAPI.getRoomWallets(targetRoomKey, targetDealType)
-    const nextMethods = nextIndex.paymentMethods
-      .filter((method) => method.room_key === targetRoomKey && method.deal_type === targetDealType)
-      .sort((left, right) => (
-        (left.sort_order || 0) - (right.sort_order || 0) ||
-        left.operation_type.localeCompare(right.operation_type) ||
-        left.method_name.localeCompare(right.method_name, undefined, { sensitivity: 'base' })
-    ))
-    setIndex(nextIndex)
-    setWallets(nextWallets)
-    const preservedCurrent = paymentMethodForm?.id && paymentMethodForm.id !== methodId
-      ? nextMethods.find((method) => method.id === paymentMethodForm.id)
-      : null
-    const nextForm = preservedCurrent
-      ? paymentMethodToForm(preservedCurrent)
-      : nextMethods[0]
-        ? paymentMethodToForm(nextMethods[0])
-        : emptyPaymentMethod(targetRoomKey, targetDealType)
-    setPaymentMethodForm(nextForm)
-    const nextWallet = findWalletForMethod(nextWallets, nextForm)
-    setWalletForm(nextWallet ? walletToForm(nextWallet) : walletFromMethod(nextForm))
-  }
-
-  const reorderPaymentMethods = async (orderedMethods: RoomPaymentMethodInfo[]) => {
-    if (!orderedMethods.length || !index) return
-    const reorderedMethods = orderedMethods.map((method, index) => ({
-      ...method,
-      sort_order: (index + 1) * 10,
-    }))
+  const reorderMethodGroups = async (orderedGroups: RoomMethodGroup[]) => {
+    if (!orderedGroups.length || !index) return
+    const sortOrders = new Map<number, number>()
+    orderedGroups.forEach((group, position) => {
+      for (const row of [...group.deposit, ...group.withdrawal]) sortOrders.set(row.id, (position + 1) * 10)
+    })
     setIndex({
       ...index,
       paymentMethods: index.paymentMethods.map((method) => (
-        method.room_key === roomKey && method.deal_type === activeMethodDealType
-          ? reorderedMethods.find((ordered) => ordered.id === method.id) || method
-          : method
+        sortOrders.has(method.id) ? { ...method, sort_order: sortOrders.get(method.id)! } : method
       )),
     })
 
-    for (const method of reorderedMethods) {
-      const methodResult = await window.electronAPI.saveRoomPaymentMethod({
-        ...paymentMethodToForm(method),
-        sort_order_only: true,
-      })
-      if (!methodResult.success) {
-        setMessage('')
-        setError(methodResult.error || 'Не удалось сохранить порядок методов')
-        return
+    for (const [position, group] of orderedGroups.entries()) {
+      const sortOrder = (position + 1) * 10
+      for (const row of [...group.deposit, ...group.withdrawal]) {
+        const result = await window.electronAPI.saveRoomPaymentMethod({
+          id: row.id,
+          room_key: row.room_key,
+          deal_type: row.deal_type,
+          operation_type: row.operation_type,
+          method_name: row.method_name,
+          sort_order: sortOrder,
+          sort_order_only: true,
+        })
+        if (!result.success) {
+          setMessage('')
+          setError(result.error || 'Не удалось сохранить порядок методов')
+          return
+        }
       }
-
-      if (method.operation_type === 'Deposit') {
-        const linkedWallet = findWalletForMethod(wallets, method)
-        if (linkedWallet) {
-          const walletResult = await window.electronAPI.saveRoomWallet({
-            ...walletToForm(linkedWallet),
-            sort_order: method.sort_order,
-            sort_order_only: true,
-          })
-          if (!walletResult.success) {
-            setMessage('')
-            setError(walletResult.error || 'Порядок методов сохранен, но порядок кошелька обновить не удалось')
-            return
-          }
+      const wallet = findWalletForMethod(wallets, { room_key: roomKey, deal_type: activeMethodDealType, currency: group.currency, network: group.network })
+      if (wallet) {
+        const result = await window.electronAPI.saveRoomWallet({ ...wallet, sort_order: sortOrder, sort_order_only: true } as SaveRoomWalletInput)
+        if (!result.success) {
+          setMessage('')
+          setError(result.error || 'Порядок методов сохранен, но порядок кошелька обновить не удалось')
+          return
         }
       }
     }
 
-    const nextIndex = await window.electronAPI.getRoomKnowledgeAdminIndex()
-    const nextWallets = await window.electronAPI.getRoomWallets(roomKey, activeMethodDealType)
-    setIndex(nextIndex)
-    setWallets(nextWallets)
-    if (paymentMethodForm?.id) {
-      const currentMethod = nextIndex.paymentMethods.find((method) => method.id === paymentMethodForm.id)
-      if (currentMethod) setPaymentMethodForm(paymentMethodToForm(currentMethod))
-    }
+    await reloadMethodsAndWallets(roomKey, activeMethodDealType)
     showMessage('Порядок сохранен')
   }
 
@@ -1000,18 +896,16 @@ export default function RoomAdminView({
         />
       ) : mode === 'methods' ? (
         <PaymentMethodEditor
-          methodForm={paymentMethodForm}
-          methods={paymentMethods}
-          wallets={wallets}
-          walletForm={walletForm}
-          roomKey={roomKey}
-          dealType={activeMethodDealType}
-          onChange={setPaymentMethodForm}
-          onWalletChange={setWalletForm}
-          onSave={savePaymentMethod}
-          onDelete={deletePaymentMethod}
-          onDeleteWallet={deleteWallet}
-          onReorder={reorderPaymentMethods}
+          groups={methodGroups}
+          commentPhrases={commentPhrases}
+          draft={methodDraft && methodDraft.room_key === roomKey && methodDraft.deal_type === activeMethodDealType ? methodDraft : null}
+          onSelect={selectMethodGroup}
+          onChange={editMethodDraft}
+          onSave={saveMethodGroup}
+          onDelete={deleteMethodGroup}
+          onDeleteRow={deleteMethodRow}
+          onDeleteWallet={deleteDraftWallet}
+          onReorder={reorderMethodGroups}
         />
       ) : mode === 'linkVerification' ? (
         <LinkVerificationAdminEditor
@@ -1104,209 +998,148 @@ function DealEditor({
 }
 
 function PaymentMethodEditor({
-  methodForm,
-  methods,
-  wallets,
-  walletForm,
-  roomKey,
-  dealType,
+  groups,
+  commentPhrases,
+  draft,
+  onSelect,
   onChange,
-  onWalletChange,
   onSave,
   onDelete,
+  onDeleteRow,
   onDeleteWallet,
   onReorder,
 }: {
-  methodForm: SaveRoomPaymentMethodInput | null
-  methods: RoomPaymentMethodInfo[]
-  wallets: RoomWalletInfo[]
-  walletForm: SaveRoomWalletInput | null
-  roomKey: string
-  dealType: RoomDealType
-  onChange: (value: SaveRoomPaymentMethodInput) => void
-  onWalletChange: (value: SaveRoomWalletInput) => void
+  groups: RoomMethodGroup[]
+  commentPhrases: RoomWalletCommentPhrase[]
+  draft: RoomMethodGroupDraft | null
+  onSelect: (group: RoomMethodGroup | null) => void
+  onChange: (draft: RoomMethodGroupDraft) => void
   onSave: () => void
-  onDelete: (methodId?: number) => void
-  onDeleteWallet: (walletId?: number) => void
-  onReorder: (orderedMethods: RoomPaymentMethodInfo[]) => void
+  onDelete: (group: RoomMethodGroup) => void
+  onDeleteRow: (row: RoomPaymentMethodInfo) => void
+  onDeleteWallet: () => void
+  onReorder: (orderedGroups: RoomMethodGroup[]) => void
 }) {
   const formSectionRef = useRef<HTMLElement | null>(null)
-  const [draggingMethodId, setDraggingMethodId] = useState<number | null>(null)
-  const currentForm = methodForm && methodForm.room_key === roomKey && methodForm.deal_type === dealType
-    ? methodForm
-    : methods[0]
-      ? paymentMethodToForm(methods[0])
-      : emptyPaymentMethod(roomKey, dealType)
-  const isNewMethod = !currentForm.id
-  const showNewButton = !isNewMethod || hasPaymentMethodDraftContent(currentForm)
-  const linkedWallet = findWalletForMethod(wallets, currentForm)
-  const walletFormMatchesMethod = walletForm &&
-    walletForm.room_key === roomKey &&
-    walletForm.deal_type === dealType &&
-    normalizeAdminToken(walletForm.currency) === normalizeAdminToken(currentForm.currency) &&
-    normalizeAdminToken(walletForm.network) === normalizeAdminToken(currentForm.network)
-  const currentWalletForm = walletFormMatchesMethod
-    ? walletForm
-    : linkedWallet
-      ? walletToForm(linkedWallet)
-      : walletFromMethod(currentForm)
+  const [draggingKey, setDraggingKey] = useState<string | null>(null)
+  // The form is shown only after "Редактировать", a row click or "Новый" (small windows).
+  const [isEditing, setIsEditing] = useState(false)
+  const currentGroup = draft?.groupKey ? groups.find((group) => group.key === draft.groupKey) : undefined
   const scrollToForm = () => {
     window.requestAnimationFrame(() => {
       formSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   }
-  const createMethod = () => {
-    const nextMethod = emptyPaymentMethod(roomKey, dealType)
-    onChange(nextMethod)
-    onWalletChange(walletFromMethod(nextMethod))
+  const openEditor = (group: RoomMethodGroup | null) => {
+    onSelect(group)
+    setIsEditing(true)
     scrollToForm()
   }
-  const editMethod = (method: RoomPaymentMethodInfo) => {
-    const nextMethod = paymentMethodToForm(method)
-    const nextWallet = findWalletForMethod(wallets, nextMethod)
-    onChange(nextMethod)
-    onWalletChange(nextWallet ? walletToForm(nextWallet) : walletFromMethod(nextMethod))
-    scrollToForm()
-  }
-  const updateMethodIdentity = (updates: Partial<SaveRoomPaymentMethodInput>) => {
-    const nextMethod = { ...currentForm, ...updates }
-    onChange(nextMethod)
-    if (nextMethod.operation_type === 'Deposit') {
-      onWalletChange({
-        ...currentWalletForm,
-        room_key: nextMethod.room_key,
-        deal_type: nextMethod.deal_type,
-        currency: nextMethod.currency || '',
-        network: nextMethod.network || '',
-        sort_order: nextMethod.sort_order,
-      })
-    }
-  }
-  const updateWallet = (updates: Partial<SaveRoomWalletInput>) => {
-    onWalletChange({
-      ...currentWalletForm,
-      room_key: currentForm.room_key,
-      deal_type: currentForm.deal_type,
-      currency: currentForm.currency || '',
-      network: currentForm.network || '',
-      is_active: currentWalletForm.is_active ?? 1,
-      sort_order: currentForm.sort_order,
-      ...updates,
-    })
-  }
-  const dropMethodOn = (targetMethod: RoomPaymentMethodInfo) => {
-    if (!draggingMethodId || draggingMethodId === targetMethod.id) return
-    const draggedMethod = methods.find((method) => method.id === draggingMethodId)
-    if (!draggedMethod) return
-    const draggedIndex = methods.findIndex((method) => method.id === draggingMethodId)
-    const targetIndexInFullList = methods.findIndex((method) => method.id === targetMethod.id)
-    const withoutDragged = methods.filter((method) => method.id !== draggingMethodId)
-    const targetIndex = withoutDragged.findIndex((method) => method.id === targetMethod.id)
-    if (targetIndex === -1) return
+  const dropGroupOn = (target: RoomMethodGroup) => {
+    if (!draggingKey || draggingKey === target.key) return
+    const dragged = groups.find((group) => group.key === draggingKey)
+    if (!dragged) return
+    const draggedIndex = groups.indexOf(dragged)
+    const targetIndexInFullList = groups.indexOf(target)
+    const withoutDragged = groups.filter((group) => group.key !== draggingKey)
+    const targetIndex = withoutDragged.indexOf(target)
     const insertIndex = draggedIndex < targetIndexInFullList ? targetIndex + 1 : targetIndex
-    const reordered = [
-      ...withoutDragged.slice(0, insertIndex),
-      draggedMethod,
-      ...withoutDragged.slice(insertIndex),
-    ]
-    onReorder(reordered)
+    onReorder([...withoutDragged.slice(0, insertIndex), dragged, ...withoutDragged.slice(insertIndex)])
   }
   const allowDrop = (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     event.dataTransfer.dropEffect = 'move'
   }
+  const updateOperation = (operation: 'deposit' | 'withdrawal', updates: Partial<RoomMethodOperationDraft>) => {
+    if (!draft) return
+    onChange({ ...draft, [operation]: { ...draft[operation], ...updates } })
+  }
 
   return (
-    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]">
+    <div className={`grid gap-5 ${isEditing ? 'xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]' : ''}`}>
       <section className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-lg font-bold text-slate-100">Методы и лимиты</h3>
-          {showNewButton && (
-            <button
-              type="button"
-              onClick={createMethod}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-blue-500 hover:text-slate-100"
-            >
-              <Plus size={15} />
-              {isNewMethod ? 'Очистить' : 'Новый'}
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => openEditor(null)}
+            className="inline-flex items-center gap-2 rounded-lg border border-slate-700 px-3 py-2 text-sm font-semibold text-slate-300 transition-colors hover:border-blue-500 hover:text-slate-100"
+          >
+            <Plus size={15} />
+            Новый
+          </button>
         </div>
-        {methods.length ? (
+        {groups.length ? (
           <div className="space-y-2">
-            {methods.map((method) => (
-              <div
-                key={method.id}
-                onDragOver={allowDrop}
-                onDrop={(event) => {
-                  event.preventDefault()
-                  dropMethodOn(method)
-                  setDraggingMethodId(null)
-                }}
-                onDragEnd={() => setDraggingMethodId(null)}
-                className={`group relative rounded-lg border pl-11 pr-24 transition-colors ${
-                  draggingMethodId === method.id
-                    ? 'border-blue-400/70 bg-blue-500/20 opacity-80'
-                    :
-                  method.id === currentForm.id
-                    ? 'border-blue-500/60 bg-blue-500/10'
-                    : 'border-slate-700/60 bg-slate-900/60 hover:border-slate-600'
-                }`}
-              >
+            {groups.map((group) => {
+              const summary = roomMethodGroupSummary(group)
+              return (
                 <div
-                  draggable
-                  onDragStart={(event) => {
-                    setDraggingMethodId(method.id)
-                    event.dataTransfer.effectAllowed = 'move'
-                    event.dataTransfer.setData('text/plain', String(method.id))
+                  key={group.key}
+                  onDragOver={allowDrop}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    dropGroupOn(group)
+                    setDraggingKey(null)
                   }}
-                  title="Перетащить"
-                  aria-label="Перетащить метод"
-                  className="absolute left-3 top-1/2 flex h-9 w-7 -translate-y-1/2 cursor-grab items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200 active:cursor-grabbing"
+                  onDragEnd={() => setDraggingKey(null)}
+                  className={`group relative rounded-lg border pl-11 pr-24 transition-colors ${
+                    draggingKey === group.key
+                      ? 'border-blue-400/70 bg-blue-500/20 opacity-80'
+                      : isEditing && group.key === draft?.groupKey
+                        ? 'border-blue-500/60 bg-blue-500/10'
+                        : 'border-slate-700/60 bg-slate-900/60 hover:border-slate-600'
+                  }`}
                 >
-                  <GripVertical size={17} />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nextMethod = paymentMethodToForm(method)
-                    const nextWallet = findWalletForMethod(wallets, nextMethod)
-                    onChange(nextMethod)
-                    onWalletChange(nextWallet ? walletToForm(nextWallet) : walletFromMethod(nextMethod))
-                  }}
-                  className="w-full px-4 py-3 text-left"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="font-semibold text-slate-100">
-                      {method.operation_type === 'Deposit' ? 'Депозит' : 'Вывод'} · {method.currency || method.method_name} {method.network}
-                    </div>
-                    {!method.is_active && <span className="text-xs text-slate-500">неактивен</span>}
+                  <div
+                    draggable
+                    onDragStart={(event) => {
+                      setDraggingKey(group.key)
+                      event.dataTransfer.effectAllowed = 'move'
+                      event.dataTransfer.setData('text/plain', group.key)
+                    }}
+                    title="Перетащить"
+                    aria-label="Перетащить метод"
+                    className="absolute left-3 top-1/2 flex h-9 w-7 -translate-y-1/2 cursor-grab items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200 active:cursor-grabbing"
+                  >
+                    <GripVertical size={17} />
                   </div>
-                  {method.limits_text && <div className="mt-1 text-xs text-amber-200">{method.limits_text}</div>}
-                  {method.fee_text && <div className="mt-1 text-xs text-slate-500">{method.fee_text}</div>}
-                </button>
-                <div className="absolute right-3 top-1/2 flex -translate-y-1/2 gap-2 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                   <button
                     type="button"
-                    onClick={() => editMethod(method)}
-                    title="Редактировать метод"
-                    aria-label="Редактировать метод"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-600 bg-slate-950/80 text-slate-300 transition-colors hover:border-blue-500 hover:text-blue-200"
+                    onClick={() => openEditor(group)}
+                    className="w-full px-4 py-3 text-left"
                   >
-                    <Pencil size={16} />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold text-slate-100">{group.currency} {group.network}</span>
+                      {group.deposit.length > 0 && <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">Депозит</span>}
+                      {group.withdrawal.length > 0 && <span className="rounded-md bg-sky-500/15 px-2 py-0.5 text-xs font-semibold text-sky-300">Вывод</span>}
+                      {!group.isActive && <span className="text-xs text-slate-500">неактивен</span>}
+                    </div>
+                    {summary && <div className="mt-1 text-xs text-slate-400">{summary}</div>}
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => onDelete(method.id)}
-                    title="Удалить метод"
-                    aria-label="Удалить метод"
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-500/40 bg-slate-950/80 text-rose-300 transition-colors hover:bg-rose-500/10"
-                  >
-                    <Trash2 size={16} />
-                  </button>
+                  <div className="absolute right-3 top-1/2 flex -translate-y-1/2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openEditor(group)}
+                      title="Редактировать метод"
+                      aria-label="Редактировать метод"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-600 bg-slate-950/80 text-slate-300 transition-colors hover:border-blue-500 hover:text-blue-200"
+                    >
+                      <Pencil size={16} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDelete(group)}
+                      title="Удалить метод"
+                      aria-label="Удалить метод"
+                      className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-500/40 bg-slate-950/80 text-rose-300 transition-colors hover:bg-rose-500/10"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">
@@ -1315,131 +1148,222 @@ function PaymentMethodEditor({
         )}
       </section>
 
+      {isEditing && (
       <section ref={formSectionRef} className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <h3 className="text-lg font-bold text-slate-100">{currentForm.id ? 'Редактировать' : 'Новый метод'}</h3>
-          <div className="flex items-center gap-2">
-            {currentForm.id && (
-              <button
-                type="button"
-                onClick={() => onDelete()}
-                title="Удалить метод"
-                aria-label="Удалить метод"
-                className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-500/40 text-rose-300 transition-colors hover:bg-rose-500/10"
-              >
-                <Trash2 size={17} />
-              </button>
-            )}
-            <SaveButton onClick={onSave} />
-          </div>
-        </div>
-        <div className="space-y-4">
-          <Field label="Операция">
-            <SelectField
-              value={currentForm.operation_type}
-              options={[{ value: 'Deposit', label: 'Депозит' }, { value: 'Withdrawal', label: 'Вывод' }]}
-              onChange={(value) => updateMethodIdentity({ operation_type: value as RoomOperationType })}
-              ariaLabel="Операция"
-            />
-          </Field>
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="Монета">
-              <input
-                value={currentForm.currency || ''}
-                onChange={(event) => updateMethodIdentity({ currency: event.target.value })}
-                placeholder="USDT"
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
-              />
-            </Field>
-            <Field label="Сеть">
-              <input
-                value={currentForm.network || ''}
-                onChange={(event) => updateMethodIdentity({ network: event.target.value })}
-                placeholder="TRC20"
-                className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
-              />
-            </Field>
-          </div>
-          {currentForm.operation_type === 'Deposit' && (
-            <div className="rounded-xl border border-slate-700/70 bg-slate-900/45 p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
-                <h4 className="text-sm font-bold text-slate-200">Кошелек для депозита</h4>
-                {currentWalletForm.id && (
+        {draft ? (
+          <>
+            <div className="mb-4 flex items-center justify-between gap-3">
+              <h3 className="text-lg font-bold text-slate-100">{currentGroup ? 'Редактировать' : 'Новый метод'}</h3>
+              <div className="flex items-center gap-2">
+                {currentGroup && (
                   <button
                     type="button"
-                    onClick={() => onDeleteWallet(currentWalletForm.id)}
-                    className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 px-3 py-2 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/10"
+                    onClick={() => onDelete(currentGroup)}
+                    title="Удалить метод"
+                    aria-label="Удалить метод"
+                    className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-500/40 text-rose-300 transition-colors hover:bg-rose-500/10"
                   >
-                    <Trash2 size={14} />
-                    Удалить кошелек
+                    <Trash2 size={17} />
                   </button>
                 )}
-              </div>
-              <div className="space-y-4">
-                <Field label="Адрес / почта / аккаунт">
-                  <textarea
-                    value={currentWalletForm.wallet_address}
-                    onChange={(event) => updateWallet({ wallet_address: event.target.value })}
-                    rows={4}
-                    className="min-h-28 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 font-mono text-sm text-slate-100 outline-none focus:border-blue-500"
-                  />
-                </Field>
-                <Field label="Комментарий к кошельку">
-                  <textarea
-                    value={currentWalletForm.note || ''}
-                    onChange={(event) => updateWallet({ note: event.target.value })}
-                    rows={3}
-                    className="min-h-20 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 text-sm text-slate-100 outline-none focus:border-blue-500"
-                  />
-                </Field>
-                <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-300">
-                  <input
-                    type="checkbox"
-                    checked={Boolean(currentWalletForm.is_active)}
-                    onChange={(event) => updateWallet({ is_active: event.target.checked ? 1 : 0 })}
-                    className="h-4 w-4"
-                  />
-                  Кошелек активен
-                </label>
+                <SaveButton onClick={onSave} />
+                <button
+                  type="button"
+                  onClick={() => setIsEditing(false)}
+                  title="Закрыть"
+                  aria-label="Закрыть редактирование"
+                  className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-slate-700 text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-100"
+                >
+                  <X size={17} />
+                </button>
               </div>
             </div>
-          )}
-          <Field label="Лимиты">
-            <input
-              value={currentForm.limits_text || ''}
-              onChange={(event) => onChange({ ...currentForm, limits_text: event.target.value })}
-              placeholder="min 200 EUR"
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
-            />
-          </Field>
-          <Field label="Комиссия">
-            <input
-              value={currentForm.fee_text || ''}
-              onChange={(event) => onChange({ ...currentForm, fee_text: event.target.value })}
-              placeholder="без комиссии"
-              className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
-            />
-          </Field>
-          <Field label="Комментарий">
-            <textarea
-              value={currentForm.note || ''}
-              onChange={(event) => onChange({ ...currentForm, note: event.target.value })}
-              rows={3}
-              className="min-h-24 w-full resize-y rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-sm text-slate-100 outline-none focus:border-blue-500"
-            />
-          </Field>
-          <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-300">
-            <input
-              type="checkbox"
-              checked={Boolean(currentForm.is_active)}
-              onChange={(event) => onChange({ ...currentForm, is_active: event.target.checked ? 1 : 0 })}
-              className="h-4 w-4"
-            />
-            Метод активен
-          </label>
-        </div>
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="Монета">
+                  <input
+                    value={draft.currency}
+                    onChange={(event) => onChange({ ...draft, currency: event.target.value })}
+                    placeholder="USDT"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
+                  />
+                </Field>
+                <Field label="Сеть">
+                  <input
+                    value={draft.network}
+                    onChange={(event) => onChange({ ...draft, network: event.target.value })}
+                    placeholder="TRC20"
+                    className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
+                  />
+                </Field>
+              </div>
+              <div className="flex flex-wrap gap-5">
+                <Checkbox checked={draft.deposit.enabled} onChange={(enabled) => updateOperation('deposit', { enabled })}>Депозит</Checkbox>
+                <Checkbox checked={draft.withdrawal.enabled} onChange={(enabled) => updateOperation('withdrawal', { enabled })}>Вывод</Checkbox>
+              </div>
+
+              {draft.deposit.enabled && (
+                <OperationBlock
+                  title="Депозит"
+                  draft={draft.deposit}
+                  extraRows={currentGroup?.deposit.slice(1) || []}
+                  commentPhrases={commentPhrases}
+                  onChange={(updates) => updateOperation('deposit', updates)}
+                  onDeleteRow={onDeleteRow}
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <span className="text-sm font-medium text-slate-400">Кошелек для депозита</span>
+                      {draft.wallet.id && (
+                        <button
+                          type="button"
+                          onClick={onDeleteWallet}
+                          className="inline-flex items-center gap-2 rounded-lg border border-rose-500/40 px-3 py-1.5 text-xs font-semibold text-rose-300 transition-colors hover:bg-rose-500/10"
+                        >
+                          <Trash2 size={14} />
+                          Удалить кошелек
+                        </button>
+                      )}
+                    </div>
+                    <textarea
+                      value={draft.wallet.wallet_address}
+                      onChange={(event) => onChange({ ...draft, wallet: { ...draft.wallet, wallet_address: event.target.value } })}
+                      rows={3}
+                      placeholder="Адрес / почта / аккаунт"
+                      className="min-h-20 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 font-mono text-sm text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
+                    />
+                    <Checkbox
+                      checked={Boolean(draft.wallet.is_active)}
+                      onChange={(active) => onChange({ ...draft, wallet: { ...draft.wallet, is_active: active ? 1 : 0 } })}
+                    >
+                      Кошелек активен
+                    </Checkbox>
+                  </div>
+                </OperationBlock>
+              )}
+
+              {draft.withdrawal.enabled && (
+                <OperationBlock
+                  title="Вывод"
+                  draft={draft.withdrawal}
+                  extraRows={currentGroup?.withdrawal.slice(1) || []}
+                  commentPhrases={commentPhrases}
+                  onChange={(updates) => updateOperation('withdrawal', updates)}
+                  onDeleteRow={onDeleteRow}
+                />
+              )}
+
+              <Checkbox checked={Boolean(draft.is_active)} onChange={(active) => onChange({ ...draft, is_active: active ? 1 : 0 })}>
+                Метод активен
+              </Checkbox>
+            </div>
+          </>
+        ) : (
+          <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">
+            Выберите метод или нажмите «Новый».
+          </div>
+        )}
       </section>
+      )}
     </div>
+  )
+}
+
+function OperationBlock({
+  title,
+  draft,
+  extraRows,
+  commentPhrases,
+  onChange,
+  onDeleteRow,
+  children,
+}: {
+  title: string
+  draft: RoomMethodOperationDraft
+  extraRows: RoomPaymentMethodInfo[]
+  commentPhrases: RoomWalletCommentPhrase[]
+  onChange: (updates: Partial<RoomMethodOperationDraft>) => void
+  onDeleteRow: (row: RoomPaymentMethodInfo) => void
+  children?: ReactNode
+}) {
+  return (
+    <div className="space-y-4 rounded-xl border border-slate-700/70 bg-slate-900/45 p-4">
+      <h4 className="text-sm font-bold text-slate-200">{title}</h4>
+      {children}
+      <div className="space-y-2">
+        <Checkbox checked={draft.showComment} onChange={(showComment) => onChange({ showComment })}>Комментарий для игрока</Checkbox>
+        {draft.showComment && (
+          <RoomWalletCommentField draft={draft} phrases={commentPhrases} onChange={onChange} />
+        )}
+      </div>
+      <div className="space-y-2">
+        <Checkbox checked={draft.showLimits} onChange={(showLimits) => onChange({ showLimits })}>Лимиты</Checkbox>
+        {draft.showLimits && (
+          <input
+            value={draft.limits}
+            onChange={(event) => onChange({ limits: event.target.value })}
+            placeholder="min 200 EUR"
+            className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
+          />
+        )}
+      </div>
+      {extraRows.map((row) => (
+        <div key={row.id} className="flex items-center justify-between gap-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-200">
+          <span>Ещё одна запись: {row.method_name}{[row.fee_text, row.limits_text].some(Boolean) ? ` — ${[row.fee_text, row.limits_text].filter(Boolean).join(', ')}` : ''}</span>
+          <button
+            type="button"
+            onClick={() => onDeleteRow(row)}
+            className="shrink-0 rounded-md border border-amber-500/40 px-2 py-1 font-semibold hover:bg-amber-500/10"
+          >
+            Удалить
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function RoomWalletCommentField({
+  draft,
+  phrases,
+  onChange,
+}: {
+  draft: RoomMethodOperationDraft
+  phrases: RoomWalletCommentPhrase[]
+  onChange: (updates: Partial<RoomMethodOperationDraft>) => void
+}) {
+  const options = [...ROOM_WALLET_COMMENT_PHRASES, ...phrases].map((phrase) => phrase.RU)
+  const needsTranslation = !isTranslatedRoomWalletComment(draft.comment, phrases)
+  const inputClass = 'w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-3 text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500'
+  return (
+    <div className="space-y-2">
+      <input
+        value={draft.comment}
+        onChange={(event) => onChange({ comment: event.target.value })}
+        list="room-wallet-comment-phrases"
+        placeholder="без комиссии"
+        className={inputClass}
+      />
+      <datalist id="room-wallet-comment-phrases">
+        {Array.from(new Set(options)).map((option) => <option key={option} value={option} />)}
+      </datalist>
+      {needsTranslation && (
+        <div className="space-y-2 rounded-lg border border-amber-500/30 bg-amber-500/5 p-3">
+          <p className="text-xs text-amber-200">Новая фраза. Добавьте перевод один раз — дальше она будет переводиться сама. Без перевода игрок на EN и ES увидит этот текст как есть.</p>
+          <input value={draft.translationEN || ''} onChange={(event) => onChange({ translationEN: event.target.value })} placeholder="EN: no fee" className={inputClass} />
+          <input value={draft.translationES || ''} onChange={(event) => onChange({ translationES: event.target.value })} placeholder="ES: sin comisión" className={inputClass} />
+        </div>
+      )}
+    </div>
+  )
+}
+
+function Checkbox({ checked, onChange, children }: { checked: boolean, onChange: (checked: boolean) => void, children: ReactNode }) {
+  return (
+    <label className="inline-flex items-center gap-2 text-sm font-medium text-slate-300">
+      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} className="h-4 w-4" />
+      {children}
+    </label>
   )
 }
 

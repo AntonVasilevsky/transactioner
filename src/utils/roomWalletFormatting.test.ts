@@ -4,6 +4,8 @@ import {
   roomWalletCopyText,
   roomWalletDisplayTitle,
   roomWalletListTitle,
+  roomSingleWalletCopyText,
+  isTranslatedRoomWalletComment,
 } from './roomWalletFormatting'
 
 const wallet = (
@@ -75,6 +77,34 @@ describe('room wallet formatting', () => {
       'ES'
     )).toBe('BTC BTC (sin comisión)\nbc1champion')
     expect(roomWalletListTitle('Champion Poker', 'ES'))
-      .toBe('Champion Poker - billeteras de depósito')
+      .toBe('Champion Poker — billeteras de depósito')
+  })
+
+  it('uses one heading form in every language, singular for one wallet', () => {
+    expect(['RU', 'EN', 'ES'].map((language) => roomWalletListTitle('Nexa', language as RoomLanguage))).toEqual([
+      'Nexa — депозитные кошельки',
+      'Nexa — deposit wallets',
+      'Nexa — billeteras de depósito',
+    ])
+    expect(['RU', 'EN', 'ES'].map((language) => roomWalletListTitle('Nexa', language as RoomLanguage, 1))).toEqual([
+      'Nexa — кошелёк для депозита',
+      'Nexa — deposit wallet',
+      'Nexa — billetera de depósito',
+    ])
+    expect(roomSingleWalletCopyText('Nexa', wallet({ fee_text: '' }), method('через нас, p2p'), 'EN'))
+      .toBe('Nexa — deposit wallet\n\nBTC BTC (through us, P2P)\nbc1champion')
+  })
+
+  it('translates operator phrases added with RU / EN / ES and tells which comments still need it', () => {
+    const phrases = [{ RU: 'только через нас', EN: 'only through us', ES: 'solo a través de nosotros' }]
+    expect(localizeRoomWalletFeeText('Только через нас', 'ES', phrases)).toBe('solo a través de nosotros')
+    expect(localizeRoomWalletFeeText('only through us', 'RU', phrases)).toBe('только через нас')
+    expect(roomSingleWalletCopyText('Champion Poker', wallet({ fee_text: '' }), method('только через нас'), 'EN', phrases))
+      .toBe('Champion Poker — deposit wallet\n\nBTC BTC (only through us)\nbc1champion')
+    expect(isTranslatedRoomWalletComment('только через нас', phrases)).toBe(true)
+    expect(isTranslatedRoomWalletComment('2% комиссия')).toBe(true)
+    expect(isTranslatedRoomWalletComment('без комиссии')).toBe(true)
+    expect(isTranslatedRoomWalletComment('')).toBe(true)
+    expect(isTranslatedRoomWalletComment('только через нас')).toBe(false)
   })
 })

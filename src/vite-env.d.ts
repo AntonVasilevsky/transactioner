@@ -397,6 +397,8 @@ interface Window {
   electronAPI: {
     searchPlayer: (username: string) => Promise<PlayerPayload | PlayerPayload[] | null>;
     savePlayer: (data: SavePlayerInput) => Promise<SavePlayerResult>;
+    getRoomWalletCommentPhrases: () => Promise<Array<Record<RoomLanguage, string>>>;
+    saveRoomWalletCommentPhrase: (phrase: Record<RoomLanguage, string>) => Promise<MutationResult>;
     saveLinkVerificationPlayer: (data: SaveLinkVerificationPlayerInput) => Promise<SaveLinkVerificationPlayerResult>;
     undoLinkVerificationPlayerSave: (undo: LinkVerificationPlayerUndo) => Promise<MutationResult>;
     getAllPlayers: () => Promise<Player[]>;

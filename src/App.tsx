@@ -15,8 +15,9 @@ import {
   normalizeSidebarNavOrder,
   type SidebarNavId,
 } from './utils/sidebarNavigation'
+import { isTextEntry, previousView, runEscapeBack, type AppView } from './utils/escapeNavigation'
 
-export type ViewState = 'search' | 'add' | 'form' | 'list' | 'edit' | 'roomInfo' | 'linkVerification'
+export type ViewState = AppView
 export type OperationType = 'Deposit' | 'Withdrawal'
 
 const sidebarNavOrderStorageKey = 'transactioner.sidebarNavOrder'
@@ -147,6 +148,32 @@ function App() {
     })
     setReleaseNotes(null)
   }
+
+  const escapeStateRef = useRef({ currentView, releaseNotes, closeReleaseNotes, navigateTo })
+  useEffect(() => {
+    escapeStateRef.current = { currentView, releaseNotes, closeReleaseNotes, navigateTo }
+  })
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || event.defaultPrevented || event.repeat) return
+      const state = escapeStateRef.current
+      if (state.releaseNotes) {
+        state.closeReleaseNotes()
+        return
+      }
+      const active = document.activeElement
+      if (isTextEntry(active)) {
+        (active as HTMLElement).blur()
+        return
+      }
+      if (runEscapeBack()) return
+      const back = previousView(state.currentView)
+      if (back) state.navigateTo(back)
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [])
 
   const handleNavDragStart = (event: React.DragEvent<HTMLButtonElement>, navId: SidebarNavId) => {
     draggingNavIdRef.current = navId

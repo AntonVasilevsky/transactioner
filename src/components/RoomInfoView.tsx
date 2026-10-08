@@ -10,6 +10,8 @@ import {
   roomWalletCopyText,
   roomWalletDisplayTitle,
   roomWalletListTitle,
+  roomSingleWalletCopyText,
+  type RoomWalletCommentPhrase,
 } from '../utils/roomWalletFormatting'
 
 type RoomInfoMode = 'wallets' | 'deals'
@@ -63,6 +65,21 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
   const [selectedDealType, setSelectedDealType] = useState<RoomDealType>('General')
   const [selectedCountryCode, setSelectedCountryCode] = useState('')
   const [language, setLanguage] = useState<RoomLanguage>('RU')
+  const [commentPhrases, setCommentPhrases] = useState<RoomWalletCommentPhrase[]>([])
+
+  useEffect(() => {
+    let active = true
+    window.electronAPI.getRoomWalletCommentPhrases()
+      .then((phrases) => {
+        if (active) setCommentPhrases(phrases || [])
+      })
+      .catch(() => {
+        if (active) setCommentPhrases([])
+      })
+    return () => {
+      active = false
+    }
+  }, [])
   const [wallets, setWallets] = useState<RoomWalletInfo[]>([])
   const [deals, setDeals] = useState<RoomDealInfo[]>([])
   const roomUsageStats = useRoomUsageStats()
@@ -247,6 +264,7 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
             initialRoomKey={selectedRoomKey}
             initialDealType={activeDealType}
             initialLanguage={language}
+            isOpen={isAdminOpen}
             onClose={(adminContext) => {
               setIsAdminOpen(false)
               if (adminContext?.roomKey) {
@@ -345,6 +363,7 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
           paymentMethods={walletPaymentMethods}
           hasConfiguredMethods={walletRoomPaymentMethods.length > 0}
           language={language}
+          commentPhrases={commentPhrases}
           copied={copied}
           onCopy={copyText}
         />
@@ -400,6 +419,7 @@ function WalletsPanel({
   paymentMethods,
   hasConfiguredMethods,
   language,
+  commentPhrases,
   copied,
   onCopy,
 }: {
@@ -408,6 +428,7 @@ function WalletsPanel({
   paymentMethods: RoomPaymentMethodInfo[]
   hasConfiguredMethods: boolean
   language: RoomLanguage
+  commentPhrases: RoomWalletCommentPhrase[]
   copied: string
   onCopy: (key: string, text: string) => void
 }) {
@@ -420,13 +441,13 @@ function WalletsPanel({
     .filter(({ method }) => !hasConfiguredMethods || method)
     .sort((left, right) => (
       ((left.method?.sort_order ?? left.wallet.sort_order) || 0) - ((right.method?.sort_order ?? right.wallet.sort_order) || 0) ||
-      roomWalletDisplayTitle(left.wallet, left.method, language)
-        .localeCompare(roomWalletDisplayTitle(right.wallet, right.method, language), undefined, { sensitivity: 'base' })
+      roomWalletDisplayTitle(left.wallet, left.method, language, commentPhrases)
+        .localeCompare(roomWalletDisplayTitle(right.wallet, right.method, language, commentPhrases), undefined, { sensitivity: 'base' })
     ))
   const walletListText = walletRows.length
     ? [
-        roomWalletListTitle(roomTitle, language),
-        ...walletRows.map(({ wallet, method }) => roomWalletCopyText(wallet, method, language)),
+        roomWalletListTitle(roomTitle, language, walletRows.length),
+        ...walletRows.map(({ wallet, method }) => roomWalletCopyText(wallet, method, language, commentPhrases)),
       ].join('\n\n')
     : ''
 
@@ -452,7 +473,7 @@ function WalletsPanel({
               >
                 <div className="min-w-0">
                   <div className="font-semibold text-slate-100">
-                    {roomWalletDisplayTitle(wallet, method, language)}
+                    {roomWalletDisplayTitle(wallet, method, language, commentPhrases)}
                   </div>
                   {method?.limits_text && <div className="mt-1 text-xs text-amber-200">{method.limits_text}</div>}
                   <div className="mt-2 break-all font-mono text-xs text-slate-300">{wallet.wallet_address}</div>
@@ -462,7 +483,7 @@ function WalletsPanel({
                   label={`Скопировать ${wallet.currency} ${wallet.network}`}
                   onClick={() => onCopy(
                     `wallet-${wallet.id}`,
-                    roomWalletCopyText(wallet, method, language)
+                    roomSingleWalletCopyText(roomTitle, wallet, method, language, commentPhrases)
                   )}
                 />
               </div>

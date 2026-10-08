@@ -276,6 +276,11 @@ ipcMain.handle('undo-link-verification-player-save', (_, undo) => {
   if (result.success) runDailyBackup()
   return result
 })
+ipcMain.handle('get-room-wallet-comment-phrases', () => store?.getRoomWalletCommentPhrases() ?? [])
+ipcMain.handle('save-room-wallet-comment-phrase', (_, phrase) => {
+  runRoomEditBackup()
+  return store?.saveRoomWalletCommentPhrase(phrase) ?? { success: false, error: 'База данных недоступна' }
+})
 ipcMain.handle('update-default-wallet', (_, id: number, wallet: string) => {
   const result = store?.updateDefaultWallet(id, wallet) ?? { success: false, error: 'База данных недоступна' }
   if (result.success) runDailyBackup()

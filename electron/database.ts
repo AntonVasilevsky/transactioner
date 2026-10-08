@@ -77,6 +77,8 @@ export interface SaveLinkVerificationPlayerResult extends MutationResult {
   undo?: LinkVerificationPlayerUndo
 }
 
+const roomWalletCommentPhrasesKey = 'room_wallet_comment_phrases'
+
 const roomIdentityKey = (value: string) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '')
 
 export interface SavePlayerResult extends MutationResult {
@@ -1182,7 +1184,22 @@ export class TransactionerDatabase {
         isActive: data.is_active === false || data.is_active === 0 ? 0 : 1,
       }
 
-      if (data.id) {
+      // One row per room / deal type / operation / coin + network: a new method for an
+      // existing coin and network updates that row instead of adding a look-alike.
+      const existingId = data.id ? Number(data.id) : currency && network
+        ? (this.db.prepare(`
+            SELECT id FROM room_payment_methods
+            WHERE room_key = ? COLLATE NOCASE
+              AND deal_type = ? COLLATE NOCASE
+              AND operation_type = ? COLLATE NOCASE
+              AND UPPER(TRIM(currency)) = ?
+              AND UPPER(TRIM(network)) = ?
+            ORDER BY id
+            LIMIT 1
+          `).get(roomKey, dealType, operationType, currency, network) as { id: number } | undefined)?.id
+        : undefined
+
+      if (existingId) {
         const result = this.db.prepare(`
           UPDATE room_payment_methods
           SET room_key = @roomKey,
@@ -1197,9 +1214,9 @@ export class TransactionerDatabase {
               sort_order = @sortOrder,
               is_active = @isActive
           WHERE id = @id
-        `).run({ ...payload, id: Number(data.id) })
+        `).run({ ...payload, id: existingId })
         if (result.changes === 0) return { success: false, error: 'Метод не найден' }
-        return { success: true, id: Number(data.id) }
+        return { success: true, id: existingId }
       }
 
       const result = this.db.prepare(`
@@ -1397,6 +1414,33 @@ export class TransactionerDatabase {
       console.error(err)
       return { success: false, error: err instanceof Error ? err.message : String(err) }
     }
+  }
+
+  /** Player comments for wallets/methods added by the operator with RU / EN / ES text (T-0019). */
+  getRoomWalletCommentPhrases(): Array<Record<RoomLanguage, string>> {
+    const row = this.db.prepare('SELECT value FROM app_settings WHERE key = ?').get(roomWalletCommentPhrasesKey) as { value: string } | undefined
+    try {
+      const parsed = row ? JSON.parse(row.value) : []
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+
+  saveRoomWalletCommentPhrase(phrase: Record<RoomLanguage, string>): MutationResult {
+    const cleaned = {
+      RU: String(phrase?.RU || '').trim(),
+      EN: String(phrase?.EN || '').trim(),
+      ES: String(phrase?.ES || '').trim(),
+    }
+    if (!cleaned.RU || !cleaned.EN || !cleaned.ES) return { success: false, error: 'Заполните текст на RU, EN и ES' }
+    const key = (value: string) => value.toLowerCase().replace(/\s+/g, ' ')
+    const phrases = this.getRoomWalletCommentPhrases().filter((item) => key(item.RU || '') !== key(cleaned.RU))
+    this.db.prepare(`
+      INSERT INTO app_settings (key, value) VALUES (?, ?)
+      ON CONFLICT(key) DO UPDATE SET value = excluded.value
+    `).run(roomWalletCommentPhrasesKey, JSON.stringify([...phrases, cleaned]))
+    return { success: true }
   }
 
   savePlayer(data: SavePlayerInput): SavePlayerResult {
@@ -1758,7 +1802,46 @@ export class TransactionerDatabase {
         name: 'link-verification-response-templates-2026-10',
         up: () => this.addMissingLinkVerificationResponseTemplates(LINK_VERIFICATION_RESPONSE_TEMPLATES_2026_10),
       },
+      {
+        version: 3,
+        name: 'room-methods-one-row-per-coin-network-2026-10',
+        up: () => this.mergeDuplicateRoomPaymentMethods(),
+      },
     ]
+  }
+
+  /**
+   * T-0019 (owner, 2026-10-05): one method row per room / deal type / operation / coin + network
+   * and no operator notes. A look-alike row ("BTC" next to "BTC BTC") is deleted only when it holds
+   * nothing the kept row lacks; rows with different fee or limits stay. Wallets (room_wallets) are
+   * a separate table matched by coin + network and are not touched.
+   */
+  private mergeDuplicateRoomPaymentMethods() {
+    type MethodRow = { id: number, room_key: string, deal_type: string, operation_type: string, currency: string, network: string, fee_text: string | null, limits_text: string | null, is_active: number }
+    const rows = this.db.prepare(`
+      SELECT id, room_key, deal_type, operation_type, currency, network, fee_text, limits_text, is_active
+      FROM room_payment_methods
+      WHERE TRIM(currency) != '' AND TRIM(network) != ''
+      ORDER BY id
+    `).all() as MethodRow[]
+    const text = (value: string | null) => String(value || '').trim().toLowerCase()
+    const richness = (row: MethodRow) => (row.is_active ? 4 : 0) + (text(row.fee_text) ? 2 : 0) + (text(row.limits_text) ? 1 : 0)
+    const groups = new Map<string, MethodRow[]>()
+    for (const row of rows) {
+      const key = [row.room_key, row.deal_type, row.operation_type, row.currency, row.network].map((part) => text(part)).join('|')
+      groups.set(key, [...(groups.get(key) || []), row])
+    }
+    const remove = this.db.prepare('DELETE FROM room_payment_methods WHERE id = ?')
+    for (const group of groups.values()) {
+      if (group.length < 2) continue
+      const kept = [...group].sort((left, right) => richness(right) - richness(left) || left.id - right.id)[0]
+      for (const row of group) {
+        if (row.id === kept.id) continue
+        const adds = (field: 'fee_text' | 'limits_text') => text(row[field]) !== '' && text(row[field]) !== text(kept[field])
+        if (!adds('fee_text') && !adds('limits_text')) remove.run(row.id)
+      }
+    }
+    this.db.prepare('UPDATE room_payment_methods SET note = NULL').run()
   }
 
   /** Adds texts only for rooms in the directory and only where no template exists yet. */

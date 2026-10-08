@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   getStorageInfo: () => ipcRenderer.invoke('get-storage-info'),
   getRoomKnowledgeIndex: () => ipcRenderer.invoke('get-room-knowledge-index'),
+  getRoomWalletCommentPhrases: () => ipcRenderer.invoke('get-room-wallet-comment-phrases'),
+  saveRoomWalletCommentPhrase: (phrase: Record<RoomLanguage, string>) => ipcRenderer.invoke('save-room-wallet-comment-phrase', phrase),
   getRoomKnowledgeAdminIndex: () => ipcRenderer.invoke('get-room-knowledge-admin-index'),
   getRoomWallets: (roomKey: string, dealType?: RoomDealType) => ipcRenderer.invoke('get-room-wallets', roomKey, dealType),
   getRoomDeals: (roomKey: string, language: RoomLanguage, dealType?: RoomDealType) => ipcRenderer.invoke('get-room-deals', roomKey, language, dealType),

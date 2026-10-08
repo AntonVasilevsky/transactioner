@@ -247,7 +247,11 @@ describe('TransactionerDatabase', () => {
     const hookCalls: PendingMigrationInfo[] = []
     db = new TransactionerDatabase(dbPath, { beforeMigrate: (info) => hookCalls.push(info) })
 
-    expect(hookCalls).toEqual([{ fromVersion: 1, toVersion: 2, steps: ['link-verification-response-templates-2026-10'] }])
+    expect(hookCalls).toEqual([{
+      fromVersion: 1,
+      toVersion: 3,
+      steps: ['link-verification-response-templates-2026-10', 'room-methods-one-row-per-coin-network-2026-10'],
+    }])
     for (const language of ['RU', 'EN', 'ES'] as const) {
       expect(db.getLinkVerificationResponseTemplates('tigergaming', language, 'Direct'), language).toHaveLength(1)
     }
@@ -1474,7 +1478,7 @@ describe('TransactionerDatabase', () => {
     expect(player.success).toBe(true)
     db.close()
     const raw = new Database(dbPath)
-    expect(raw.pragma('user_version', { simple: true })).toBe(2)
+    expect(raw.pragma('user_version', { simple: true })).toBe(3)
     raw.pragma('user_version = 0')
     raw.close()
 
@@ -1483,8 +1487,8 @@ describe('TransactionerDatabase', () => {
 
     expect(hookCalls).toEqual([{
       fromVersion: 0,
-      toVersion: 2,
-      steps: ['initial-room-knowledge', 'link-verification-response-templates-2026-10'],
+      toVersion: 3,
+      steps: ['initial-room-knowledge', 'link-verification-response-templates-2026-10', 'room-methods-one-row-per-coin-network-2026-10'],
     }])
     expect(db.getRoomWallets('nexa', 'Agent').map((row) => row.wallet_address)).toEqual(['TLegacyNexaWallet'])
     expect(db.getPlayerById(Number(player.id))?.accounts).toHaveLength(1)
@@ -1524,6 +1528,70 @@ describe('TransactionerDatabase', () => {
     ).count).toBe(0)
     untouched.close()
     db = new TransactionerDatabase(dbPath)
+  })
+
+  it('merges look-alike method rows once, clears operator notes and leaves every wallet address as it was', () => {
+    for (const wallet of [
+      { currency: 'BTC', network: 'BTC', wallet_address: 'bc1qchampionbtcwallet0000000000000000000' },
+      { currency: 'USDT', network: 'TRC20', wallet_address: 'TChampionTrc20Wallet000000000000000' },
+    ]) {
+      expect(db.saveRoomWallet({ room_key: 'champion-poker', deal_type: 'Agent', ...wallet, is_active: 1, sort_order: 10 }).success).toBe(true)
+    }
+    db.close()
+    const raw = new Database(dbPath)
+    raw.prepare("DELETE FROM room_payment_methods WHERE room_key = 'champion-poker' AND currency = 'BTC'").run()
+    const insert = raw.prepare(`
+      INSERT INTO room_payment_methods (room_key, deal_type, operation_type, method_name, currency, network, fee_text, limits_text, note, sort_order, is_active)
+      VALUES (?, 'Agent', ?, ?, 'BTC', 'BTC', ?, ?, ?, ?, 1)
+    `)
+    insert.run('champion-poker', 'Deposit', 'BTC BTC', null, null, null, 50)
+    insert.run('champion-poker', 'Deposit', 'BTC', 'без комиссии', null, 'Актуальный кошелек для депозита в рум.', 14)
+    insert.run('champion-poker', 'Withdrawal', 'BTC BTC', null, '500 EUR', null, 130)
+    insert.run('champion-poker', 'Withdrawal', 'BTC', 'без комиссии', '500 EUR', null, 24)
+    insert.run('champion-poker', 'Deposit', 'BTC old', '1% комиссия', null, null, 60)
+    const walletsBefore = raw.prepare('SELECT id, room_key, deal_type, currency, network, wallet_address, is_active FROM room_wallets ORDER BY id').all()
+    raw.pragma('user_version = 2')
+    raw.close()
+
+    db = new TransactionerDatabase(dbPath)
+
+    const btc = db.getRoomKnowledgeAdminIndex().paymentMethods
+      .filter((method) => method.room_key === 'champion-poker' && method.currency === 'BTC')
+      .map((method) => [method.operation_type, method.method_name, method.fee_text, method.limits_text, method.note])
+      .sort((left, right) => `${left[0]}|${left[1]}`.localeCompare(`${right[0]}|${right[1]}`, 'en'))
+    expect(btc).toEqual([
+      ['Deposit', 'BTC', 'без комиссии', null, null],
+      ['Deposit', 'BTC old', '1% комиссия', null, null],
+      ['Withdrawal', 'BTC', 'без комиссии', '500 EUR', null],
+    ])
+    expect(db.getRoomKnowledgeAdminIndex().paymentMethods.every((method) => !method.note)).toBe(true)
+    const check = new Database(dbPath, { readonly: true })
+    expect(check.prepare('SELECT id, room_key, deal_type, currency, network, wallet_address, is_active FROM room_wallets ORDER BY id').all())
+      .toEqual(walletsBefore)
+    check.close()
+  })
+
+  it('stores operator comment phrases once per RU text and requires all three languages', () => {
+    expect(db.getRoomWalletCommentPhrases()).toEqual([])
+    expect(db.saveRoomWalletCommentPhrase({ RU: 'только через нас', EN: 'only through us', ES: '' }).success).toBe(false)
+    expect(db.saveRoomWalletCommentPhrase({ RU: 'только через нас', EN: 'only through us', ES: 'solo a través de nosotros' })).toEqual({ success: true })
+    expect(db.saveRoomWalletCommentPhrase({ RU: 'Только  через нас', EN: 'only via us', ES: 'solo por nosotros' })).toEqual({ success: true })
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+    expect(db.getRoomWalletCommentPhrases()).toEqual([{ RU: 'Только  через нас', EN: 'only via us', ES: 'solo por nosotros' }])
+  })
+
+  it('updates the existing coin + network row instead of adding a look-alike method', () => {
+    const first = db.saveRoomPaymentMethod({
+      room_key: 'redstar', deal_type: 'General', operation_type: 'Withdrawal', method_name: 'LTC', currency: 'LTC', network: 'LTC', fee_text: '', is_active: 1, sort_order: 10,
+    })
+    const second = db.saveRoomPaymentMethod({
+      room_key: 'redstar', deal_type: 'General', operation_type: 'Withdrawal', method_name: 'LTC LTC', currency: 'ltc', network: 'ltc', fee_text: 'без комиссии', is_active: 1, sort_order: 10,
+    })
+    expect(second).toEqual({ success: true, id: first.id })
+    expect(db.getRoomKnowledgeAdminIndex().paymentMethods.filter((method) => (
+      method.room_key === 'redstar' && method.operation_type === 'Withdrawal' && method.currency === 'LTC'
+    ))).toEqual([expect.objectContaining({ id: first.id, fee_text: 'без комиссии' })])
   })
 
   it('saves editable room payment method limits and keeps inactive methods visible in admin', () => {
