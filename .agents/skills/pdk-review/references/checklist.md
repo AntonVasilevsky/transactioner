@@ -3,6 +3,14 @@
 Apply to changed code and to the callers you expanded to. Each "no" or
 "unsure" is a candidate finding; confirm it before reporting.
 
+## Consequences
+
+- For each changed flag, field or setting: who reads it, and what does a person
+  get when it is wrong (paid via a closed channel, shown wrong data, a message
+  sent, a record deleted)? Follow it to that point before rating the finding.
+- Can the change happen silently, without an action of a person? Silent + money,
+  people's data, an irreversible action or the main process = blocker.
+
 ## Correctness
 
 - Does the code do what the Acceptance and the cited requirement ids say,

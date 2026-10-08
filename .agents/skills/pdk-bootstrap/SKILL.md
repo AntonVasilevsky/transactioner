@@ -60,6 +60,10 @@ installs, scripts or network calls during bootstrap, never write secrets.
 6. **Fill `pdk/knowledge/project.md`** from the answers and the files:
    - Idea — what, for whom, what "done" means for v1. Replace the placeholder.
    - Open questions — each unresolved point, one line, owner if known.
+   - Critical — ask once: "what must never go wrong here, and where?" (money,
+     people's data, irreversible actions, the main process). 3–5 lines in the
+     human's words; leave empty if they have none. Review rates findings there by
+     consequence.
    - Constraints — hard limits, then `Out of scope:` items.
    - Existing projects: add `## Existing sources` with relative links to the
      real docs (e.g. `../../docs/api.md`) and what must not be touched.

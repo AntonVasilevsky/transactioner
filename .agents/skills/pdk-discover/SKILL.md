@@ -38,6 +38,9 @@ Paths here are PDK defaults; if `pdk.json` `paths` differ, use those.
    answer where it belongs right away (don't keep it only in chat).
 3. **Open questions** go to `project.md` → `## Open questions`, one line each;
    remove a line when it is answered and the answer is recorded. Set `updated:`.
+   What must never go wrong (money, people's data, irreversible actions, the main
+   process) goes to `## Critical`, 3–5 lines; propose an addition when the
+   answers reveal one.
 4. **Research** only what the answers depend on (market, prior art, regulations,
    APIs, limits). One file per topic: `pdk/knowledge/research/<slug>.md`:
    ```yaml

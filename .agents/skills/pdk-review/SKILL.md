@@ -75,7 +75,9 @@ skip silently, do not mention. `ocrFull` is human-only either way; when it is
 3. **Expand only where the diff demands it**: changed signature, behaviour,
    return/error semantics, data format, config key, shared state or security
    boundary → find callers and dependents (`grep -rn`, `git grep`) and read
-   them. Say which expansions you made. The route from `pdk resolve` ends
+   them. A changed flag, field or setting (`is_active`, a status, a limit) →
+   follow it to the code that reads it and on to what a person gets: who is
+   paid, what is shown, sent or deleted. Say which expansions you made. The route from `pdk resolve` ends
    with a `Code graph:` line: `fresh` → run `pdk graph affected --paths
    <changed files>` and read the listed neighbours; `stale` or `missing` →
    `pdk graph update` first (writes only `graphify-out/`), then `affected`;
@@ -97,8 +99,14 @@ skip silently, do not mention. `ocrFull` is human-only either way; when it is
    ```
    [blocker|major|minor|nit] path/to/file.ext:LINE — what is wrong
      Why: the failing case or violated requirement/ADR, with evidence
+     Consequence: the worst outcome for a person, one sentence
      Fix: a concrete change (what to do, not the patch itself)
    ```
+   Severity follows the worst consequence, not the kind of bug or how likely it is.
+   A change that can happen silently (no action of a person) and touches money,
+   other people's data, an irreversible action or the product's main process is a
+   **blocker**, even when unlikely or behind a confirmation. `project.md` →
+   `## Critical`, when present, names this project's such places.
    - blocker: wrong result, data loss, security hole, Acceptance unmet, ADR violated.
    - major: realistic bug or missing test for key behaviour.
    - minor: edge case, unclear error, maintainability risk.

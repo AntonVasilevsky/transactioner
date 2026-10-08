@@ -86,6 +86,8 @@ L4 costs the scarcest model, so give it only where L3 would likely do worse.
 Decide with one question: **if this goes wrong, will the tests catch it?**
 No → L4 (or L3 plus an independent pdk-review at L4). Yes → L3 or lower.
 
+- Work in a place listed under `project.md` → `## Critical`: L4 or L3 plus an
+  independent review at L4.
 - Always L4 (or L3 plus an independent review at L4): a rule that decides which
   records are the same or what gets merged, overwritten, deleted or charged (matching,
   deduplication, identity, money). Tests of such a rule only freeze it — a wrong rule
