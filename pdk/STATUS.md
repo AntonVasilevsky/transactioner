@@ -6,7 +6,7 @@ Generated: 2026-10-08
 ## Active
 
 - **T-0001** Картировать существующие знания в pdk/ — next: Получить явное принятие или правки requirements/architecture; после принятия перевести их в current и отдельно спросить про mandatory. Новые proposed-задачи уточнять и активировать отдельно, начиная с T-0004 перед T-0003.
-- **T-0019** Методы и кошельки рума: одна строка на монету и сеть, понятные комментарии, единые подписи при копировании — next: Независимый pdk-review коммита 8704386 (/pdk review --agent T-0019, другая модель L3/L4); затем --status done. В релиз — со следующей сборкой на мак.
+- **T-0019** Методы и кошельки рума: одна строка на монету и сеть, понятные комментарии, единые подписи при копировании — next: Повторный независимый pdk-review коммитов 8704386 и 258288b по запросу владельца; затем --status done; затем T-0020 и релиз 0.1.27
 
 ## Blocked
 
@@ -37,4 +37,6 @@ _none_
 
 ## Check
 
-0 errors, 0 warnings
+0 errors, 1 warnings
+
+- warning .agents/skills/pdk-review/SKILL.md skills.outdated Installed skill is older than the toolkit copy; run `pdk skills sync`

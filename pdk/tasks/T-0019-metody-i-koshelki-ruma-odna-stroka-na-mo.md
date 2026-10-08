@@ -8,10 +8,10 @@ executed_by: claude-code/claude-opus-5-5
 depends_on: [T-0011]
 aliases: [room payment methods wallets admin one row per coin network deposit withdrawal checkboxes comment translation copy wallet header singular plural]
 scope: [rooms, wallets, room-admin]
-links: [src/components/RoomAdminView.tsx, src/components/RoomInfoView.tsx, src/utils/roomWalletFormatting.ts, src/utils/transactionTemplateFormatting.ts, electron/database.ts, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, src/utils/roomMethodGroups.ts]
+links: [src/components/RoomAdminView.tsx, src/components/RoomInfoView.tsx, src/utils/roomWalletFormatting.ts, src/utils/transactionTemplateFormatting.ts, electron/database.ts, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, src/utils/roomMethodGroups.ts, pdk/knowledge/notes/T-0019-review-2026-10-08-3.md]
 sessions: [01a10223-e2be-770a-9bc6-2646a7428876]
-commits: ["8704386"]
-revision: 6
+commits: ["8704386", 258288b]
+revision: 11
 created: 2026-10-05
 updated: 2026-10-08
 ---
@@ -60,10 +60,18 @@ Works: (1) подписи копирования кошельков — одна
 Verified: npm run lint — exit 0; npm test — 26 файлов, 233/233 (после правки формы тоже); npm run build — ok; pdk check — 0 errors. Шаг 3 на копии рабочей БД: 15 адресов кошельков совпадают побайтно, удалены 3 «BTC BTC» и дубль вывода Champion Skrill EUR, заметки очищены.
 Done: владелец проверил редактор методов и Esc 2026-10-08. Changed: коммит 8704386. Not done: независимый pdk-review (L3) — по Acceptance; проверка копирования кошельков владельцем не подтверждена отдельно.
 Done: Skrill EUR «max 3k» перенесён в лимиты в рабочей БД. Форма редактора скрыта по умолчанию, кнопки Редактировать/Удалить видны всегда, «Закрыть» в форме. Рабочая БД на версии 3 (шаг применён при запуске владельца).
+Review 2026-10-08 (claude-fable-5-1, независимый, 3 прогона по одному коду): итоговый 3 blocker, 3 minor, 1 nit — pdk/knowledge/notes/T-0019-review-2026-10-08-3.md.
+Found in owner test 2026-10-08: «Новый» USDT TRC20 у Nexa (подтверждение блокера 2) добавил второй кошелёк t-TEST (sort 0) рядом с TTyKPa… и сменил порядок метода на 0 — экраны показывали тестовый вместо настоящего; затем правка адреса в форме дала сырое «UNIQUE constraint failed: room_wallets…» (форма держала id тестового кошелька). Восстановлено: t-TEST удалён, порядок 10 возвращён; methods и wallets совпадают с утренней копией transactioner-2026-10-08.db (snapshot transactioner-before-nexa-wallet-restore-2026-10-08-093344.db).
+Owner 2026-10-08: убрать общую галку «Метод активен» (своя «Активен» у депозита и вывода); вопросы: вариант (а) для кошелька при снятии «Депозит», подпись/смысл блока «Вывод».
+Fixed after review 2026-10-08 (не закоммичено): (1) снятие «Депозит» кошелёк не удаляет; кошелёк той же монеты+сети переиспользуется, второй не создаётся; (2) «Новый»/переименование на существующую монету+сеть не сохраняется — «уже есть, открыть?»; (3) «Активен» у депозита и вывода раздельно, в списке неактивная операция зачёркнута; (4) вместо UNIQUE SQLite — понятные ошибки (friendlyConstraintError) и проверка дубля адреса до сохранения; (5) фразы на «Инфо по румам» перечитываются после закрытия настроек; (6) datalist id по операции. Переименование «Методы» → «Кошельки», цвета, пояснение у «Вывод». Находка о потере текста из method_name в миграции отклонена: «max 3k» был в fee_text записи 1012, миграция её сохранила.
+Verified: npm run lint — exit 0; npm test — 27 файлов, 239/239 (новые: кошелёк при снятии «Депозит», дубль монеты+сети, переиспользование кошелька, дубль адреса, раздельная активность, понятные ошибки БД); npm run build — ok.
+Owner 2026-10-08: «Активен» и «Кошелек активен» путают — у депозита одна галка «Активен», она включает/выключает и строку депозита, и его кошелёк (депозит активен только если активны оба). «Кошелек активен» убран. У вывода своя «Активен» осталась (кошелька там нет). В рабочей БД сейчас Nexa USDT TRC20: депозит неактивен, кошелёк активен — редактор покажет «Активен» снятым; при сохранении оба выровняются.
+Verified before commit 258288b: vitest на отдельной Node-сборке better-sqlite3 (.pdk/cache/vitest.node-sqlite.config.ts, рабочий модуль Electron не тронут) — 27 файлов, 240/240; lint exit 0; build ok; pdk check 0 errors. Владелец 2026-10-08: проверил — работает.
+Review notes: оставлен pdk/knowledge/notes/T-0019-review-2026-10-08-3.md, два прежних удалены (владелец да).
 
 ## Next step
 
-Независимый pdk-review коммита 8704386 (/pdk review --agent T-0019, другая модель L3/L4); затем --status done. В релиз — со следующей сборкой на мак.
+Повторный независимый pdk-review коммитов 8704386 и 258288b по запросу владельца; затем --status done; затем T-0020 и релиз 0.1.27
 
 ## Blockers
 
@@ -74,4 +82,9 @@ Done: Skrill EUR «max 3k» перенесён в лимиты в рабочей
 - 2026-10-05 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
 - 2026-10-05 update: sessions +01a10223-e2be-770a-9bc6-2646a7428876
 - 2026-10-05 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
+- 2026-10-08 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
+- 2026-10-08 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
+- 2026-10-08 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
+- 2026-10-08 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
+- 2026-10-08 update: links +pdk/knowledge/notes/T-0019-review-2026-10-08-3.md
 - 2026-10-08 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
