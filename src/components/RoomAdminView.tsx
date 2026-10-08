@@ -586,7 +586,12 @@ export default function RoomAdminView({
   const saveMethodGroup = async () => {
     if (!methodDraft) return
     const group = methodGroups.find((item) => item.key === methodDraft.groupKey)
-    const plan = planRoomMethodGroupSave(methodDraft, group)
+    const plan = planRoomMethodGroupSave(methodDraft, group, methodGroups, wallets)
+    if (plan.existingGroupKey) {
+      const existing = methodGroups.find((item) => item.key === plan.existingGroupKey)
+      if (existing && window.confirm(`${plan.error}\n\nОткрыть его?`)) selectMethodGroup(existing)
+      return
+    }
     if (plan.error) {
       setMessage('')
       setError(plan.error)
@@ -606,25 +611,25 @@ export default function RoomAdminView({
     if (phrases.length) setCommentPhrases(await window.electronAPI.getRoomWalletCommentPhrases())
     for (const id of plan.deletes) {
       const result = await window.electronAPI.deleteRoomPaymentMethod(id)
-      if (!result.success) return fail(result.error || 'Не удалось удалить операцию метода')
+      if (!result.success) return fail(result.error || 'Не удалось удалить депозит или вывод')
     }
     for (const save of plan.saves) {
       const result = await window.electronAPI.saveRoomPaymentMethod(save)
-      if (!result.success) return fail(result.error || 'Не удалось сохранить метод')
+      if (!result.success) return fail(result.error || 'Не удалось сохранить кошелёк')
     }
     if (plan.walletSave) {
       const result = await window.electronAPI.saveRoomWallet(plan.walletSave)
-      if (!result.success) return fail(result.error || 'Метод сохранен, но кошелек сохранить не удалось')
+      if (!result.success) return fail(result.error || 'Сохранено, но адрес кошелька сохранить не удалось')
     }
     if (plan.walletDelete) {
       const result = await window.electronAPI.deleteRoomWallet(plan.walletDelete)
-      if (!result.success) return fail(result.error || 'Метод сохранен, но кошелек удалить не удалось')
+      if (!result.success) return fail(result.error || 'Сохранено, но адрес кошелька удалить не удалось')
     }
 
     await reloadMethodsAndWallets(methodDraft.room_key, methodDraft.deal_type)
     setMethodDraft({ ...methodDraft, groupKey: roomMethodGroupKey({ currency: methodDraft.currency, network: methodDraft.network, method_name: '' }) })
     setMethodDraftDirty(false)
-    showMessage(plan.walletSave ? 'Метод и кошелек сохранены' : 'Метод сохранен')
+    showMessage('Сохранено')
   }
 
   const deleteMethodGroup = async (group: RoomMethodGroup) => {
@@ -637,7 +642,7 @@ export default function RoomAdminView({
       const result = await window.electronAPI.deleteRoomPaymentMethod(row.id)
       if (!result.success) {
         setMessage('')
-        setError(result.error || 'Не удалось удалить метод')
+        setError(result.error || 'Не удалось удалить')
         return
       }
     }
@@ -645,7 +650,7 @@ export default function RoomAdminView({
       const result = await window.electronAPI.deleteRoomWallet(wallet.id)
       if (!result.success) {
         setMessage('')
-        setError(result.error || 'Метод удален, но кошелек удалить не удалось')
+        setError(result.error || 'Удалено, но адрес кошелька удалить не удалось')
         return
       }
     }
@@ -654,7 +659,7 @@ export default function RoomAdminView({
       setMethodDraft(null)
       setMethodDraftDirty(false)
     }
-    showMessage('Метод удален')
+    showMessage('Удалено')
   }
 
   const deleteMethodRow = async (row: RoomPaymentMethodInfo) => {
@@ -712,7 +717,7 @@ export default function RoomAdminView({
         })
         if (!result.success) {
           setMessage('')
-          setError(result.error || 'Не удалось сохранить порядок методов')
+          setError(result.error || 'Не удалось сохранить порядок')
           return
         }
       }
@@ -721,7 +726,7 @@ export default function RoomAdminView({
         const result = await window.electronAPI.saveRoomWallet({ ...wallet, sort_order: sortOrder, sort_order_only: true } as SaveRoomWalletInput)
         if (!result.success) {
           setMessage('')
-          setError(result.error || 'Порядок методов сохранен, но порядок кошелька обновить не удалось')
+          setError(result.error || 'Порядок сохранен, но порядок адреса кошелька обновить не удалось')
           return
         }
       }
@@ -827,7 +832,7 @@ export default function RoomAdminView({
           <label className="mb-1 block text-sm font-medium text-slate-400">Раздел</label>
           <div className="flex rounded-xl bg-slate-950 p-1">
             <ModeButton active={mode === 'deals'} onClick={() => setMode('deals')}>Сделки</ModeButton>
-            <ModeButton active={mode === 'methods'} onClick={() => setMode('methods')}>Методы</ModeButton>
+            <ModeButton active={mode === 'methods'} onClick={() => setMode('methods')}>Кошельки</ModeButton>
             <ModeButton active={mode === 'linkVerification'} onClick={() => setMode('linkVerification')}>Привязки</ModeButton>
           </div>
         </div>
@@ -1059,7 +1064,7 @@ function PaymentMethodEditor({
     <div className={`grid gap-5 ${isEditing ? 'xl:grid-cols-[minmax(0,1fr)_minmax(360px,420px)]' : ''}`}>
       <section className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h3 className="text-lg font-bold text-slate-100">Методы и лимиты</h3>
+          <h3 className="text-lg font-bold text-slate-100">Кошельки и лимиты</h3>
           <button
             type="button"
             onClick={() => openEditor(null)}
@@ -1099,7 +1104,7 @@ function PaymentMethodEditor({
                       event.dataTransfer.setData('text/plain', group.key)
                     }}
                     title="Перетащить"
-                    aria-label="Перетащить метод"
+                    aria-label="Перетащить кошелёк"
                     className="absolute left-3 top-1/2 flex h-9 w-7 -translate-y-1/2 cursor-grab items-center justify-center rounded-lg text-slate-500 transition-colors hover:bg-slate-800 hover:text-slate-200 active:cursor-grabbing"
                   >
                     <GripVertical size={17} />
@@ -1111,8 +1116,12 @@ function PaymentMethodEditor({
                   >
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="font-semibold text-slate-100">{group.currency} {group.network}</span>
-                      {group.deposit.length > 0 && <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-xs font-semibold text-emerald-300">Депозит</span>}
-                      {group.withdrawal.length > 0 && <span className="rounded-md bg-sky-500/15 px-2 py-0.5 text-xs font-semibold text-sky-300">Вывод</span>}
+                      {group.deposit.length > 0 && (
+                        <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${operationTone.deposit.badge} ${group.deposit[0].is_active ? '' : 'line-through opacity-50'}`}>Депозит</span>
+                      )}
+                      {group.withdrawal.length > 0 && (
+                        <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${operationTone.withdrawal.badge} ${group.withdrawal[0].is_active ? '' : 'line-through opacity-50'}`}>Вывод</span>
+                      )}
                       {!group.isActive && <span className="text-xs text-slate-500">неактивен</span>}
                     </div>
                     {summary && <div className="mt-1 text-xs text-slate-400">{summary}</div>}
@@ -1121,8 +1130,8 @@ function PaymentMethodEditor({
                     <button
                       type="button"
                       onClick={() => openEditor(group)}
-                      title="Редактировать метод"
-                      aria-label="Редактировать метод"
+                      title="Редактировать"
+                      aria-label="Редактировать"
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-slate-600 bg-slate-950/80 text-slate-300 transition-colors hover:border-blue-500 hover:text-blue-200"
                     >
                       <Pencil size={16} />
@@ -1130,8 +1139,8 @@ function PaymentMethodEditor({
                     <button
                       type="button"
                       onClick={() => onDelete(group)}
-                      title="Удалить метод"
-                      aria-label="Удалить метод"
+                      title="Удалить: депозит, вывод и адрес кошелька"
+                      aria-label="Удалить"
                       className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-rose-500/40 bg-slate-950/80 text-rose-300 transition-colors hover:bg-rose-500/10"
                     >
                       <Trash2 size={16} />
@@ -1143,7 +1152,7 @@ function PaymentMethodEditor({
           </div>
         ) : (
           <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">
-            Методы пока не заполнены.
+            Кошельки пока не заполнены.
           </div>
         )}
       </section>
@@ -1153,14 +1162,14 @@ function PaymentMethodEditor({
         {draft ? (
           <>
             <div className="mb-4 flex items-center justify-between gap-3">
-              <h3 className="text-lg font-bold text-slate-100">{currentGroup ? 'Редактировать' : 'Новый метод'}</h3>
+              <h3 className="text-lg font-bold text-slate-100">{currentGroup ? 'Редактировать' : 'Новый кошелёк'}</h3>
               <div className="flex items-center gap-2">
                 {currentGroup && (
                   <button
                     type="button"
                     onClick={() => onDelete(currentGroup)}
-                    title="Удалить метод"
-                    aria-label="Удалить метод"
+                    title="Удалить: депозит, вывод и адрес кошелька"
+                    aria-label="Удалить"
                     className="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-rose-500/40 text-rose-300 transition-colors hover:bg-rose-500/10"
                   >
                     <Trash2 size={17} />
@@ -1198,13 +1207,18 @@ function PaymentMethodEditor({
                 </Field>
               </div>
               <div className="flex flex-wrap gap-5">
-                <Checkbox checked={draft.deposit.enabled} onChange={(enabled) => updateOperation('deposit', { enabled })}>Депозит</Checkbox>
-                <Checkbox checked={draft.withdrawal.enabled} onChange={(enabled) => updateOperation('withdrawal', { enabled })}>Вывод</Checkbox>
+                <Checkbox checked={draft.deposit.enabled} onChange={(enabled) => updateOperation('deposit', { enabled })}>
+                  <span className={`font-semibold ${operationTone.deposit.text}`}>Депозит</span>
+                </Checkbox>
+                <Checkbox checked={draft.withdrawal.enabled} onChange={(enabled) => updateOperation('withdrawal', { enabled })}>
+                  <span className={`font-semibold ${operationTone.withdrawal.text}`}>Вывод</span>
+                </Checkbox>
               </div>
 
               {draft.deposit.enabled && (
                 <OperationBlock
                   title="Депозит"
+                  tone="deposit"
                   draft={draft.deposit}
                   extraRows={currentGroup?.deposit.slice(1) || []}
                   commentPhrases={commentPhrases}
@@ -1232,12 +1246,6 @@ function PaymentMethodEditor({
                       placeholder="Адрес / почта / аккаунт"
                       className="min-h-20 w-full resize-y rounded-xl border border-slate-700 bg-slate-950 px-3 py-3 font-mono text-sm text-slate-100 placeholder-slate-600/60 outline-none focus:border-blue-500"
                     />
-                    <Checkbox
-                      checked={Boolean(draft.wallet.is_active)}
-                      onChange={(active) => onChange({ ...draft, wallet: { ...draft.wallet, is_active: active ? 1 : 0 } })}
-                    >
-                      Кошелек активен
-                    </Checkbox>
                   </div>
                 </OperationBlock>
               )}
@@ -1245,6 +1253,8 @@ function PaymentMethodEditor({
               {draft.withdrawal.enabled && (
                 <OperationBlock
                   title="Вывод"
+                  tone="withdrawal"
+                  hint="Игрок выводит на свой кошелёк — его адрес вводится в форме вывода. Здесь комментарий для игрока и лимиты вывода (из них форма вывода предупреждает о минимальной сумме)."
                   draft={draft.withdrawal}
                   extraRows={currentGroup?.withdrawal.slice(1) || []}
                   commentPhrases={commentPhrases}
@@ -1253,14 +1263,11 @@ function PaymentMethodEditor({
                 />
               )}
 
-              <Checkbox checked={Boolean(draft.is_active)} onChange={(active) => onChange({ ...draft, is_active: active ? 1 : 0 })}>
-                Метод активен
-              </Checkbox>
             </div>
           </>
         ) : (
           <div className="rounded-lg border border-dashed border-slate-700 px-4 py-8 text-center text-sm text-slate-500">
-            Выберите метод или нажмите «Новый».
+            Выберите кошелёк или нажмите «Новый».
           </div>
         )}
       </section>
@@ -1269,8 +1276,16 @@ function PaymentMethodEditor({
   )
 }
 
+/** Same colours as the badges in the list: deposit green, withdrawal blue. */
+const operationTone = {
+  deposit: { text: 'text-emerald-300', border: 'border-emerald-500/40', badge: 'bg-emerald-500/15 text-emerald-300' },
+  withdrawal: { text: 'text-sky-300', border: 'border-sky-500/40', badge: 'bg-sky-500/15 text-sky-300' },
+} as const
+
 function OperationBlock({
   title,
+  tone,
+  hint,
   draft,
   extraRows,
   commentPhrases,
@@ -1279,6 +1294,8 @@ function OperationBlock({
   children,
 }: {
   title: string
+  tone: keyof typeof operationTone
+  hint?: string
   draft: RoomMethodOperationDraft
   extraRows: RoomPaymentMethodInfo[]
   commentPhrases: RoomWalletCommentPhrase[]
@@ -1287,13 +1304,19 @@ function OperationBlock({
   children?: ReactNode
 }) {
   return (
-    <div className="space-y-4 rounded-xl border border-slate-700/70 bg-slate-900/45 p-4">
-      <h4 className="text-sm font-bold text-slate-200">{title}</h4>
+    <div className={`space-y-4 rounded-xl border bg-slate-900/45 p-4 ${operationTone[tone].border}`}>
+      <div className="flex items-center justify-between gap-3">
+        <h4 className={`text-sm font-bold ${operationTone[tone].text}`}>{title}</h4>
+        <Checkbox checked={draft.active} onChange={(active) => onChange({ active })}>
+          <span title={tone === 'deposit' ? 'Выключенный депозит и его кошелёк не показываются и не копируются игроку' : 'Выключенный вывод не предлагается в форме вывода'}>Активен</span>
+        </Checkbox>
+      </div>
+      {hint && <p className="text-xs leading-5 text-slate-400">{hint}</p>}
       {children}
       <div className="space-y-2">
         <Checkbox checked={draft.showComment} onChange={(showComment) => onChange({ showComment })}>Комментарий для игрока</Checkbox>
         {draft.showComment && (
-          <RoomWalletCommentField draft={draft} phrases={commentPhrases} onChange={onChange} />
+          <RoomWalletCommentField listId={`room-wallet-comment-phrases-${tone}`} draft={draft} phrases={commentPhrases} onChange={onChange} />
         )}
       </div>
       <div className="space-y-2">
@@ -1324,10 +1347,12 @@ function OperationBlock({
 }
 
 function RoomWalletCommentField({
+  listId,
   draft,
   phrases,
   onChange,
 }: {
+  listId: string
   draft: RoomMethodOperationDraft
   phrases: RoomWalletCommentPhrase[]
   onChange: (updates: Partial<RoomMethodOperationDraft>) => void
@@ -1340,11 +1365,11 @@ function RoomWalletCommentField({
       <input
         value={draft.comment}
         onChange={(event) => onChange({ comment: event.target.value })}
-        list="room-wallet-comment-phrases"
+        list={listId}
         placeholder="без комиссии"
         className={inputClass}
       />
-      <datalist id="room-wallet-comment-phrases">
+      <datalist id={listId}>
         {Array.from(new Set(options)).map((option) => <option key={option} value={option} />)}
       </datalist>
       {needsTranslation && (

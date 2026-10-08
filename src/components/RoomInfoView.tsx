@@ -65,6 +65,15 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
   const [selectedDealType, setSelectedDealType] = useState<RoomDealType>('General')
   const [selectedCountryCode, setSelectedCountryCode] = useState('')
   const [language, setLanguage] = useState<RoomLanguage>('RU')
+  const [wallets, setWallets] = useState<RoomWalletInfo[]>([])
+  const [deals, setDeals] = useState<RoomDealInfo[]>([])
+  const roomUsageStats = useRoomUsageStats()
+  const [loading, setLoading] = useState(true)
+  const [copied, setCopied] = useState('')
+  const [isAdminOpen, setIsAdminOpen] = useState(false)
+  const [isAdminMounted, setIsAdminMounted] = useState(false)
+  const [adminSessionKey, setAdminSessionKey] = useState(0)
+  const [refreshToken, setRefreshToken] = useState(0)
   const [commentPhrases, setCommentPhrases] = useState<RoomWalletCommentPhrase[]>([])
 
   useEffect(() => {
@@ -79,16 +88,7 @@ export default function RoomInfoView({ homeSignal }: { homeSignal: number }) {
     return () => {
       active = false
     }
-  }, [])
-  const [wallets, setWallets] = useState<RoomWalletInfo[]>([])
-  const [deals, setDeals] = useState<RoomDealInfo[]>([])
-  const roomUsageStats = useRoomUsageStats()
-  const [loading, setLoading] = useState(true)
-  const [copied, setCopied] = useState('')
-  const [isAdminOpen, setIsAdminOpen] = useState(false)
-  const [isAdminMounted, setIsAdminMounted] = useState(false)
-  const [adminSessionKey, setAdminSessionKey] = useState(0)
-  const [refreshToken, setRefreshToken] = useState(0)
+  }, [refreshToken])
   const hasSeenHomeSignal = useRef(false)
   const selectedRoomKeyRef = useRef('')
   const roomUsageStatsRef = useRef<RoomRegistrationStat[]>([])

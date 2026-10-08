@@ -1581,6 +1581,25 @@ describe('TransactionerDatabase', () => {
     expect(db.getRoomWalletCommentPhrases()).toEqual([{ RU: 'Только  через нас', EN: 'only via us', ES: 'solo por nosotros' }])
   })
 
+  it('answers a duplicate wallet or method with a sentence instead of the SQLite error', () => {
+    const base = { room_key: 'nexa', deal_type: 'Agent' as const, currency: 'USDT', network: 'TRC20', is_active: 1, sort_order: 10 }
+    expect(db.saveRoomWallet({ ...base, wallet_address: 'TRealNexaWallet' }).success).toBe(true)
+    const test = db.saveRoomWallet({ ...base, wallet_address: 't-TEST' })
+    expect(db.saveRoomWallet({ ...base, id: test.id, wallet_address: 'TRealNexaWallet' }))
+      .toEqual({ success: false, error: 'Такой адрес кошелька уже сохранён для этой монеты и сети' })
+    expect(db.getRoomWallets('nexa', 'Agent').map((row) => row.wallet_address).sort()).toEqual(['TRealNexaWallet', 't-TEST'])
+
+    const ltc = db.saveRoomPaymentMethod({ room_key: 'nexa', deal_type: 'Agent', operation_type: 'Deposit', method_name: 'LTC LTC', currency: 'LTC', network: 'LTC', is_active: 1, sort_order: 50 })
+    const usdt = db.getRoomKnowledgeAdminIndex().paymentMethods.find((row) => (
+      row.room_key === 'nexa' && row.operation_type === 'Deposit' && row.currency === 'USDT' && row.network === 'TRC20'
+    ))
+    expect(usdt).toBeDefined()
+    expect(db.saveRoomPaymentMethod({
+      id: ltc.id, room_key: 'nexa', deal_type: 'Agent', operation_type: 'Deposit',
+      method_name: usdt!.method_name, currency: 'USDT', network: 'TRC20', is_active: 1, sort_order: 50,
+    })).toEqual({ success: false, error: 'Такая монета и сеть уже есть у этого рума' })
+  })
+
   it('updates the existing coin + network row instead of adding a look-alike method', () => {
     const first = db.saveRoomPaymentMethod({
       room_key: 'redstar', deal_type: 'General', operation_type: 'Withdrawal', method_name: 'LTC', currency: 'LTC', network: 'LTC', fee_text: '', is_active: 1, sort_order: 10,

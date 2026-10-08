@@ -79,6 +79,12 @@ export interface SaveLinkVerificationPlayerResult extends MutationResult {
 
 const roomWalletCommentPhrasesKey = 'room_wallet_comment_phrases'
 
+/** Operators see a sentence, not "UNIQUE constraint failed: …". */
+const friendlyConstraintError = (err: unknown, duplicateMessage: string) => {
+  const message = err instanceof Error ? err.message : String(err)
+  return /UNIQUE constraint failed/i.test(message) ? duplicateMessage : message
+}
+
 const roomIdentityKey = (value: string) => String(value || '').trim().toLowerCase().replace(/[^a-z0-9а-яё]+/gi, '')
 
 export interface SavePlayerResult extends MutationResult {
@@ -1132,7 +1138,7 @@ export class TransactionerDatabase {
       return { success: true, id }
     } catch (err: unknown) {
       console.error(err)
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
+      return { success: false, error: friendlyConstraintError(err, 'Такой адрес кошелька уже сохранён для этой монеты и сети') }
     }
   }
 
@@ -1249,7 +1255,7 @@ export class TransactionerDatabase {
       return { success: true, id }
     } catch (err: unknown) {
       console.error(err)
-      return { success: false, error: err instanceof Error ? err.message : String(err) }
+      return { success: false, error: friendlyConstraintError(err, 'Такая монета и сеть уже есть у этого рума') }
     }
   }
 
