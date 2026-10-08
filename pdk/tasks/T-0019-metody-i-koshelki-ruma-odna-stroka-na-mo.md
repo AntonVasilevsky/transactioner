@@ -1,19 +1,19 @@
 ---
 id: T-0019
 title: "Методы и кошельки рума: одна строка на монету и сеть, понятные комментарии, единые подписи при копировании"
-status: proposed
+status: active
 owner: agent
 model: "L3 — high: меняет редактирование справочника румов (создание/удаление строк методов), риск потерять комиссии и лимиты; схема БД не меняется"
-executed_by: ""
+executed_by: claude-code/claude-opus-5-5
 depends_on: [T-0011]
 aliases: [room payment methods wallets admin one row per coin network deposit withdrawal checkboxes comment translation copy wallet header singular plural]
 scope: [rooms, wallets, room-admin]
-links: [src/components/RoomAdminView.tsx, src/components/RoomInfoView.tsx, src/utils/roomWalletFormatting.ts, src/utils/transactionTemplateFormatting.ts, electron/database.ts, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md]
-sessions: []
-commits: []
-revision: 1
+links: [src/components/RoomAdminView.tsx, src/components/RoomInfoView.tsx, src/utils/roomWalletFormatting.ts, src/utils/transactionTemplateFormatting.ts, electron/database.ts, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, src/utils/roomMethodGroups.ts]
+sessions: [01a10223-e2be-770a-9bc6-2646a7428876]
+commits: ["8704386"]
+revision: 6
 created: 2026-10-05
-updated: 2026-10-05
+updated: 2026-10-08
 ---
 ## Goal
 
@@ -56,10 +56,22 @@ updated: 2026-10-05
 
 ## Checkpoint
 
+Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки» / «Nexa — кошелёк для депозита» (EN/ES так же); копия одного кошелька получила заголовок. (2) Шаг миграции 3 (room-methods-one-row-per-coin-network-2026-10): удаляет строки-двойники методов, если они не добавляют комиссии/лимитов, очищает заметки методов; room_wallets не трогает. Сохранение метода без id обновляет существующую строку той же монеты+сети, двойники больше не создаются. (3) Редактор: одна строка на монету+сеть со значками Депозит/Вывод, перетаскивание групп; в форме галочки Депозит/Вывод, у каждой свои «Комментарий для игрока» и «Лимиты» по галочке; кошелёк в блоке депозита; поля заметок убраны; снятие галочки удаляет только строки этой операции, с подтверждением при потере данных или кошелька; лишние старые записи показаны с кнопкой «Удалить». Логика — src/utils/roomMethodGroups.ts. (4) Комментарий: список готовых фраз + свои фразы с EN/ES (app_settings room_wallet_comment_phrases), переводятся при копировании кошельков.
+Verified: npm run lint — exit 0; npm test — 26 файлов, 233/233 (после правки формы тоже); npm run build — ok; pdk check — 0 errors. Шаг 3 на копии рабочей БД: 15 адресов кошельков совпадают побайтно, удалены 3 «BTC BTC» и дубль вывода Champion Skrill EUR, заметки очищены.
+Done: владелец проверил редактор методов и Esc 2026-10-08. Changed: коммит 8704386. Not done: независимый pdk-review (L3) — по Acceptance; проверка копирования кошельков владельцем не подтверждена отдельно.
+Done: Skrill EUR «max 3k» перенесён в лимиты в рабочей БД. Форма редактора скрыта по умолчанию, кнопки Редактировать/Удалить видны всегда, «Закрыть» в форме. Рабочая БД на версии 3 (шаг применён при запуске владельца).
+
 ## Next step
+
+Независимый pdk-review коммита 8704386 (/pdk review --agent T-0019, другая модель L3/L4); затем --status done. В релиз — со следующей сборкой на мак.
 
 ## Blockers
 
 ## Log
 
 - 2026-10-05 created
+- 2026-10-05 update: executed_by "" -> claude-code/claude-opus-5-5, status proposed -> active, links +src/utils/roomMethodGroups.ts
+- 2026-10-05 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
+- 2026-10-05 update: sessions +01a10223-e2be-770a-9bc6-2646a7428876
+- 2026-10-05 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
+- 2026-10-08 checkpoint: Works: (1) подписи копирования кошельков — одна функция для всех румов/языков, одно тире: «Nexa — депозитные кошельки...
