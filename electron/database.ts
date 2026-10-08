@@ -7,6 +7,8 @@ import { getWalletAddressValidationError } from '../src/utils/walletValidation'
 import type { ContactMethodKey } from '../src/utils/messengers'
 import { roomKnowledgeSeed, type LinkVerificationResponseOutcome, type RoomKnowledgeSeed } from './roomKnowledgeSeed'
 import { LINK_VERIFICATION_RESPONSE_TEMPLATES_2026_10, type LinkVerificationResponseTemplateSource } from './linkVerificationResponseTemplates'
+import { QUICK_REPLIES_2026_10, type QuickReplySeed } from './quickRepliesSeed'
+import { quickReplyValidationError, type QuickReply, type QuickReplyInput } from '../src/utils/quickReplies'
 
 export type ContactMethod = ContactMethodKey
 export type RoomDealType = 'General' | 'Direct' | 'Agent'
@@ -1423,6 +1425,45 @@ export class TransactionerDatabase {
     }
   }
 
+  /** Quick standard replies (T-0024), each operator's own list in the fixed topic structure. */
+  getQuickReplies(): QuickReply[] {
+    return this.db.prepare(`
+      SELECT id, topic, title, text_ru, text_en, text_es, sort_order
+      FROM quick_replies
+      ORDER BY sort_order, id
+    `).all() as QuickReply[]
+  }
+
+  saveQuickReply(input: QuickReplyInput): MutationResult & { id?: number } {
+    const reply = {
+      topic: String(input?.topic || ''),
+      text_ru: String(input?.text_ru || '').trim(),
+      text_en: String(input?.text_en || '').trim(),
+      text_es: String(input?.text_es || '').trim(),
+    }
+    const error = quickReplyValidationError(reply)
+    if (error) return { success: false, error }
+    const now = new Date().toISOString()
+    if (input.id) {
+      const result = this.db.prepare(`
+        UPDATE quick_replies
+        SET topic = ?, text_ru = ?, text_en = ?, text_es = ?, updated_at = ?
+        WHERE id = ?
+      `).run(reply.topic, reply.text_ru, reply.text_en, reply.text_es, now, input.id)
+      return result.changes ? { success: true, id: input.id } : { success: false, error: 'Ответ не найден, обновите список' }
+    }
+    const result = this.db.prepare(`
+      INSERT INTO quick_replies (topic, title, text_ru, text_en, text_es, sort_order, updated_at)
+      VALUES (?, '', ?, ?, ?, (SELECT IFNULL(MAX(sort_order), 0) + 1 FROM quick_replies), ?)
+    `).run(reply.topic, reply.text_ru, reply.text_en, reply.text_es, now)
+    return { success: true, id: Number(result.lastInsertRowid) }
+  }
+
+  deleteQuickReply(id: number): MutationResult {
+    const result = this.db.prepare('DELETE FROM quick_replies WHERE id = ?').run(id)
+    return result.changes ? { success: true } : { success: false, error: 'Ответ не найден, обновите список' }
+  }
+
   /** Wallets the rakeback is sent from, one free-text list shared by every player (T-0022). */
   getRakebackSenderWallets(): string {
     const row = this.db.prepare('SELECT value FROM app_settings WHERE key = ?').get(rakebackSenderWalletsKey) as { value: string } | undefined
@@ -1767,6 +1808,16 @@ export class TransactionerDatabase {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS quick_replies (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        topic TEXT NOT NULL,
+        title TEXT NOT NULL,
+        text_ru TEXT NOT NULL DEFAULT '',
+        text_en TEXT NOT NULL DEFAULT '',
+        text_es TEXT NOT NULL DEFAULT '',
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT
+      );
     `)
 
     this.migrate()
@@ -1828,6 +1879,11 @@ export class TransactionerDatabase {
         name: 'room-methods-one-row-per-coin-network-2026-10',
         up: () => this.mergeDuplicateRoomPaymentMethods(),
       },
+      {
+        version: 4,
+        name: 'quick-replies-2026-10',
+        up: () => this.addMissingQuickReplies(QUICK_REPLIES_2026_10),
+      },
     ]
   }
 
@@ -1866,6 +1922,20 @@ export class TransactionerDatabase {
   }
 
   /** Adds texts only for rooms in the directory and only where no template exists yet. */
+  /** Adds a shipped reply only when the list has no reply with the same topic and internal title. */
+  private addMissingQuickReplies(replies: QuickReplySeed[]) {
+    const exists = this.db.prepare('SELECT 1 FROM quick_replies WHERE topic = ? AND title = ? COLLATE NOCASE')
+    const insert = this.db.prepare(`
+      INSERT INTO quick_replies (topic, title, text_ru, text_en, text_es, sort_order, updated_at)
+      VALUES (?, ?, ?, ?, ?, (SELECT IFNULL(MAX(sort_order), 0) + 1 FROM quick_replies), ?)
+    `)
+    const now = new Date().toISOString()
+    for (const reply of replies) {
+      if (exists.get(reply.topic, reply.title)) continue
+      insert.run(reply.topic, reply.title, reply.ru, reply.en, reply.es, now)
+    }
+  }
+
   private addMissingLinkVerificationResponseTemplates(templates: LinkVerificationResponseTemplateSource[]) {
     const roomExists = this.db.prepare('SELECT 1 FROM room_profiles WHERE room_key = ? COLLATE NOCASE')
     const roomDealTypes = this.db.prepare('SELECT DISTINCT deal_type FROM room_deals WHERE room_key = ? COLLATE NOCASE')

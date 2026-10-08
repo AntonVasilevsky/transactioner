@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ArrowLeft, Check, Copy, Info, Settings } from 'lucide-react'
+import { ArrowLeft, Info, Settings } from 'lucide-react'
 import RoomAdminView from './RoomAdminView'
+import { IconCopyButton } from './ui/IconButtons'
 import { sortRoomProfilesByUsage } from '../utils/roomUsageSort'
 import { useRoomUsageStats } from '../hooks/useRoomUsageStats'
 import ComboboxField from './fields/ComboboxField'
@@ -399,20 +400,6 @@ function ModeButton({ active, children, onClick }: { active: boolean, children: 
   )
 }
 
-function GhostIconCopyButton({ copied, onClick, label }: { copied: boolean, onClick: () => void, label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      title={label}
-      aria-label={label}
-      className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-slate-800/55 text-slate-300 transition-colors hover:bg-blue-600/80 hover:text-white"
-    >
-      {copied ? <Check size={15} /> : <Copy size={15} />}
-    </button>
-  )
-}
-
 function WalletsPanel({
   roomTitle,
   wallets,
@@ -457,7 +444,7 @@ function WalletsPanel({
         <div className="mb-4 flex items-center justify-between gap-3">
           <h3 className="text-lg font-bold text-slate-100">Кошельки</h3>
           {walletRows.length > 0 && (
-            <GhostIconCopyButton
+            <IconCopyButton
               copied={copied === 'wallets-all'}
               label="Скопировать все кошельки"
               onClick={() => onCopy('wallets-all', walletListText)}
@@ -478,7 +465,7 @@ function WalletsPanel({
                   {method?.limits_text && <div className="mt-1 text-xs text-amber-200">{method.limits_text}</div>}
                   <div className="mt-2 break-all font-mono text-xs text-slate-300">{wallet.wallet_address}</div>
                 </div>
-                <GhostIconCopyButton
+                <IconCopyButton
                   copied={copied === `wallet-${wallet.id}`}
                   label={`Скопировать ${wallet.currency} ${wallet.network}`}
                   onClick={() => onCopy(
@@ -548,7 +535,7 @@ function DealsPanel({
         <section key={deal.id} className="rounded-xl border border-slate-700/70 bg-slate-800/70 p-5">
           <div className="mb-4 flex items-center justify-between gap-3">
             <h3 className="text-lg font-bold text-slate-100">{dealTypeLabels[deal.deal_type]} сделка</h3>
-            <GhostIconCopyButton
+            <IconCopyButton
               copied={copied === `deal-full-${deal.id}`}
               label="Скопировать сделку полностью"
               onClick={() => onCopy(`deal-full-${deal.id}`, dealCopyText(deal, 'full'))}
@@ -556,7 +543,7 @@ function DealsPanel({
           </div>
           <div className="relative mb-4 rounded-lg bg-slate-950/60 p-4 pr-14 text-sm leading-6 text-slate-300">
             <div className="absolute right-3 top-3">
-              <GhostIconCopyButton
+              <IconCopyButton
                 copied={copied === `deal-short-${deal.id}`}
                 label="Скопировать короткую сделку"
                 onClick={() => onCopy(`deal-short-${deal.id}`, dealCopyText(deal, 'short'))}
@@ -569,7 +556,7 @@ function DealsPanel({
           </div>
           <div className="relative whitespace-pre-wrap rounded-lg border border-slate-700/60 bg-slate-900/70 p-4 pr-14 font-sans text-sm leading-6 text-slate-300">
             <div className="absolute right-3 top-3">
-              <GhostIconCopyButton
+              <IconCopyButton
                 copied={copied === `deal-conditions-${deal.id}`}
                 label="Скопировать полные условия"
                 onClick={() => onCopy(`deal-conditions-${deal.id}`, deal.full_text)}

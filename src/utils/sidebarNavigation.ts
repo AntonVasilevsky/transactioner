@@ -4,6 +4,7 @@ export const defaultSidebarNavOrder = [
   'add',
   'roomInfo',
   'linkVerification',
+  'quickReplies',
 ] as const
 
 export type SidebarNavId = typeof defaultSidebarNavOrder[number]

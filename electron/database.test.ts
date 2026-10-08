@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import Database from 'better-sqlite3'
 import { TransactionerDatabase, type RoomPaymentMethodInfo, type SaveLinkVerificationResponseTemplateInput, type SaveLinkVerificationTemplateInput, type SavePlayerInput } from './database'
 import type { PendingMigrationInfo } from './migrations'
+import { QUICK_REPLIES_2026_10 } from './quickRepliesSeed'
 
 let tempDir = ''
 let dbPath = ''
@@ -249,8 +250,8 @@ describe('TransactionerDatabase', () => {
 
     expect(hookCalls).toEqual([{
       fromVersion: 1,
-      toVersion: 3,
-      steps: ['link-verification-response-templates-2026-10', 'room-methods-one-row-per-coin-network-2026-10'],
+      toVersion: 4,
+      steps: ['link-verification-response-templates-2026-10', 'room-methods-one-row-per-coin-network-2026-10', 'quick-replies-2026-10'],
     }])
     for (const language of ['RU', 'EN', 'ES'] as const) {
       expect(db.getLinkVerificationResponseTemplates('tigergaming', language, 'Direct'), language).toHaveLength(1)
@@ -1478,7 +1479,7 @@ describe('TransactionerDatabase', () => {
     expect(player.success).toBe(true)
     db.close()
     const raw = new Database(dbPath)
-    expect(raw.pragma('user_version', { simple: true })).toBe(3)
+    expect(raw.pragma('user_version', { simple: true })).toBe(4)
     raw.pragma('user_version = 0')
     raw.close()
 
@@ -1487,8 +1488,8 @@ describe('TransactionerDatabase', () => {
 
     expect(hookCalls).toEqual([{
       fromVersion: 0,
-      toVersion: 3,
-      steps: ['initial-room-knowledge', 'link-verification-response-templates-2026-10', 'room-methods-one-row-per-coin-network-2026-10'],
+      toVersion: 4,
+      steps: ['initial-room-knowledge', 'link-verification-response-templates-2026-10', 'room-methods-one-row-per-coin-network-2026-10', 'quick-replies-2026-10'],
     }])
     expect(db.getRoomWallets('nexa', 'Agent').map((row) => row.wallet_address)).toEqual(['TLegacyNexaWallet'])
     expect(db.getPlayerById(Number(player.id))?.accounts).toHaveLength(1)
@@ -1569,6 +1570,37 @@ describe('TransactionerDatabase', () => {
     expect(check.prepare('SELECT id, room_key, deal_type, currency, network, wallet_address, is_active FROM room_wallets ORDER BY id').all())
       .toEqual(walletsBefore)
     check.close()
+  })
+
+  it('ships the first quick replies once and keeps the operator\'s edits and deletions', () => {
+    const shipped = db.getQuickReplies()
+    expect(shipped).toHaveLength(QUICK_REPLIES_2026_10.length)
+    const greeting = shipped.find((item) => item.title === 'Чем могу помочь?')!
+    expect(db.saveQuickReply({ id: greeting.id, topic: 'greeting', text_ru: 'Здравствуйте! Чем помочь?', text_en: greeting.text_en, text_es: '' }))
+      .toEqual({ success: true, id: greeting.id })
+    const hours = shipped.find((item) => item.title === 'Часы работы')!
+    expect(db.deleteQuickReply(hours.id)).toEqual({ success: true })
+    const added = db.saveQuickReply({ topic: 'soft', text_ru: '', text_en: '', text_es: ' Hola ' })
+    expect(added.success).toBe(true)
+    expect(db.saveQuickReply({ topic: 'soft', text_ru: ' ', text_en: '', text_es: '' }))
+      .toEqual({ success: false, error: 'Введите текст хотя бы на одном языке' })
+
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+    const after = db.getQuickReplies()
+    expect(after).toHaveLength(QUICK_REPLIES_2026_10.length)
+    expect(after.find((item) => item.id === greeting.id)).toMatchObject({ title: 'Чем могу помочь?', text_ru: 'Здравствуйте! Чем помочь?', text_es: '' })
+    expect(after.some((item) => item.title === 'Часы работы')).toBe(false)
+    expect(after.find((item) => item.id === added.id)).toMatchObject({ title: '', text_es: 'Hola', topic: 'soft' })
+    expect(after.at(-1)?.id).toBe(added.id)
+
+    // Even if the step ran again, a reply with the same topic and title is not added twice.
+    db.close()
+    const raw = new Database(dbPath)
+    raw.pragma('user_version = 3')
+    raw.close()
+    db = new TransactionerDatabase(dbPath)
+    expect(db.getQuickReplies().filter((item) => item.title === 'Чем могу помочь?')).toHaveLength(1)
   })
 
   it('keeps the rakeback sender wallets in the database across restarts', () => {

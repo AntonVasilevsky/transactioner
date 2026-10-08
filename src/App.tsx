@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Info, Download, Search, UserPlus, ChevronRight, Users, X, Link2 } from 'lucide-react'
+import { Info, Download, Search, UserPlus, ChevronRight, Users, X, Link2, MessageSquareText } from 'lucide-react'
 
 // Views
 import SearchPlayerView from './components/SearchPlayerView'
@@ -10,6 +10,7 @@ import EditPlayerView from './components/EditPlayerView'
 import RoomInfoView from './components/RoomInfoView'
 import LinkVerificationView from './components/LinkVerificationView'
 import RakebackView from './components/RakebackView'
+import QuickRepliesView from './components/QuickRepliesView'
 import {
   moveSidebarNavToTarget,
   normalizeSidebarNavOrder,
@@ -268,6 +269,12 @@ function App() {
       active: currentView === 'linkVerification',
       onClick: () => navigateTo('linkVerification'),
     },
+    quickReplies: {
+      icon: <MessageSquareText size={20} />,
+      label: 'Быстрые ответы',
+      active: currentView === 'quickReplies',
+      onClick: () => navigateTo('quickReplies'),
+    },
   }
 
   return (
@@ -382,6 +389,9 @@ function App() {
           )}
           {currentView === 'roomInfo' && (
             <RoomInfoView homeSignal={roomInfoHomeSignal} />
+          )}
+          {currentView === 'quickReplies' && (
+            <QuickRepliesView />
           )}
           {currentView === 'linkVerification' && (
             <LinkVerificationView />

@@ -397,6 +397,9 @@ interface Window {
   electronAPI: {
     searchPlayer: (username: string) => Promise<PlayerPayload | PlayerPayload[] | null>;
     savePlayer: (data: SavePlayerInput) => Promise<SavePlayerResult>;
+    getQuickReplies: () => Promise<import('./utils/quickReplies').QuickReply[]>;
+    saveQuickReply: (reply: import('./utils/quickReplies').QuickReplyInput) => Promise<MutationResult & { id?: number }>;
+    deleteQuickReply: (id: number) => Promise<MutationResult>;
     getRakebackSenderWallets: () => Promise<string>;
     saveRakebackSenderWallets: (text: string) => Promise<MutationResult>;
     getRoomWalletCommentPhrases: () => Promise<Array<Record<RoomLanguage, string>>>;

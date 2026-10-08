@@ -13,6 +13,7 @@ describe('sidebar navigation order', () => {
       'list',
       'add',
       'linkVerification',
+      'quickReplies',
     ])
   })
 
@@ -30,6 +31,7 @@ describe('sidebar navigation order', () => {
       'add',
       'roomInfo',
       'linkVerification',
+      'quickReplies',
     ])
     expect(moveSidebarNavToTarget(order, 'linkVerification', 'list')).toEqual([
       'search',
@@ -37,6 +39,7 @@ describe('sidebar navigation order', () => {
       'list',
       'add',
       'roomInfo',
+      'quickReplies',
     ])
   })
 })

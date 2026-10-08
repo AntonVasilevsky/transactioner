@@ -5,6 +5,7 @@ describe('Esc = back', () => {
   it('goes back one level, ending at the player search', () => {
     expect(previousView('roomInfo')).toBe('search')
     expect(previousView('linkVerification')).toBe('search')
+    expect(previousView('quickReplies')).toBe('search')
     expect(previousView('form')).toBe('search')
     expect(previousView('add')).toBe('search')
     expect(previousView('list')).toBe('search')

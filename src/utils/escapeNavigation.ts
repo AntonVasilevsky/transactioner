@@ -5,7 +5,7 @@
  * 3. a screen inside a section registered its own "back" (room settings → room info);
  * 4. otherwise the section goes back by previousView, ending at "Найти игрока".
  */
-export type AppView = 'search' | 'add' | 'form' | 'list' | 'edit' | 'roomInfo' | 'linkVerification'
+export type AppView = 'search' | 'add' | 'form' | 'list' | 'edit' | 'roomInfo' | 'linkVerification' | 'quickReplies'
 
 export const previousView = (view: AppView): AppView | null => {
   if (view === 'search') return null

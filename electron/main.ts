@@ -276,6 +276,17 @@ ipcMain.handle('undo-link-verification-player-save', (_, undo) => {
   if (result.success) runDailyBackup()
   return result
 })
+ipcMain.handle('get-quick-replies', () => store?.getQuickReplies() ?? [])
+ipcMain.handle('save-quick-reply', (_, reply) => {
+  const result = store?.saveQuickReply(reply) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
+ipcMain.handle('delete-quick-reply', (_, id: number) => {
+  const result = store?.deleteQuickReply(id) ?? { success: false, error: 'База данных недоступна' }
+  if (result.success) runDailyBackup()
+  return result
+})
 ipcMain.handle('get-rakeback-sender-wallets', () => store?.getRakebackSenderWallets() ?? '')
 ipcMain.handle('save-rakeback-sender-wallets', (_, text: string) => {
   const result = store?.saveRakebackSenderWallets(text) ?? { success: false, error: 'База данных недоступна' }
