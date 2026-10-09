@@ -113,7 +113,9 @@ skip silently, do not mention. `ocrFull` is human-only either way; when it is
    - nit: naming, style; never blocks.
    Unsure → say "suspected" and how to confirm it.
 8. **State coverage**: files/areas reviewed fully, partially, not at all (and
-   why); expansions made; tests run or not run. Verdict rules:
+   why); expansions made; tests run or not run. When `project.md` has no
+   `## Critical` section or it is empty, say so: "Critical section empty —
+   severity rated without this project's critical places". Verdict rules:
    - full coverage, no blockers → "no blockers found in the reviewed scope";
    - partial coverage → "partial review — no overall verdict"; never "approved".
 9. **Record.** Report to the human **in this shape, every time, even with
