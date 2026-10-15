@@ -7,7 +7,7 @@ import { isWindowFocusRestore } from '../../utils/windowFocusRestore'
 // - keyboard focus (Tab) opens; focus restored by switching back to the app
 //   window does not;
 // - Escape closes and restores; leaving the field closes;
-// - the drop-down scrolls into view when it opens near the window edge.
+// - the drop-down is drawn over the window and opens upward when it does not fit below (DropdownPanel).
 
 interface DropdownFieldCallbacks {
   /** Return false to keep the drop-down closed (e.g. a search field that already has text). */
@@ -87,20 +87,12 @@ export function useDropdownField(callbacks: DropdownFieldCallbacks = {}) {
     ;(onBlurClose || onDismiss)?.()
   }, [setOpen])
 
-  // Runs when the drop-down mounts, after the click that opened it has finished,
-  // so nothing (like selecting the input text) interrupts the scroll.
-  const panelRef = useCallback((node: HTMLElement | null) => {
-    if (!node) return
-    requestAnimationFrame(() => node.scrollIntoView({ block: 'nearest', behavior: 'smooth' }))
-  }, [])
-
   return {
     isOpen,
     open,
     close,
     dismiss,
     focusWithoutOpening,
-    panelRef,
     handleMouseDown,
     handleFocus,
     handleClick,

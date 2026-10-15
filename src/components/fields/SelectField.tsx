@@ -83,7 +83,7 @@ export default function SelectField({
         <ChevronDown size={16} className={`shrink-0 text-slate-500 transition-transform ${field.isOpen ? 'rotate-180' : ''}`} />
       </button>
       {field.isOpen && (
-        <DropdownPanel panelRef={field.panelRef} className="right-0 min-w-max">
+        <DropdownPanel width="atLeastField">
           <DropdownOptionList
             options={options}
             selectedValue={value}

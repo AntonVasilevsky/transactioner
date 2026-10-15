@@ -69,7 +69,7 @@ export default function DateField({
         className={`[&::-webkit-calendar-picker-indicator]:hidden ${inputClassName}`}
       />
       {field.isOpen && (
-        <DropdownPanel panelRef={field.panelRef} className="w-72">
+        <DropdownPanel width="content" className="w-72">
           <div className="mb-2 flex items-center justify-between">
             <CalendarNavButton label="Предыдущий месяц" onClick={() => setViewMonth((month) => shiftCalendarMonth(month, -1))}>
               <ChevronLeft size={16} />

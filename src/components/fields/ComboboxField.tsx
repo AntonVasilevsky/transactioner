@@ -126,7 +126,7 @@ export default function ComboboxField({
         />
       </div>
       {field.isOpen && (
-        <DropdownPanel panelRef={field.panelRef}>
+        <DropdownPanel>
           <DropdownOptionList
             options={filteredOptions}
             selectedValue={value}

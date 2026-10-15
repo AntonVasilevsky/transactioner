@@ -1,4 +1,6 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
+import { dropdownPlacement, type DropdownWidth } from './dropdownPlacement'
 
 export interface FieldOption {
   value: string
@@ -9,24 +11,72 @@ export interface FieldOption {
   trailing?: ReactNode
 }
 
+/**
+ * The drop-down of every list and calendar. It is drawn over the whole window, so the next card
+ * on the screen cannot cover it (T-0026), and placed by dropdownPlacement next to the field: the
+ * nearest positioned element around the place where the panel is rendered (the field wrapper).
+ */
 export function DropdownPanel({
-  panelRef,
   children,
   className = '',
+  width = 'field',
 }: {
-  panelRef: (node: HTMLElement | null) => void
   children: ReactNode
   className?: string
+  width?: DropdownWidth
 }) {
+  const anchorRef = useRef<HTMLSpanElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+
+  useLayoutEffect(() => {
+    const place = (event?: Event) => {
+      const panel = panelRef.current
+      const anchor = anchorRef.current
+      const field = anchor?.offsetParent ?? anchor?.parentElement
+      if (!panel || !field || event?.target === panel) return
+      const placement = dropdownPlacement(
+        field.getBoundingClientRect(),
+        { width: window.innerWidth, height: window.innerHeight },
+        width,
+        panel.scrollHeight,
+      )
+      const px = (value?: number) => (value === undefined ? '' : `${value}px`)
+      Object.assign(panel.style, {
+        left: px(placement.left),
+        top: px(placement.top),
+        bottom: px(placement.bottom),
+        maxHeight: px(placement.maxHeight),
+        maxWidth: px(placement.maxWidth),
+        width: px(placement.width),
+        minWidth: px(placement.minWidth),
+        visibility: 'visible',
+      })
+    }
+    place()
+    window.addEventListener('resize', place)
+    window.addEventListener('scroll', place, true)
+    return () => {
+      window.removeEventListener('resize', place)
+      window.removeEventListener('scroll', place, true)
+    }
+  }, [width])
+
   return (
-    <div
-      ref={panelRef}
-      // Keeps focus in the field when the scrollbar or padding is clicked.
-      onMouseDown={(event) => event.preventDefault()}
-      className={`absolute left-0 top-full z-30 mt-2 max-h-72 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 shadow-2xl shadow-slate-950/40 ${className || 'right-0'}`}
-    >
-      {children}
-    </div>
+    <>
+      <span ref={anchorRef} aria-hidden className="pointer-events-none absolute h-0 w-0" />
+      {createPortal(
+        <div
+          ref={panelRef}
+          // Keeps focus in the field when the scrollbar or padding is clicked.
+          onMouseDown={(event) => event.preventDefault()}
+          style={{ visibility: 'hidden' }}
+          className={`fixed z-50 overflow-y-auto rounded-xl border border-slate-700 bg-slate-900 p-2 font-sans text-slate-100 shadow-2xl shadow-slate-950/40 ${className}`}
+        >
+          {children}
+        </div>,
+        document.body,
+      )}
+    </>
   )
 }
 

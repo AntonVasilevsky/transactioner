@@ -224,7 +224,7 @@ export default function SearchPlayerView({
           </button>
         </div>
         {recent.isOpen && (
-          <DropdownPanel panelRef={recent.panelRef}>
+          <DropdownPanel>
             <div className="px-3 pb-2 pt-1 text-xs text-slate-500">Недавние игроки</div>
             <DropdownOptionList
               options={recentOptions}
