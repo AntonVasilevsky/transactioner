@@ -1,5 +1,5 @@
 {
-  "toolkitVersion": "0.4.20",
+  "toolkitVersion": "0.4.22",
   "createdAt": "2026-10-02T00:18:23.057Z",
   "files": {
     ".gitignore": "4b3c0d375d592aab103d4c593f8b06e2a01f80115e4b359a7590b59a553d8311",
@@ -22,7 +22,7 @@
   "skills": {
     ".agents/skills/pdk-bootstrap/SKILL.md": "83d7eec282f73e1d78972a450ebcf7521a49e5c51baf6acc6bd1885625bec8e5",
     ".agents/skills/pdk-bootstrap/references/checklist.md": "244d0848296d64ff200d4dccbff855b1330928e22bdb5f49e537e0d7a317f68a",
-    ".agents/skills/pdk-deliver/SKILL.md": "734be696186d9c7bd307341556ba1c699f918d7519e3436cb608a19431571eb5",
+    ".agents/skills/pdk-deliver/SKILL.md": "b5416588864c26968429b689472e331a2d8416d44d0db2ca62e6de5896effb80",
     ".agents/skills/pdk-design/SKILL.md": "1ba98ae2f638c8924abe8f242714b6bc7322df76914cbc178c03fa7a9348bf6f",
     ".agents/skills/pdk-design/references/adr.md": "1498892ae3cfa7487c1a7c778e916ed5130362947fbc3a698db9fd720216297f",
     ".agents/skills/pdk-discover/SKILL.md": "141d6af64960ebbdd8e9d585f604bb9039c8dce09e243d1adcc387888e35be92",

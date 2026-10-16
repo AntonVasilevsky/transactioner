@@ -79,6 +79,14 @@ skip silently, do not mention.
    levels") and wait. When the human widens this task instead, ask again whether its
    level still fits before coding. Every "as X already does" in a plan is checked by
    reading X first and cited as file:line; an unchecked claim is a guess.
+   **Smallest complete change** (after you have read the code it touches): take the
+   first option that fully works — not needed at all (name what you skip in one
+   line) → already in this codebase → standard library or platform → an installed
+   dependency (never a new one for a few lines) → the minimum new code. No option,
+   flag, config, abstraction or "for later" code nobody asked for. Never cut:
+   validation of untrusted input, error handling that prevents data loss, security,
+   accessibility, anything the task asks for. Finish every place the change must
+   reach (callers, tests, docs the project keeps in step with code).
 6. **Test.** Run the project's own test command (README, package/build files,
    CI config). Add tests for new behaviour. Never weaken or delete a test to
    make it pass; if a test is wrong, say why and ask.

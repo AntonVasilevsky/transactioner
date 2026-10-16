@@ -39,7 +39,4 @@ _none_
 
 ## Check
 
-0 errors, 2 warnings
-
-- warning .agents/skills/pdk-deliver/SKILL.md skills.outdated Installed skill is older than the toolkit copy; run `pdk skills sync`
-- warning pdk/knowledge/notes/T-0019-review-2026-10-08-3.md doc.temporary-task-closed Task T-0019 is done; move or remove this temporary document
+0 errors, 0 warnings

@@ -8,7 +8,7 @@ executed_by: claude-code/claude-opus-5-5
 depends_on: [T-0011]
 aliases: [room payment methods wallets admin one row per coin network deposit withdrawal checkboxes comment translation copy wallet header singular plural]
 scope: [rooms, wallets, room-admin]
-links: [src/components/RoomAdminView.tsx, src/components/RoomInfoView.tsx, src/utils/roomWalletFormatting.ts, src/utils/transactionTemplateFormatting.ts, electron/database.ts, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, src/utils/roomMethodGroups.ts, pdk/knowledge/notes/T-0019-review-2026-10-08-3.md]
+links: [src/components/RoomAdminView.tsx, src/components/RoomInfoView.tsx, src/utils/roomWalletFormatting.ts, src/utils/transactionTemplateFormatting.ts, electron/database.ts, pdk/knowledge/decisions/ADR-0003-room-wallets-owned-by-room.md, src/utils/roomMethodGroups.ts]
 sessions: [01a10223-e2be-770a-9bc6-2646a7428876]
 commits: ["8704386", 258288b]
 revision: 12
@@ -56,7 +56,7 @@ updated: 2026-10-08
 
 ## Checkpoint
 
-Закрыта владельцем 2026-10-08 по ручной проверке (повторный независимый ревью не требуется). Коммиты 8704386, 258288b; отчёт ревью pdk/knowledge/notes/T-0019-review-2026-10-08-3.md.
+Закрыта владельцем 2026-10-08 по ручной проверке (повторный независимый ревью не требуется). Коммиты 8704386, 258288b; отчёт ревью pdk/knowledge/notes/T-0019-review-2026-10-08-3.md удалён 2026-10-16 (задача закрыта), остаётся в истории git (коммит ab568bb).
 
 ## Next step
 
