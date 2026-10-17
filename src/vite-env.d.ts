@@ -397,6 +397,8 @@ interface Window {
   electronAPI: {
     searchPlayer: (username: string) => Promise<PlayerPayload | PlayerPayload[] | null>;
     savePlayer: (data: SavePlayerInput) => Promise<SavePlayerResult>;
+    recordLinkVerificationCheck: (check: import('./utils/linkVerificationHistory').LinkVerificationCheckInput) => Promise<MutationResult & { recorded?: boolean }>;
+    findPreviousLinkVerificationChecks: (query: import('./utils/linkVerificationHistory').LinkVerificationCheckFields) => Promise<import('./utils/linkVerificationHistory').PreviousLinkVerificationChecks | null>;
     getQuickReplies: () => Promise<import('./utils/quickReplies').QuickReply[]>;
     saveQuickReply: (reply: import('./utils/quickReplies').QuickReplyInput) => Promise<MutationResult & { id?: number }>;
     deleteQuickReply: (id: number) => Promise<MutationResult>;

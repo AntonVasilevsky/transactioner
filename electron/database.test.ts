@@ -1603,6 +1603,33 @@ describe('TransactionerDatabase', () => {
     expect(db.getQuickReplies().filter((item) => item.title === 'Чем могу помочь?')).toHaveLength(1)
   })
 
+  it('logs copied link verification checks once per 30 minutes and finds earlier ones by Nick, Room ID or Email', () => {
+    const at = (time: string) => new Date(`2026-10-16T${time}:00Z`)
+    const check = { room_name: 'Nexa', nick: ' sdfss ', room_id: '', email: 'p@mail.com', messenger: 'Telegram', contact_value: '@player' }
+    expect(db.findPreviousLinkVerificationChecks(check, at('10:00'))).toBeNull()
+    expect(db.recordLinkVerificationCheck(check, at('10:00'))).toEqual({ success: true, recorded: true })
+    expect(db.recordLinkVerificationCheck({ ...check, nick: 'SDFSS' }, at('10:20'))).toEqual({ success: true, recorded: false })
+    expect(db.findPreviousLinkVerificationChecks(check, at('10:20'))).toBeNull()
+    expect(db.findPreviousLinkVerificationChecks({ room_name: 'nexa', nick: '', room_id: '', email: 'P@mail.com' }, at('10:20')))
+      .toEqual({ count: 1, fields: ['email'] })
+    expect(db.findPreviousLinkVerificationChecks({ room_name: 'RedStar', nick: 'sdfss', room_id: '', email: '' }, at('10:20'))).toBeNull()
+
+    expect(db.recordLinkVerificationCheck(check, at('10:31'))).toEqual({ success: true, recorded: true })
+    expect(db.findPreviousLinkVerificationChecks(check, at('10:40'))).toEqual({ count: 1, fields: ['nick', 'email'] })
+    expect(db.findPreviousLinkVerificationChecks(check, at('11:10'))).toEqual({ count: 2, fields: ['nick', 'email'] })
+    expect(db.recordLinkVerificationCheck({ room_name: 'Nexa', nick: ' ', room_id: '', email: '' }, at('11:10')).success).toBe(false)
+
+    db.close()
+    db = new TransactionerDatabase(dbPath)
+    expect(db.findPreviousLinkVerificationChecks(check, at('12:00'))).toEqual({ count: 2, fields: ['nick', 'email'] })
+    const raw = new Database(dbPath, { readonly: true })
+    expect(raw.prepare('SELECT room_name, nick, email, messenger, contact_value FROM link_verification_checks ORDER BY id').all()).toEqual([
+      { room_name: 'Nexa', nick: 'sdfss', email: 'p@mail.com', messenger: 'Telegram', contact_value: '@player' },
+      { room_name: 'Nexa', nick: 'sdfss', email: 'p@mail.com', messenger: 'Telegram', contact_value: '@player' },
+    ])
+    raw.close()
+  })
+
   it('keeps the rakeback sender wallets in the database across restarts', () => {
     expect(db.getRakebackSenderWallets()).toBe('')
     expect(db.saveRakebackSenderWallets('USDT TRC20\nTH9pR7y4opKeR78jmutCgY4toDVfpFJjgM\n')).toEqual({ success: true })

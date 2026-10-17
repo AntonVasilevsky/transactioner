@@ -9,6 +9,16 @@ import { roomKnowledgeSeed, type LinkVerificationResponseOutcome, type RoomKnowl
 import { LINK_VERIFICATION_RESPONSE_TEMPLATES_2026_10, type LinkVerificationResponseTemplateSource } from './linkVerificationResponseTemplates'
 import { QUICK_REPLIES_2026_10, type QuickReplySeed } from './quickRepliesSeed'
 import { quickReplyValidationError, type QuickReply, type QuickReplyInput } from '../src/utils/quickReplies'
+import {
+  LINK_VERIFICATION_REPEAT_COPY_MS,
+  hasLinkVerificationIdentity,
+  isRecentSameLinkVerificationCheck,
+  summarizePreviousLinkVerificationChecks,
+  type LinkVerificationCheckFields,
+  type LinkVerificationCheckInput,
+  type LinkVerificationCheckRecord,
+  type PreviousLinkVerificationChecks,
+} from '../src/utils/linkVerificationHistory'
 
 export type ContactMethod = ContactMethodKey
 export type RoomDealType = 'General' | 'Direct' | 'Agent'
@@ -1425,6 +1435,46 @@ export class TransactionerDatabase {
     }
   }
 
+  private linkVerificationChecksForRoom(roomName: string): LinkVerificationCheckRecord[] {
+    return this.db.prepare(`
+      SELECT room_name, nick, room_id, email, created_at
+      FROM link_verification_checks
+      WHERE room_name = ? COLLATE NOCASE
+      ORDER BY created_at DESC, id DESC
+    `).all(roomName.trim()) as LinkVerificationCheckRecord[]
+  }
+
+  /** Logs a copied link verification request (T-0028); the same request copied again within 30 minutes is not logged twice. */
+  recordLinkVerificationCheck(input: LinkVerificationCheckInput, now = new Date()): MutationResult & { recorded?: boolean } {
+    const check = {
+      room_name: String(input?.room_name || '').trim(),
+      nick: String(input?.nick || '').trim(),
+      room_id: String(input?.room_id || '').trim(),
+      email: String(input?.email || '').trim(),
+    }
+    if (!hasLinkVerificationIdentity(check)) return { success: false, error: 'Нужны рум и хотя бы одно из Nick, Room ID, Email' }
+    const since = new Date(now.getTime() - LINK_VERIFICATION_REPEAT_COPY_MS).toISOString()
+    const recent = this.linkVerificationChecksForRoom(check.room_name).filter((record) => record.created_at >= since)
+    if (recent.some((record) => isRecentSameLinkVerificationCheck(record, check, now))) return { success: true, recorded: false }
+    this.db.prepare(`
+      INSERT INTO link_verification_checks (room_name, nick, room_id, email, messenger, contact_value, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(check.room_name, check.nick, check.room_id, check.email, String(input?.messenger || '').trim(), String(input?.contact_value || '').trim(), now.toISOString())
+    return { success: true, recorded: true }
+  }
+
+  /** Earlier checks of the same binding by the one rule in linkVerificationHistory. */
+  findPreviousLinkVerificationChecks(query: LinkVerificationCheckFields, now = new Date()): PreviousLinkVerificationChecks | null {
+    const check = {
+      room_name: String(query?.room_name || ''),
+      nick: String(query?.nick || ''),
+      room_id: String(query?.room_id || ''),
+      email: String(query?.email || ''),
+    }
+    if (!hasLinkVerificationIdentity(check)) return null
+    return summarizePreviousLinkVerificationChecks(this.linkVerificationChecksForRoom(check.room_name), check, now)
+  }
+
   /** Quick standard replies (T-0024), each operator's own list in the fixed topic structure. */
   getQuickReplies(): QuickReply[] {
     return this.db.prepare(`
@@ -1808,6 +1858,18 @@ export class TransactionerDatabase {
         key TEXT PRIMARY KEY,
         value TEXT NOT NULL
       );
+      CREATE TABLE IF NOT EXISTS link_verification_checks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        room_name TEXT NOT NULL,
+        nick TEXT NOT NULL DEFAULT '',
+        room_id TEXT NOT NULL DEFAULT '',
+        email TEXT NOT NULL DEFAULT '',
+        messenger TEXT NOT NULL DEFAULT '',
+        contact_value TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_link_verification_checks_room
+        ON link_verification_checks(room_name COLLATE NOCASE);
       CREATE TABLE IF NOT EXISTS quick_replies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         topic TEXT NOT NULL,

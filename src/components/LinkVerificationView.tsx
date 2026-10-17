@@ -27,6 +27,11 @@ import {
 } from '../utils/linkVerificationFormatting'
 import { matchesRoomSearch } from '../utils/roomSearch'
 import { MESSENGER_LABELS } from '../utils/messengers'
+import {
+  describePreviousLinkVerificationChecks,
+  hasLinkVerificationIdentity,
+  type PreviousLinkVerificationChecks,
+} from '../utils/linkVerificationHistory'
 import { getWalletAddressValidationError } from '../utils/walletValidation'
 import { sortRoomProfilesByUsage } from '../utils/roomUsageSort'
 import ComboboxField from './fields/ComboboxField'
@@ -215,6 +220,34 @@ export default function LinkVerificationView() {
   }, [])
 
   const rule = useMemo(() => resolveLinkVerificationRoomRule(roomName), [roomName])
+  // What the request identifies; logged on copy and checked against earlier copies (T-0028).
+  const checkFields = useMemo(
+    () => ({ room_name: rule.canonicalRoomName.trim(), nick: username.trim(), room_id: roomId.trim(), email: email.trim() }),
+    [email, roomId, rule.canonicalRoomName, username]
+  )
+  const checkKey = JSON.stringify(checkFields)
+  const [previousChecks, setPreviousChecks] = useState<{ key: string, result: PreviousLinkVerificationChecks | null } | null>(null)
+  useEffect(() => {
+    if (!hasLinkVerificationIdentity(checkFields)) return
+    let active = true
+    const key = JSON.stringify(checkFields)
+    const timer = window.setTimeout(() => {
+      window.electronAPI.findPreviousLinkVerificationChecks(checkFields)
+        .then((result) => {
+          if (active) setPreviousChecks({ key, result })
+        })
+        .catch(() => {
+          // The warning is a hint; a failed lookup must not block the request.
+        })
+    }, 250)
+    return () => {
+      active = false
+      window.clearTimeout(timer)
+    }
+  }, [checkFields])
+  const previousCheckWarning = previousChecks?.key === checkKey && previousChecks.result && hasLinkVerificationIdentity(checkFields)
+    ? describePreviousLinkVerificationChecks(previousChecks.result, checkFields)
+    : ''
   const templateOptions = useMemo(
     () => applyLinkVerificationTemplateOverrides(rule.templates, savedTemplates, rule.canonicalRoomName),
     [rule.canonicalRoomName, rule.templates, savedTemplates]
@@ -512,6 +545,12 @@ export default function LinkVerificationView() {
   const copyRequest = async (skipSave: boolean) => {
     const copiedText = requestText
     await copy('request', copiedText)
+    if (hasLinkVerificationIdentity(checkFields)) {
+      window.electronAPI.recordLinkVerificationCheck({ ...checkFields, messenger: selectedMessenger, contact_value: messengerUsername.trim() })
+        .catch(() => {
+          // Logging the check must not get in the way of sending the request.
+        })
+    }
     const plan = planLinkVerificationPlayerSave({
       rule,
       messenger: selectedMessenger,
@@ -653,6 +692,9 @@ export default function LinkVerificationView() {
               <input value={email} onChange={(event) => setEmail(event.target.value)} className="mt-1 w-full bg-slate-900 border border-slate-700 rounded-lg p-3 text-slate-100 outline-none focus:border-blue-500" />
             </label>
           </div>
+          {previousCheckWarning && (
+            <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">{previousCheckWarning}</p>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="text-sm text-slate-400">

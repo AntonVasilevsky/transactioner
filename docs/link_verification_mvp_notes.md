@@ -115,6 +115,12 @@ Current shared scope:
 
 All Chico-network rooms currently use the same built-in fallback: `15% Net Revenue` with `net/ramp\n0, 15%`. If an operator edits the deal fields for any room in this group, the saved value is reused for the entire group.
 
+## 2026-10-16: Log Of Sent Checks And Repeat Warning (T-0028)
+
+- Every copy of the request (also Shift + click, without saving the player) logs room, Nick, Room ID, Email, messenger and contact in `link_verification_checks`; the same request copied again within 30 minutes is not logged twice.
+- Same binding = same room and at least one filled Nick / Room ID / Email equal (case and edge spaces aside); the contact is stored but not part of the rule. Rule: `src/utils/linkVerificationHistory.ts`.
+- The form shows "Эта привязка уже отправлялась на проверку: <fields> — N раз" as soon as the room and one of the fields are filled; copying is not blocked. The log is local to each operator's database and starts with this version; no list view yet.
+
 ## Known GBrain Slugs Mentioned During Planning
 
 - `transactioner/link-verification-required-fields`

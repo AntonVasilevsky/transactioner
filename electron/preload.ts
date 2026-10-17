@@ -12,6 +12,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAppInfo: () => ipcRenderer.invoke('get-app-info'),
   getStorageInfo: () => ipcRenderer.invoke('get-storage-info'),
   getRoomKnowledgeIndex: () => ipcRenderer.invoke('get-room-knowledge-index'),
+  recordLinkVerificationCheck: (check: unknown) => ipcRenderer.invoke('record-link-verification-check', check),
+  findPreviousLinkVerificationChecks: (query: unknown) => ipcRenderer.invoke('find-previous-link-verification-checks', query),
   getQuickReplies: () => ipcRenderer.invoke('get-quick-replies'),
   saveQuickReply: (reply: unknown) => ipcRenderer.invoke('save-quick-reply', reply),
   deleteQuickReply: (id: number) => ipcRenderer.invoke('delete-quick-reply', id),
