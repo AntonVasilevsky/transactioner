@@ -8,6 +8,7 @@
 - Prepend the matching user-facing section to `USER_RELEASE_NOTES.txt` before building.
 - Run the full test suite and production build before committing and pushing.
 - When users must receive the in-app update prompt, publish a GitHub Release with the matching `v<version>` tag and installer assets; a Git push alone is not sufficient.
+- A build request that mentions updating the app or the version for users ("сборки … с обновлением версии", "чтобы у пользователей обновилось") includes publishing that GitHub Release right after the push (owner, 2026-10-17). The release notes cover every version since the last published release. Builds for both platforms ("на Windows и на Mac") attach both installers and their `.blockmap` files.
 - Never commit `docs/supabase/creds.txt` or files from `build/private/`.
 
 <!-- pdk:start -->
