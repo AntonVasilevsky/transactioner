@@ -1,19 +1,19 @@
 ---
 id: T-0028
 title: Журнал отправленных проверок привязки и предупреждение о повторной проверке
-status: proposed
+status: done
 owner: agent
 model: "L2 — medium: новая таблица и одно правило совпадения, надпись в форме проверки привязки"
-executed_by: ""
+executed_by: claude-code/claude-opus-5-5
 depends_on: []
 aliases: [link verification history duplicate binding check warning already sent nick room id email журнал привязок повторная проверка]
 scope: [link-verification, database]
 links: [src/components/LinkVerificationView.tsx, electron/database.ts, src/utils/linkVerificationRules.ts]
-sessions: []
-commits: []
-revision: 1
+sessions: [01a10223-e2be-770a-9bc6-2646a7428876]
+commits: [da93633]
+revision: 6
 created: 2026-10-16
-updated: 2026-10-16
+updated: 2026-10-17
 ---
 ## Goal
 
@@ -39,10 +39,24 @@ updated: 2026-10-16
 
 ## Checkpoint
 
+Works: журнал link_verification_checks (рум, Nick, Room ID, Email, мессенджер, контакт, служебное время); запись при каждом копировании запроса, в т.ч. Shift; та же привязка повторно в течение 30 мин не пишется; правило совпадения src/utils/linkVerificationHistory.ts (рум + любое совпавшее непустое поле, регистр/пробелы не важны); надпись в форме под Nick/Room ID/Email «Эта привязка уже отправлялась на проверку: … — N раз», своё копирование последних 30 мин не предупреждает; копирование не блокируется.
+Verified: tsc ok; lint 0; тесты 261/261 (Node-сборка sqlite; +5 правило, +1 база); build ok; pdk resolve по диффу — новых нормативных документов нет, ADR-0002 не затронут (схема, не данные).
+Changed: src/utils/linkVerificationHistory.ts(+test), electron/database.ts(+test), main.ts, preload.ts, vite-env.d.ts, LinkVerificationView.tsx, docs/link_verification_mvp_notes.md.
+Verified in app (2026-10-17, по просьбе владельца): временная копия собранного приложения (TRANSACTIONER_USER_DATA_DIR и TRANSACTIONER_BACKUP_DIR во /tmp, управление через --remote-debugging-port, рабочая БД и папка бэкапов не тронуты): Nexa + Nick test1 → копирование с Shift → 1 запись, игрок не создан, надписи нет; + Email → «Эта привязка уже отправлялась на проверку: Nick test1 — 1 раз.»; Nick « TEST1 » → надпись есть; рум RedStar → надписи нет. Скриншот /tmp/t0028-warning.png.
+Done: владелец принял по проверке в приложении 2026-10-17; коммит da93633 (push не делался).
+
 ## Next step
+
+Нет — закрыто. Позже: просмотр журнала, общий журнал вместе с общей базой.
 
 ## Blockers
 
 ## Log
 
 - 2026-10-16 created
+- 2026-10-16 update: executed_by "" -> claude-code/claude-opus-5-5, status proposed -> active
+- 2026-10-16 checkpoint: Works: журнал link_verification_checks (рум, Nick, Room ID, Email, мессенджер, контакт, служебное время); запись при ...
+- 2026-10-16 update: sessions +01a10223-e2be-770a-9bc6-2646a7428876
+- 2026-10-17 checkpoint: Works: журнал link_verification_checks (рум, Nick, Room ID, Email, мессенджер, контакт, служебное время); запись при ...
+- 2026-10-17 checkpoint: Works: журнал link_verification_checks (рум, Nick, Room ID, Email, мессенджер, контакт, служебное время); запись при ...
+- 2026-10-17 update: status active -> done
