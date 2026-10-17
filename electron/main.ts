@@ -7,6 +7,7 @@ import { convertUsdToEur, parseCurrencyAmount } from './currency'
 import { TransactionerDatabase, type RoomDealType, type RoomLanguage, type SaveLinkVerificationDealDefaultsInput, type SaveLinkVerificationResponseTemplateInput, type SaveLinkVerificationTemplateInput, type SaveRoomDealInput, type SaveRoomPaymentMethodInput, type SaveRoomProfileInput, type SaveRoomWalletInput } from './database'
 import { resolveTransaction, type KnownTransactionWallet } from './transactionResolver'
 import { searchRakebackTransaction } from './rakebackTransactionSearch'
+import { searchDepositTransfers } from './depositTransferSearch'
 import { checkForUpdate, isAllowedReleaseUrl } from './updates'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -221,6 +222,7 @@ ipcMain.handle('resolve-transaction', (_, input) => resolveTransaction({
   knownWallets: getActiveTransactionWallets(),
 }))
 ipcMain.handle('search-rakeback-transaction', (_, input) => searchRakebackTransaction(input))
+ipcMain.handle('search-deposit-transfers', (_, input) => searchDepositTransfers(input))
 ipcMain.handle('convert-usd-to-eur', async (_, amountText: string) => {
   try {
     const amount = parseCurrencyAmount(amountText)

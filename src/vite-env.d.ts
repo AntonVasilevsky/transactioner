@@ -376,6 +376,32 @@ interface SearchRakebackTransactionResult {
   error?: string
 }
 
+interface SearchDepositTransfersInput {
+  currency: string
+  network: string
+  wallet: string
+  amount: string
+  messageTime?: string
+}
+
+interface DepositTransferCandidate {
+  hash: string
+  from: string
+  to: string
+  amount: string
+  timestampMs: number
+  explorerUrl: string
+  confirmed: boolean
+}
+
+interface SearchDepositTransfersResult {
+  success: boolean
+  status: 'found' | 'not_found' | 'not_configured' | 'error'
+  candidates: DepositTransferCandidate[]
+  window?: { startMs: number, endMs: number }
+  error?: string
+}
+
 interface CurrencyConversionResult extends MutationResult {
   inputAmount?: string
   inputCurrency?: 'USD'
@@ -436,6 +462,7 @@ interface Window {
     checkForUpdates: () => Promise<UpdateCheckResult>;
     resolveTransaction: (input: ResolveTransactionInput) => Promise<ResolveTransactionResult>;
     searchRakebackTransaction: (input: SearchRakebackTransactionInput) => Promise<SearchRakebackTransactionResult>;
+    searchDepositTransfers: (input: SearchDepositTransfersInput) => Promise<SearchDepositTransfersResult>;
     convertUsdToEur: (amount: string) => Promise<CurrencyConversionResult>;
     getReleaseNotes: () => Promise<ReleaseNotesInfo>;
     markReleaseNotesSeen: () => Promise<MutationResult>;

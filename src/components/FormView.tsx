@@ -15,6 +15,7 @@ import { filterPaymentAccountsForOperation } from '../utils/roomAccountOptions'
 import { getTransactionInputWarning, getWalletAddressValidationError } from '../utils/walletValidation'
 import SelectField from './fields/SelectField'
 import { CONTACT_METHOD_OPTIONS } from './fields/fieldOptions'
+import DepositTransferFinder from './DepositTransferFinder'
 
 const isRedStarWithdrawal = (targetAccount: Account | null, targetOperationType: OperationType) =>
   targetAccount?.roomName === 'RedStar' && targetOperationType === 'Withdrawal'
@@ -824,6 +825,14 @@ export default function FormView({ player, account: selectedAccount, onAccountSe
               )}
               {!txResolveMessage && txInputWarning && (
                 <p className="mt-2 text-xs text-amber-400">{txInputWarning}</p>
+              )}
+              {!txId.trim() && (
+                <DepositTransferFinder
+                  account={account}
+                  roomKnowledgeIndex={roomKnowledgeIndex}
+                  formAmount={amount}
+                  onPick={handleTxChange}
+                />
               )}
               {transactionDateWarning && (
                 <p ref={firstVisibleWarningKey.startsWith('date:') ? warningScrollTargetRef : undefined} className="mt-2 text-xs text-amber-300">

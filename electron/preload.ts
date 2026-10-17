@@ -42,6 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
   resolveTransaction: (input: ResolveTransactionInput) => ipcRenderer.invoke('resolve-transaction', input),
   searchRakebackTransaction: (input: SearchRakebackTransactionInput) => ipcRenderer.invoke('search-rakeback-transaction', input),
+  searchDepositTransfers: (input: unknown) => ipcRenderer.invoke('search-deposit-transfers', input),
   convertUsdToEur: (amount: string) => ipcRenderer.invoke('convert-usd-to-eur', amount),
   getReleaseNotes: () => ipcRenderer.invoke('get-release-notes'),
   markReleaseNotesSeen: () => ipcRenderer.invoke('mark-release-notes-seen'),
